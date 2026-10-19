@@ -82,6 +82,7 @@ final class Workspace: ObservableObject {
 
     func addScene() {
         selectedSceneID = project.addScene()
+        mode = .edit
         changed()
     }
 

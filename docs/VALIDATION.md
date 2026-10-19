@@ -21,6 +21,8 @@ There is no claim of full feature parity, macOS runtime validation, cloud synchr
 
 The portable suite now contains 16 tests. New native tests exercise semantic `sc-*` HTML round trips, nested wrappers, Tamil and emoji, native Return/Tab flow, and untouched-source preservation. PDF tests verify every paragraph is extractable from a long multipage screenplay, page ranges cover all source text exactly once, Letter/A4 page geometry, omitted scenes, orphan-cue movement and destination symlink protection. CI saves test results and generated PDFs in `Frontstage-screenplay-validation`.
 
+The native suite also tests formatting undo and rich clipboard insertion into dialogue. macOS run [39333279146](https://github.com/ratioprofile-design/frontstage/actions/runs/39333279146) passed the full test step, release compilation, bundle signature/plist checks, and both artifact uploads. The log-capture pipeline explicitly enables pipefail so a test or compilation failure fails the job. Run 39333067564 is not valid test evidence: it exposed a missing `try` in a test and the pipeline status bug, both corrected before the passing run.
+
 On a Mac, also review the Write/Pages switch and native Print dialog. Check Option+1–7, Tab/Shift+Tab, text undo, IME composition, scene headings and scene numbers. Compare preview and exported PDF visually. Custom imported font/layout settings and MORE/CONT'D continuation markers are not implemented in this milestone.
 
 ## Current cloud run

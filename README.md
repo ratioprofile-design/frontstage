@@ -57,4 +57,4 @@ The selected browser direction is a web application with shared projects and syn
 
 Do not add private service keys to the source or document schema. Native credentials should use Keychain; shared backend credentials belong on a server. Authentication, collaboration, conflict resolution, hosted storage, AI, Maps and other integrations are not implemented yet.
 
-Validated development artifact: [macOS CI run 39330835052](https://github.com/ratioprofile-design/frontstage/actions/runs/39330835052). Download and unzip `Frontstage-macOS-development` while signed into GitHub. The included app requires macOS 14+ and is intended for development testing.
+Validated screenplay development artifact: [macOS CI run 39333279146](https://github.com/ratioprofile-design/frontstage/actions/runs/39333279146). Download `Frontstage-macOS-development` while signed into GitHub, unzip it, then unzip the enclosed `Frontstage-macOS.zip` to get `Frontstage.app`. The app requires macOS 14+ and is intended for development testing. `Frontstage-screenplay-validation` contains the test report and sample Letter/A4 PDFs.
