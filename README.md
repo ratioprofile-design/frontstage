@@ -2,7 +2,7 @@
 
 A native macOS rewrite of Backstage, built with Swift, SwiftUI and AppKit. The original `ratioprofile-design/Backstage` repository is not modified. There is no React, Tauri, JavaScript runtime or web view in this client.
 
-**Status: first native foundation, not a complete Backstage conversion.** The portable model and persistence pass 11 tests, and the initial macOS CI build and app bundling passed. Interactive app testing and full feature parity are still outstanding; see the validation notes below.
+**Status: first native foundation, not a complete Backstage conversion.** The portable model and persistence pass 11 tests, and macOS CI passed native editing tests, the release build and app bundling. Interactive app testing and full feature parity are still outstanding; see the validation notes below.
 
 ## Current scope
 
@@ -45,3 +45,5 @@ See [migration plan](docs/MIGRATION.md), [feature status](docs/FEATURES.md), and
 The selected browser direction is a web application with shared projects and sync, like Notion, rather than remote streaming of Mac windows. `FrontstageCore` keeps document operations independent of SwiftUI. Future web and Windows clients should share a versioned service/document contract; they will require separate UI implementations. A local JSON format alone does not implement synchronization.
 
 Do not add private service keys to the source or document schema. Native credentials should use Keychain; shared backend credentials belong on a server. Authentication, collaboration, conflict resolution, hosted storage, AI, Maps and other integrations are not implemented yet.
+
+Validated development artifact: [macOS CI run 39330835052](https://github.com/ratioprofile-design/frontstage/actions/runs/39330835052). Download and unzip `Frontstage-macOS-development` while signed into GitHub. The included app requires macOS 14+ and is intended for development testing.
