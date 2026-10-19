@@ -1,10 +1,43 @@
 #if os(macOS)
 import Foundation
+import AppKit
 import XCTest
 import FrontstageCore
 @testable import FrontstageApp
 
 final class RecoveryWorkspaceTests: XCTestCase {
+    func testTextUndoCannotCrossSceneAndImportedProjectBoundaries() async throws {
+        try await MainActor.run {
+            _ = NSApplication.shared
+            let workspace = Workspace()
+            workspace.addScene()
+            let first = workspace.selectedSceneID!
+            workspace.addScene()
+            let second = workspace.selectedSceneID!
+            workspace.selectedSceneID = first
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 250),
+                styleMask: [.titled], backing: .buffered, defer: false)
+            let text = NSTextView(frame: window.contentView!.bounds)
+            text.allowsUndo = true
+            window.contentView = text
+            window.makeFirstResponder(text)
+            workspace.editor.textView = text
+            let undo = try XCTUnwrap(text.undoManager)
+            text.insertText("First scene edit", replacementRange: NSRange(location: 0, length: 0))
+            XCTAssertTrue(undo.canUndo)
+            workspace.selectedSceneID = second
+            XCTAssertFalse(undo.canUndo)
+            text.insertText("Second scene edit", replacementRange: text.selectedRange())
+            XCTAssertTrue(undo.canUndo)
+            var imported = Project(name: "Another project")
+            _ = imported.addScene()
+            workspace.loadCopy(imported)
+            XCTAssertFalse(undo.canUndo)
+            XCTAssertFalse(workspace.history.canUndo)
+            XCTAssertEqual(workspace.project.name, "Another project")
+            XCTAssertTrue(workspace.hasChanges)
+        }
+    }
     func testUnreadableRecoveryCopyIsNotOverwrittenByNewEdits() async throws {
         try await MainActor.run {
             let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

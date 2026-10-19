@@ -64,10 +64,14 @@ final class Workspace: ObservableObject {
         case edit = "Write", pages = "Pages", revisions = "Revisions", board = "Board", people = "People", breakdown = "Breakdown", production = "Production"
     }
     @Published private(set) var project = Project()
-    @Published var selectedSceneID: Decimal?
+    @Published var selectedSceneID: Decimal? {
+        didSet { if oldValue != selectedSceneID { editor.textView?.undoManager?.removeAllActions() } }
+    }
     @Published private(set) var hasChanges = false
     @Published var errorMessage: String?
-    @Published var mode = Mode.edit
+    @Published var mode = Mode.edit {
+        didSet { if oldValue != mode { editor.textView?.undoManager?.removeAllActions() } }
+    }
     @Published var paper = ScreenplayPaper.letter
     @Published private(set) var preview: PDFDocument?
     @Published private(set) var history = ProjectHistory()
@@ -97,12 +101,20 @@ final class Workspace: ObservableObject {
 
     func recoverSession() {
         guard let candidate = recoveryCandidate else { return }
-        project = candidate
+        recoveryCandidate = nil
+        loadCopy(candidate)
+    }
+
+    func loadCopy(_ imported: Project) {
+        recoveryTask?.cancel()
+        editor.textView?.undoManager?.removeAllActions()
+        project = imported
         savedProject = nil
         history = ProjectHistory()
         selectedSceneID = project.scenes.first?.id
         saveURL = nil
-        recoveryCandidate = nil
+        mode = .edit
+        preview = nil
         changed()
     }
 
@@ -164,6 +176,12 @@ final class Workspace: ObservableObject {
 
     func newProject() {
         guard confirmDiscardOrSave() else { return }
+        recoveryTask?.cancel()
+        if !recoveryBlocked {
+            do { try recoveryStore?.clear() }
+            catch { errorMessage = error.localizedDescription; return }
+        }
+        editor.textView?.undoManager?.removeAllActions()
         project = Project()
         savedProject = project
         history = ProjectHistory()
@@ -264,16 +282,8 @@ final class Workspace: ObservableObject {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             let imported = try Project.load(from: url)
-            project = imported
-            savedProject = nil
-            history = ProjectHistory()
-            selectedSceneID = imported.scenes.first?.id
             // Every open starts a copy. No source project is ever a default save destination.
-            saveURL = nil
-            hasChanges = true
-            mode = .edit
-            preview = nil
-            changed()
+            loadCopy(imported)
         } catch { errorMessage = error.localizedDescription }
     }
 

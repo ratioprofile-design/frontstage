@@ -29,7 +29,7 @@ On a Mac, also review the Write/Pages switch and native Print dialog. Check Opti
 
 The portable suite now executes 40 tests. Additional coverage includes bounded/coalesced undo, recovery, revision restore and line-diff reconstruction, cycle rejection/diagnosis, stable scene links, casting confirmation and metadata patches, legacy breakdowns, strict dates/times, overnight schedules, workload/turnaround checks, CSV quoting/source protection, and an integrated five-phase save/recover/undo workflow.
 
-Native tests add dirty-state/selection reconciliation, explicit recovery, protection of unreadable recovery data, character-cue discovery, undo of production edits, live call-sheet PDF text, and long-dialogue continuation headers/footers. The validation artifact includes call-sheet-sample.pdf as well as screenplay PDFs.
+Native tests add dirty-state/selection reconciliation, isolation of text undo across scenes/projects, explicit recovery, protection of unreadable recovery data, character-cue discovery, undo of production edits, live call-sheet PDF text, and long-dialogue continuation headers/footers. The validation artifact includes call-sheet-sample.pdf as well as screenplay PDFs.
 
 Phase 7's combined native suite and app packaging passed in run [39336366519](https://github.com/ratioprofile-design/frontstage/actions/runs/39336366519). The final bundling script additionally compiles both arm64 and x86_64 and verifies the universal binary with lipo before signing; this is build evidence for both architectures, not an Intel runtime test.
 
