@@ -393,11 +393,6 @@ struct WorkspaceView: View {
                         controller: workspace.editor, width: workspace.paper.contentWidth,
                         onError: { workspace.errorMessage = $0 })
                         .id(scene.id)
-                    Text("Local project · \(workspace.hasChanges ? "Unsaved changes" : "Saved")")
-                        .font(.caption).foregroundStyle(.secondary)
-                    if !workspace.recoveryStatus.isEmpty {
-                        Text(workspace.recoveryStatus).font(.caption2).foregroundStyle(.secondary)
-                    }
                 }.padding(28)
             } else {
                 ContentUnavailableView {
@@ -409,6 +404,13 @@ struct WorkspaceView: View {
                     Button("Open or Import…", action: workspace.open)
                 }
             }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            HStack {
+                Text(workspace.hasChanges ? "Unsaved project changes" : "No pending changes")
+                Spacer()
+                if !workspace.recoveryStatus.isEmpty { Text(workspace.recoveryStatus) }
+            }.font(.caption).foregroundStyle(.secondary).padding(8).background(.regularMaterial)
         }
         .toolbar {
             Picker("View", selection: $workspace.mode) {

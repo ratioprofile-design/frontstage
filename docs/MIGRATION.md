@@ -1,6 +1,6 @@
 # Native macOS migration preparation
 
-Status: first Swift foundation implemented in frontstage; full migration is outstanding. See FEATURES.md and VALIDATION.md for current scope and evidence.
+Status: native screenplay and five additional editing/production milestones implemented in frontstage; full migration is outstanding. See FEATURES.md, FIVE_PHASES.md and VALIDATION.md for current scope and evidence.
 Source inspected: ratioprofile-design/Backstage, commit 425da0c30eb3d10b47f3398dbc909989fe761d69.
 The original checkout is read-only for this migration. All implementation belongs in a new independent repository under the GitHub owner and name selected by the user. Do not push to, rename, move, or alter the source repository. Do not copy its Git metadata, local environment files, credentials, caches, generated output, or user project data.
 
@@ -52,4 +52,4 @@ Do not describe a shell or first vertical slice as the completed conversion. Ful
 
 ## Validation limits
 
-The current development host is Linux. A signature-verified Swift 6.0.3 Linux toolchain was installed and the 11 portable XCTest tests pass; Xcode is unavailable. It cannot compile or run SwiftUI/AppKit, sign or notarize macOS apps. Foundation-only tests may run on Linux after installing a supported Swift toolchain; native app readiness requires a Mac or macOS CI. GitHub write access and macOS CI results must be verified separately. Existing platform Git HTTPS read access to the original repository does not imply GitHub API access or permission to create a repository under another account.
+The current development host is Linux. A signature-verified Swift 6.0.3 Linux toolchain runs the portable suite; Xcode is unavailable locally. Native SwiftUI/AppKit tests, release compilation and development app bundling run on macOS CI. Individual phase results are recorded in FIVE_PHASES.md. Interactive macOS and printer checks remain outstanding. No distribution signing/notarization, cloud synchronization or full application parity is claimed. GitHub writes to frontstage have been verified; Backstage remains unchanged.

@@ -8,7 +8,7 @@ The original Backstage checkout remains read-only. All changes belong in frontst
 | 4 | Named scene revision snapshots; restore/diff; MORE/CONT'D page continuations | Passed portable tests and macOS CI run 39334593999 |
 | 5 | Native spatial causality board; move cards; connect scenes; cycle validation | Passed portable tests and macOS CI run 39334843832 |
 | 6 | Native character/casting records and scene breakdown editing | Passed portable tests and macOS CI run 39335498475 |
-| 7 | Shooting-day assignments, call sheets and production exports | Implemented; native validation in progress |
+| 7 | Shooting-day assignments, call sheets and production exports | 40 portable tests and combined native test step passed; release validation pending |
 
 Phase 3 keeps up to 40 project changes, coalescing a burst of edits to the same field within a second. Project undo uses Command+Option+Z and redo Command+Option+Shift+Z; normal Command+Z remains native text undo. Recovery copies are written after 800 ms without edits to Application Support/Frontstage/Recovery/session.frontstage, never to an imported source. Recovery is not a replacement for saving: the most recent fraction of a second can be lost in a crash. Startup asks whether to recover or discard the copy. Successful saves and explicit discard clear it. Test workspaces use injected stores and do not write to the real user's app directory.
 
