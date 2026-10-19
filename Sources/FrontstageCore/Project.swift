@@ -100,7 +100,7 @@ public struct Project: Equatable, Sendable {
         var beats = state["beats"]?.array ?? []
         beats.append(.object([
             "id": .number(next), "title": .string("Untitled Scene"), "content": .string(""),
-            "x": .number(0), "y": .number(0), "boardId": .number(0),
+            "x": .number(Decimal((beats.count % 4) * 280)), "y": .number(Decimal((beats.count / 4) * 180)), "boardId": .number(0),
             "slug": .object(["prefix": .string("INT."), "location": .string(""), "time": .string("DAY")])
         ]))
         state["beats"] = .array(beats)
