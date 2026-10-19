@@ -60,7 +60,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 @MainActor
 final class Workspace: ObservableObject {
-    enum Mode: String, CaseIterable { case edit = "Write", pages = "Pages", revisions = "Revisions", board = "Board" }
+    enum Mode: String, CaseIterable {
+        case edit = "Write", pages = "Pages", revisions = "Revisions", board = "Board", people = "People", breakdown = "Breakdown"
+    }
     @Published private(set) var project = Project()
     @Published var selectedSceneID: Decimal?
     @Published private(set) var hasChanges = false
@@ -335,7 +337,11 @@ struct WorkspaceView: View {
             }.padding(.top)
             .navigationSplitViewColumnWidth(min: 220, ideal: 260)
         } detail: {
-            if workspace.mode == .board {
+            if workspace.mode == .people {
+                PeopleView(workspace: workspace)
+            } else if workspace.mode == .breakdown {
+                BreakdownView(workspace: workspace)
+            } else if workspace.mode == .board {
                 StoryBoardView(workspace: workspace)
             } else if workspace.mode == .revisions {
                 RevisionsView(workspace: workspace)
