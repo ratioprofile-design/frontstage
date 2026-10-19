@@ -23,6 +23,7 @@ struct RenderedScreenplay {
     let text: NSAttributedString
     let pageRanges: [NSRange]
     let paper: ScreenplayPaper
+    let pages: [ScreenplayPageLayout]
 
     func save(to url: URL) throws {
         let resolved = url.resolvingSymlinksInPath()
@@ -31,6 +32,13 @@ struct RenderedScreenplay {
         }
         try data.write(to: resolved, options: .atomic)
     }
+}
+
+struct ScreenplayPageLayout {
+    let range: NSRange
+    let rect: CGRect
+    let continuedCharacter: String?
+    let continuesCharacter: String?
 }
 
 @MainActor
@@ -50,7 +58,7 @@ enum ScreenplayPDF {
                     ScreenplayTypography.attributes(.action, width: paper.contentWidth, printing: true)))
             }
         }
-        let ranges = try paginate(text, paper: paper)
+        let pages = try layoutPages(text, paper: paper)
         let output = CFDataCreateMutable(nil, 0)!
         guard let consumer = CGDataConsumer(data: output) else { throw ScreenplayPDFError.cannotCreatePDF }
         var bounds = CGRect(x: 0, y: 0, width: paper.width, height: paper.height)
@@ -59,14 +67,22 @@ enum ScreenplayPDF {
             throw ScreenplayPDFError.cannotCreatePDF
         }
         let framesetter = CTFramesetterCreateWithAttributedString(text as CFAttributedString)
-        for (index, range) in ranges.enumerated() {
+        for (index, page) in pages.enumerated() {
             context.beginPDFPage(nil)
             context.setFillColor(NSColor.white.cgColor)
             context.fill(bounds)
             context.textMatrix = .identity
-            let path = CGPath(rect: contentRect(paper), transform: nil)
-            let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: range.location, length: range.length), path, nil)
+            let path = CGPath(rect: page.rect, transform: nil)
+            let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: page.range.location, length: page.range.length), path, nil)
             CTFrameDraw(frame, context)
+            if let character = page.continuedCharacter {
+                drawMarker("\(character) (CONT'D)", x: paper.leftMargin + paper.contentWidth * 0.37,
+                    y: paper.height - paper.topMargin - 12, in: context, paper: paper)
+            }
+            if page.continuesCharacter != nil {
+                drawMarker("(MORE)", x: paper.leftMargin + paper.contentWidth * 0.37,
+                    y: paper.bottomMargin + 2, in: context, paper: paper)
+            }
             if index > 0 {
                 let label = NSAttributedString(string: "\(index + 1).", attributes:
                     ScreenplayTypography.attributes(.action, width: paper.contentWidth, printing: true))
@@ -78,36 +94,85 @@ enum ScreenplayPDF {
             context.endPDFPage()
         }
         context.closePDF()
-        return RenderedScreenplay(data: output as Data, text: text, pageRanges: ranges, paper: paper)
+        return RenderedScreenplay(data: output as Data, text: text, pageRanges: pages.map(\.range), paper: paper, pages: pages)
     }
 
     static func paginate(_ text: NSAttributedString, paper: ScreenplayPaper) throws -> [NSRange] {
+        try layoutPages(text, paper: paper).map(\.range)
+    }
+
+    static func layoutPages(_ text: NSAttributedString, paper: ScreenplayPaper) throws -> [ScreenplayPageLayout] {
         let framesetter = CTFramesetterCreateWithAttributedString(text as CFAttributedString)
-        let path = CGPath(rect: contentRect(paper), transform: nil)
         let source = text.string as NSString
-        var pages: [NSRange] = []
+        var pages: [ScreenplayPageLayout] = []
         var offset = 0
         while offset < text.length {
-            let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: offset, length: 0), path, nil)
-            let visible = CTFrameGetVisibleStringRange(frame)
-            guard visible.length > 0 else { throw ScreenplayPDFError.cannotLayOut }
-            var end = min(text.length, offset + visible.length)
-            if end < text.length {
+            let header = offset > 0 ? continuingCharacter(in: text, at: offset) : nil
+            var reserveFooter = false
+            var rect = contentRect(paper)
+            var end = offset
+            for _ in 0..<2 {
+                rect = contentRect(paper)
+                if header != nil { rect.size.height -= 28 }
+                if reserveFooter { rect.origin.y += 14; rect.size.height -= 14 }
+                let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: offset, length: 0),
+                    CGPath(rect: rect, transform: nil), nil)
+                let visible = CTFrameGetVisibleStringRange(frame)
+                guard visible.length > 0 else { throw ScreenplayPDFError.cannotLayOut }
+                end = min(text.length, offset + visible.length)
+                if end < text.length {
                 // Avoid stranding a scene heading, character cue or parenthetical at the bottom.
                 // A chain (heading -> character -> parenthetical) moves together when necessary.
-                var candidate = end
-                while candidate > offset {
-                    let last = source.paragraphRange(for: NSRange(location: candidate - 1, length: 0))
-                    if last.location <= offset || !ScreenplayTextCodec.element(in: text, at: last.location).keepsWithNext { break }
-                    candidate = last.location
+                    var candidate = end
+                    while candidate > offset {
+                        let last = source.paragraphRange(for: NSRange(location: candidate - 1, length: 0))
+                        if last.location <= offset || !ScreenplayTextCodec.element(in: text, at: last.location).keepsWithNext { break }
+                        candidate = last.location
+                    }
+                    if candidate > offset { end = candidate }
                 }
-                if candidate > offset { end = candidate }
+                if end < text.length, continuingCharacter(in: text, at: end) != nil, !reserveFooter {
+                    reserveFooter = true
+                    continue
+                }
+                break
             }
             guard end > offset else { throw ScreenplayPDFError.cannotLayOut }
-            pages.append(NSRange(location: offset, length: end - offset))
+            pages.append(ScreenplayPageLayout(range: NSRange(location: offset, length: end - offset), rect: rect,
+                continuedCharacter: header, continuesCharacter: end < text.length ? continuingCharacter(in: text, at: end) : nil))
             offset = end
         }
         return pages
+    }
+
+    private static func continuingCharacter(in text: NSAttributedString, at offset: Int) -> String? {
+        guard offset < text.length,
+              [.dialogue, .parenthetical].contains(ScreenplayTextCodec.element(in: text, at: offset)) else { return nil }
+        let source = text.string as NSString
+        var location = source.paragraphRange(for: NSRange(location: offset, length: 0)).location
+        while location > 0 {
+            let previous = source.paragraphRange(for: NSRange(location: location - 1, length: 0))
+            let type = ScreenplayTextCodec.element(in: text, at: previous.location)
+            if type == .character {
+                return source.substring(with: previous).trimmingCharacters(in: .whitespacesAndNewlines)
+                    .replacingOccurrences(of: " (CONT'D)", with: "").uppercased()
+            }
+            if type != .dialogue && type != .parenthetical { return nil }
+            location = previous.location
+        }
+        return nil
+    }
+
+    private static func drawMarker(_ value: String, x: CGFloat, y: CGFloat, in context: CGContext, paper: ScreenplayPaper) {
+        let label = NSAttributedString(string: value, attributes:
+            ScreenplayTypography.attributes(.character, width: paper.contentWidth, printing: true))
+        let line = CTLineCreateWithAttributedString(label as CFAttributedString)
+        let width = paper.width - paper.rightMargin - x
+        let ellipsis = CTLineCreateWithAttributedString(NSAttributedString(string: "…", attributes:
+            ScreenplayTypography.attributes(.character, width: paper.contentWidth, printing: true)) as CFAttributedString)
+        let fitted = CTLineCreateTruncatedLine(line, width, .end, ellipsis) ?? line
+        context.textPosition = CGPoint(x: x, y: y)
+        CTLineDraw(fitted, context)
     }
 
     private static func contentRect(_ paper: ScreenplayPaper) -> CGRect {

@@ -6,6 +6,31 @@ import FrontstageCore
 @testable import FrontstageApp
 
 final class ScreenplayPDFTests: XCTestCase {
+    func testLongDialogueGetsContinuationMarkersWithoutChangingSource() async throws {
+        try await MainActor.run {
+            var project = Project()
+            let id = project.addScene()
+            let speech = String(repeating: "The train will arrive soon. ", count: 600)
+            try project.updateScene(id: id, html: "<div class='sc-character'>RANGA</div><div class='sc-dialogue'>\(speech)</div>")
+            let before = try project.encoded()
+            let rendered = try ScreenplayPDF.render(project: project, paper: .letter)
+            XCTAssertGreaterThan(rendered.pages.count, 2)
+            XCTAssertNil(rendered.pages.first?.continuedCharacter)
+            XCTAssertNil(rendered.pages.last?.continuesCharacter)
+            for page in rendered.pages.dropFirst() { XCTAssertEqual(page.continuedCharacter, "RANGA") }
+            for page in rendered.pages.dropLast() { XCTAssertEqual(page.continuesCharacter, "RANGA") }
+            let output = PDFDocument(data: rendered.data)?.string ?? ""
+            XCTAssertTrue(output.contains("(MORE)"))
+            XCTAssertTrue(output.contains("RANGA (CONT'D)"))
+            XCTAssertEqual(try project.encoded(), before)
+            var end = 0
+            for page in rendered.pages {
+                XCTAssertEqual(page.range.location, end)
+                end = NSMaxRange(page.range)
+            }
+            XCTAssertEqual(end, rendered.text.length)
+        }
+    }
     func testMultipagePDFContainsEveryParagraphAndCorrectPaperBounds() async throws {
         try await MainActor.run {
             _ = NSApplication.shared

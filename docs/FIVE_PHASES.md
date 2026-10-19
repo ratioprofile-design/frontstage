@@ -4,8 +4,8 @@ The original Backstage checkout remains read-only. All changes belong in frontst
 
 | Phase | Deliverable | State |
 | --- | --- | --- |
-| 3 | Bounded project undo/redo; debounced local recovery and explicit startup recovery | Implemented; validation in progress |
-| 4 | Named scene revision snapshots; restore/diff; MORE/CONT'D page continuations | Pending |
+| 3 | Bounded project undo/redo; debounced local recovery and explicit startup recovery | Passed portable tests and macOS CI run 39334231361 |
+| 4 | Named scene revision snapshots; restore/diff; MORE/CONT'D page continuations | Implemented; native validation in progress |
 | 5 | Native spatial causality board; move cards; connect scenes; cycle validation | Pending |
 | 6 | Native character/casting records and scene breakdown editing | Pending |
 | 7 | Shooting-day assignments, call sheets and production exports | Pending |
