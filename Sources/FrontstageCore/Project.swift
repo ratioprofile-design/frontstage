@@ -29,7 +29,7 @@ public struct Scene: Identifiable, Equatable, Sendable {
 /// An explicit, versioned envelope isolates native saves from the original application.
 public struct Project: Equatable, Sendable {
     public var name: String
-    private var state: [String: JSONValue]
+    var state: [String: JSONValue]
 
     public init(name: String = "Untitled Screenplay") {
         self.name = name

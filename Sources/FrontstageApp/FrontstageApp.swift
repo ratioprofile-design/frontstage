@@ -7,14 +7,14 @@ import FrontstageCore
 
 @main
 struct FrontstageApp: App {
-    @StateObject private var workspace = Workspace()
+    @StateObject private var workspace = Workspace(recoveryStore: .applicationDefault())
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some SwiftUI.Scene {
         Window("Frontstage", id: "workspace") {
             WorkspaceView(workspace: workspace)
                 .frame(minWidth: 850, minHeight: 560)
-                .onAppear { delegate.workspace = workspace }
+                .onAppear { delegate.workspace = workspace; workspace.checkRecovery() }
         }
         .commands {
             CommandGroup(replacing: .newItem) {
@@ -39,6 +39,12 @@ struct FrontstageApp: App {
                         .disabled(workspace.selectedScene == nil || workspace.mode != .edit)
                 }
             }
+            CommandMenu("Project") {
+                Button("Undo \(workspace.history.undoLabel)", action: workspace.undoProject)
+                    .keyboardShortcut("z", modifiers: [.command, .option]).disabled(!workspace.history.canUndo)
+                Button("Redo \(workspace.history.redoLabel)", action: workspace.redoProject)
+                    .keyboardShortcut("z", modifiers: [.command, .option, .shift]).disabled(!workspace.history.canRedo)
+            }
         }
     }
 }
@@ -62,8 +68,85 @@ final class Workspace: ObservableObject {
     @Published var mode = Mode.edit
     @Published var paper = ScreenplayPaper.letter
     @Published private(set) var preview: PDFDocument?
+    @Published private(set) var history = ProjectHistory()
+    @Published private(set) var recoveryCandidate: Project?
+    @Published private(set) var recoveryStatus = ""
     let editor = ScreenplayEditorController()
     private var saveURL: URL?
+    private var savedProject: Project? = Project()
+    private let recoveryStore: RecoveryStore?
+    private var recoveryTask: Task<Void, Never>?
+    private var checkedRecovery = false
+
+    init(recoveryStore: RecoveryStore? = nil) { self.recoveryStore = recoveryStore }
+
+    func checkRecovery() {
+        guard !checkedRecovery else { return }
+        checkedRecovery = true
+        do { recoveryCandidate = try recoveryStore?.load() }
+        catch { errorMessage = "The recovery copy could not be read. It has been kept on disk. \(error.localizedDescription)" }
+    }
+
+    func recoverSession() {
+        guard let candidate = recoveryCandidate else { return }
+        project = candidate
+        savedProject = nil
+        history = ProjectHistory()
+        selectedSceneID = project.scenes.first?.id
+        saveURL = nil
+        recoveryCandidate = nil
+        changed()
+    }
+
+    func discardRecovery() {
+        do { try recoveryStore?.clear(); recoveryCandidate = nil }
+        catch { errorMessage = error.localizedDescription }
+    }
+
+    func flushRecovery() throws {
+        recoveryTask?.cancel()
+        if hasChanges {
+            try recoveryStore?.save(project)
+            if recoveryStore != nil { recoveryStatus = "Recovery copy saved" }
+        } else { try recoveryStore?.clear() }
+    }
+
+    func edit(_ label: String, key: String? = nil, _ operation: (inout Project) throws -> Void) {
+        let previous = project
+        do {
+            try operation(&project)
+            guard project != previous else { return }
+            history.record(previous, label: label, key: key)
+            changed()
+        } catch { project = previous; errorMessage = error.localizedDescription }
+    }
+
+    func undoProject() {
+        guard let previous = history.undo(current: project) else { return }
+        project = previous
+        reconcileSelection()
+        changed()
+    }
+
+    func redoProject() {
+        guard let next = history.redo(current: project) else { return }
+        project = next
+        reconcileSelection()
+        changed()
+    }
+
+    private func reconcileSelection() {
+        if !project.scenes.contains(where: { $0.id == selectedSceneID }) { selectedSceneID = project.scenes.first?.id }
+        editor.textView?.undoManager?.removeAllActions()
+    }
+
+    private func didSave() {
+        savedProject = project
+        hasChanges = false
+        recoveryTask?.cancel()
+        do { try recoveryStore?.clear(); recoveryStatus = "" }
+        catch { recoveryStatus = "Saved project; recovery cleanup failed" }
+    }
 
     var selectedScene: FrontstageCore.Scene? {
         project.scenes.first { $0.id == selectedSceneID }
@@ -73,6 +156,8 @@ final class Workspace: ObservableObject {
     func newProject() {
         guard confirmDiscardOrSave() else { return }
         project = Project()
+        savedProject = project
+        history = ProjectHistory()
         saveURL = nil
         hasChanges = false
         selectedSceneID = nil
@@ -81,29 +166,39 @@ final class Workspace: ObservableObject {
     }
 
     func addScene() {
-        selectedSceneID = project.addScene()
+        var id: Decimal?
+        edit("Add Scene") { id = $0.addScene() }
+        selectedSceneID = id
         mode = .edit
-        changed()
     }
 
     func updateScene(id: Decimal, title: String? = nil, html: String? = nil, summary: String? = nil,
                      heading: SceneHeading? = nil, sceneNumber: String? = nil) {
-        do {
-            try project.updateScene(id: id, title: title, html: html, summary: summary,
+        let field = html != nil ? "Text" : heading != nil ? "Heading" : title != nil ? "Title" : summary != nil ? "Summary" : "Number"
+        edit("Edit Scene \(field)", key: "\(id)-\(field)") {
+            try $0.updateScene(id: id, title: title, html: html, summary: summary,
                                     heading: heading, sceneNumber: sceneNumber)
-            changed()
-        } catch { errorMessage = error.localizedDescription }
+        }
     }
 
     func rename(_ name: String) {
-        project.name = name
-        changed()
+        edit("Rename Project", key: "name") { $0.name = name }
     }
 
     private func changed() {
-        hasChanges = true
+        hasChanges = project != savedProject
         preview = nil
         if mode == .pages { makePreview() }
+        recoveryTask?.cancel()
+        if recoveryStore != nil {
+            recoveryStatus = hasChanges ? "Recovery copy pending…" : ""
+            recoveryTask = Task { [weak self] in
+                do { try await Task.sleep(for: .milliseconds(800)) } catch { return }
+                guard !Task.isCancelled, let self else { return }
+                do { try self.flushRecovery() }
+                catch { self.recoveryStatus = "Recovery unavailable: \(error.localizedDescription)" }
+            }
+        }
     }
 
     func makePreview() {
@@ -152,12 +247,15 @@ final class Workspace: ObservableObject {
         do {
             let imported = try Project.load(from: url)
             project = imported
+            savedProject = nil
+            history = ProjectHistory()
             selectedSceneID = imported.scenes.first?.id
             // Every open starts a copy. No source project is ever a default save destination.
             saveURL = nil
             hasChanges = true
             mode = .edit
             preview = nil
+            changed()
         } catch { errorMessage = error.localizedDescription }
     }
 
@@ -168,7 +266,7 @@ final class Workspace: ObservableObject {
         guard let saveURL else { return saveAs() }
         do {
             try project.save(to: saveURL)
-            hasChanges = false
+            didSave()
             return true
         } catch {
             errorMessage = error.localizedDescription
@@ -186,7 +284,7 @@ final class Workspace: ObservableObject {
         do {
             try project.save(to: url)
             saveURL = url
-            hasChanges = false
+            didSave()
             return true
         } catch {
             errorMessage = error.localizedDescription
@@ -204,7 +302,10 @@ final class Workspace: ObservableObject {
         alert.addButton(withTitle: "Discard")
         switch alert.runModal() {
         case .alertFirstButtonReturn: return saveCurrent()
-        case .alertThirdButtonReturn: return true
+        case .alertThirdButtonReturn:
+            recoveryTask?.cancel()
+            do { try recoveryStore?.clear(); return true }
+            catch { errorMessage = error.localizedDescription; return false }
         default: return false
         }
     }
@@ -266,6 +367,9 @@ struct WorkspaceView: View {
                         .id(scene.id)
                     Text("Local project · \(workspace.hasChanges ? "Unsaved changes" : "Saved")")
                         .font(.caption).foregroundStyle(.secondary)
+                    if !workspace.recoveryStatus.isEmpty {
+                        Text(workspace.recoveryStatus).font(.caption2).foregroundStyle(.secondary)
+                    }
                 }.padding(28)
             } else {
                 ContentUnavailableView {
@@ -292,6 +396,17 @@ struct WorkspaceView: View {
         }
         .onChange(of: workspace.mode) { _, mode in if mode == .pages { workspace.makePreview() } }
         .onChange(of: workspace.paper) { _, _ in if workspace.mode == .pages { workspace.makePreview() } }
+        .sheet(isPresented: Binding(get: { workspace.recoveryCandidate != nil }, set: { _ in })) {
+            VStack(alignment: .leading, spacing: 18) {
+                Text("Recover your last session?").font(.title2)
+                Text("A recovery copy of \(workspace.recoveryCandidate?.name ?? "your project") was found. Recover it as a new unsaved copy, or discard it.")
+                HStack {
+                    Button("Discard Recovery", action: workspace.discardRecovery)
+                    Spacer()
+                    Button("Recover", action: workspace.recoverSession).keyboardShortcut(.defaultAction)
+                }
+            }.padding(28).frame(width: 440).interactiveDismissDisabled()
+        }
         .alert("Frontstage", isPresented: Binding(
             get: { workspace.errorMessage != nil },
             set: { if !$0 { workspace.errorMessage = nil } })) {
