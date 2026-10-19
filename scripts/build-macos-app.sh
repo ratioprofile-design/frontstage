@@ -12,7 +12,7 @@ intel_path="$(swift build -c release --arch x86_64 --scratch-path .build/mac-x86
 app_path="$PWD/build/Frontstage.app"
 mkdir -p "$app_path/Contents/MacOS" "$app_path/Contents/Resources"
 xcrun lipo -create "$arm_path/Frontstage" "$intel_path/Frontstage" -output "$app_path/Contents/MacOS/Frontstage"
-xcrun lipo -verify_arch arm64 x86_64 "$app_path/Contents/MacOS/Frontstage"
+xcrun lipo "$app_path/Contents/MacOS/Frontstage" -verify_arch arm64 x86_64
 cp Resources/Info.plist "$app_path/Contents/Info.plist"
 # Ad-hoc signing is for local development, not distribution or notarization.
 codesign --force --sign - "$app_path"
