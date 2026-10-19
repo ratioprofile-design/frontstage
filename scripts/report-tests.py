@@ -1,5 +1,6 @@
 """Expose test failures in Actions annotations without changing the runner's exit status."""
 import os
+import sys
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -8,6 +9,13 @@ def annotate(message):
     escaped = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
     print(f"::error::{escaped}")
 
+
+if "--build" in sys.argv:
+    log = Path("build/build.log")
+    if log.exists():
+        for line in log.read_text().splitlines()[-24:]:
+            annotate(line)
+    raise SystemExit(0)
 
 result = Path("build/test-results.xml")
 if result.exists():
