@@ -118,6 +118,7 @@ struct ScreenplayEditor: NSViewRepresentable {
         var onError: (String) -> Void
         private(set) var lastHTML: String?
         private var loading = false
+        private var pendingElement: ScreenplayElement?
         init(html: Binding<String>, controller: ScreenplayEditorController, onError: @escaping (String) -> Void) {
             self.html = html
             self.controller = controller
@@ -126,7 +127,14 @@ struct ScreenplayEditor: NSViewRepresentable {
 
         func load(_ source: String, into text: NSTextView) {
             loading = true
-            defer { loading = false }
+            defer {
+                loading = false
+                // View updates may call load; publish the new format after that update completes.
+                DispatchQueue.main.async { [weak controller = controller, weak text] in
+                    guard let controller, controller.textView === text else { return }
+                    controller.selectionChanged()
+                }
+            }
             do {
                 let attributed = try ScreenplayTextCodec.decode(source, width: controller.contentWidth)
                 text.textStorage?.setAttributedString(attributed)
@@ -144,6 +152,22 @@ struct ScreenplayEditor: NSViewRepresentable {
 
         func textDidChange(_ notification: Notification) {
             guard !loading, let text = notification.object as? NSTextView, !text.hasMarkedText() else { return }
+            // Rich clipboard data lacks our paragraph metadata. Keep the destination element
+            // instead of turning pasted dialogue into action or retaining arbitrary clipboard sizes.
+            if let storage = text.textStorage {
+                loading = true
+                var location = 0
+                while location < storage.length {
+                    let range = (storage.string as NSString).paragraphRange(for: NSRange(location: location, length: 0))
+                    if storage.attribute(.screenplayElement, at: location, effectiveRange: nil) == nil {
+                        ScreenplayTypography.apply(pendingElement ?? controller.activeElement, to: storage,
+                            range: range, width: controller.contentWidth)
+                    }
+                    location = NSMaxRange(range)
+                }
+                loading = false
+            }
+            pendingElement = nil
             let result = ScreenplayTextCodec.encode(text.attributedString())
             lastHTML = result
             html.wrappedValue = result
@@ -152,6 +176,12 @@ struct ScreenplayEditor: NSViewRepresentable {
 
         func textViewDidChangeSelection(_ notification: Notification) {
             if !loading { controller.selectionChanged() }
+        }
+
+        func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange,
+                      replacementString: String?) -> Bool {
+            if !loading { pendingElement = controller.activeElement }
+            return true
         }
 
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {

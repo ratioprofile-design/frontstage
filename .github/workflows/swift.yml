@@ -16,6 +16,7 @@ jobs:
         env:
           FRONTSTAGE_TEST_ARTIFACTS: ${{ github.workspace }}/build/test-artifacts
         run: |
+          set -o pipefail
           mkdir -p build
           swift test --parallel --xunit-output build/test-results.xml 2>&1 | tee build/test.log
       - name: Report test results

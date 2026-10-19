@@ -96,6 +96,52 @@ final class ScreenplayEditingTests: XCTestCase {
             XCTAssertEqual(state.html, original)
         }
     }
+
+    func testPastedRichTextKeepsDestinationDialogueElement() async throws {
+        try await MainActor.run {
+            let state = ScriptState("<div class='sc-dialogue'>Old dialogue</div>")
+            let controller = ScreenplayEditorController()
+            let coordinator = ScreenplayEditor.Coordinator(html: Binding(get: { state.html }, set: { state.html = $0 }),
+                controller: controller, onError: { _ in XCTFail() })
+            let text = NSTextView()
+            text.isRichText = true
+            text.delegate = coordinator
+            controller.textView = text
+            coordinator.load(state.html, into: text)
+            text.setSelectedRange(NSRange(location: 0, length: 12))
+            controller.selectionChanged()
+            let clipboard = NSAttributedString(string: "Pasted dialogue", attributes: [.font: NSFont.systemFont(ofSize: 36)])
+            text.insertText(clipboard, replacementRange: text.selectedRange())
+            coordinator.textDidChange(Notification(name: NSText.didChangeNotification, object: text))
+            let restored = try ScreenplayTextCodec.decode(state.html)
+            XCTAssertEqual(ScreenplayTextCodec.element(in: restored, at: 0), .dialogue)
+            XCTAssertTrue(restored.string.contains("Pasted dialogue"))
+        }
+    }
+
+    func testFormattingParticipatesInNativeUndo() async throws {
+        try await MainActor.run {
+            _ = NSApplication.shared
+            let controller = ScreenplayEditorController()
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 500, height: 300),
+                styleMask: [.titled], backing: .buffered, defer: false)
+            let text = NSTextView(frame: window.contentView!.bounds)
+            text.isRichText = true
+            text.allowsUndo = true
+            window.contentView = text
+            window.makeFirstResponder(text)
+            controller.textView = text
+            text.textStorage?.setAttributedString(try ScreenplayTextCodec.decode("<div class='sc-action'>Arrival</div>"))
+            text.setSelectedRange(NSRange(location: 0, length: 0))
+            let undo = try XCTUnwrap(text.undoManager)
+            undo.removeAllActions()
+            controller.format(.dialogue)
+            XCTAssertEqual(ScreenplayTextCodec.element(in: text.attributedString(), at: 0), .dialogue)
+            XCTAssertTrue(undo.canUndo)
+            undo.undo()
+            XCTAssertEqual(ScreenplayTextCodec.element(in: text.attributedString(), at: 0), .action)
+        }
+    }
 }
 
 @MainActor

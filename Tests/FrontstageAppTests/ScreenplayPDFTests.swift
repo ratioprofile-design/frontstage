@@ -75,7 +75,7 @@ final class ScreenplayPDFTests: XCTestCase {
     }
 
     func testNoActiveScenesProducesClearFailure() async throws {
-        await MainActor.run {
+        try await MainActor.run {
             XCTAssertThrowsError(try ScreenplayPDF.render(project: Project(), paper: .letter))
         }
     }
