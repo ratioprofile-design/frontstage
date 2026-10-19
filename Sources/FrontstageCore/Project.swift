@@ -21,6 +21,9 @@ public struct Scene: Identifiable, Equatable, Sendable {
     public var title: String
     public var html: String
     public var summary: String
+    public var heading: SceneHeading
+    public var sceneNumber: String
+    public var isDisabled: Bool
 }
 
 /// An explicit, versioned envelope isolates native saves from the original application.
@@ -77,8 +80,13 @@ public struct Project: Equatable, Sendable {
     public var scenes: [Scene] {
         (state["beats"]?.array ?? []).compactMap { value in
             guard let fields = value.object, case .number(let id) = fields["id"] else { return nil }
+            let slug = fields["slug"]?.object ?? [:]
             return Scene(id: id, title: fields["title"]?.string ?? "", html: fields["content"]?.string ?? "",
-                         summary: fields["summary"]?.string ?? "")
+                         summary: fields["summary"]?.string ?? "",
+                         heading: SceneHeading(prefix: slug["prefix"]?.string ?? "INT.",
+                             location: slug["location"]?.string ?? "", time: slug["time"]?.string ?? "DAY"),
+                         sceneNumber: fields["sceneNumber"]?.string ?? "",
+                         isDisabled: fields["isDisabled"] == .bool(true))
         }
     }
 
@@ -101,13 +109,24 @@ public struct Project: Equatable, Sendable {
     }
 
     public mutating func updateScene(id: Decimal, title: String? = nil, html: String? = nil,
-                                     summary: String? = nil) throws {
+                                     summary: String? = nil, heading: SceneHeading? = nil,
+                                     sceneNumber: String? = nil) throws {
         var beats = state["beats"]?.array ?? []
         guard let index = beats.firstIndex(where: { $0.object?["id"] == .number(id) }),
               var fields = beats[index].object else { throw ProjectError.sceneNotFound }
         if let title { fields["title"] = .string(title) }
         if let html { fields["content"] = .string(html) }
         if let summary { fields["summary"] = .string(summary) }
+        if let heading {
+            var slug = fields["slug"]?.object ?? [:]
+            slug["prefix"] = .string(heading.prefix)
+            slug["location"] = .string(heading.location)
+            slug["time"] = .string(heading.time)
+            // Legacy raw text is a derived cache. Keep it in sync when the structured heading changes.
+            if slug["raw"] != nil { slug["raw"] = .string(heading.text) }
+            fields["slug"] = .object(slug)
+        }
+        if let sceneNumber { fields["sceneNumber"] = .string(sceneNumber) }
         beats[index] = .object(fields)
         state["beats"] = .array(beats)
     }

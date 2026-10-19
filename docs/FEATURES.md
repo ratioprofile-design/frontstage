@@ -3,12 +3,14 @@
 | Area | Status |
 | --- | --- |
 | Native macOS shell and scene list | Implemented; macOS CI build passed, interactive runtime review pending |
-| Scene title, summary, native rich text | Implemented; macOS TextKit/workspace tests passed, interactive import fidelity review pending |
+| Scene title, summary, native rich text | Implemented; interactive import fidelity review pending |
+| Screenplay elements, scene headings, scene numbers | Implemented; native semantic import/edit/save tests added |
+| Letter/A4 page preview, PDF export, native print | Implemented; multipage output, omitted-scene and orphan-cue tests added |
 | Project create/import/save | Implemented; portable model tests cover source protection |
 | Unknown project fields, Tamil HTML preservation | Implemented in portable model; rich-text edit fidelity needs macOS checks |
 | Credentials | Known legacy fields stripped; Keychain/provider integrations not implemented |
 | Undo | TextKit text undo only; project-wide undo not implemented |
-| Screenplay element editing, pagination, revisions, print/PDF | Not implemented |
+| Revisions, custom layout settings, page locks, dual dialogue, MORE/CONT'D | Not implemented |
 | Causality timeline, spatial board, Excalidraw replacement | Not implemented |
 | Tamil/Bamini conversion and two-column editor | Not implemented |
 | Character/casting/crew/breakdown/continuity | Not implemented |

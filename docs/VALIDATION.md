@@ -17,6 +17,12 @@
 
 There is no claim of full feature parity, macOS runtime validation, cloud synchronization or fresh-machine restoration until the relevant checks execute.
 
+## Screenplay milestone checks
+
+The portable suite now contains 16 tests. New native tests exercise semantic `sc-*` HTML round trips, nested wrappers, Tamil and emoji, native Return/Tab flow, and untouched-source preservation. PDF tests verify every paragraph is extractable from a long multipage screenplay, page ranges cover all source text exactly once, Letter/A4 page geometry, omitted scenes, orphan-cue movement and destination symlink protection. CI saves test results and generated PDFs in `Frontstage-screenplay-validation`.
+
+On a Mac, also review the Write/Pages switch and native Print dialog. Check Option+1–7, Tab/Shift+Tab, text undo, IME composition, scene headings and scene numbers. Compare preview and exported PDF visually. Custom imported font/layout settings and MORE/CONT'D continuation markers are not implemented in this milestone.
+
 ## Current cloud run
 
 Swift 6.0.3 on Linux: 11 XCTest tests executed, 11 passed, 0 failures. The trailing Swift Testing message reports zero tests because this suite uses XCTest; it is not the suite result. Bash syntax and plist parsing also passed. The first macOS CI run (91a584b, run 39330601726) succeeded, covering core tests, native compilation and the development bundling script. Interactive UI checks are still outstanding. Follow-up macOS CI run 39330835052 (8741b72) also succeeded: the suite includes three native TextKit/workspace tests, followed by a release app build, plist/signature validation and artifact upload. The development zip is available from that run.

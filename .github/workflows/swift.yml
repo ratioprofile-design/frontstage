@@ -7,15 +7,31 @@ permissions:
 jobs:
   macos:
     runs-on: macos-15
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Check toolchain
         run: swift --version
       - name: Test project model and persistence
-        run: swift test --parallel
+        env:
+          FRONTSTAGE_TEST_ARTIFACTS: ${{ github.workspace }}/build/test-artifacts
+        run: |
+          mkdir -p build
+          swift test --parallel --xunit-output build/test-results.xml 2>&1 | tee build/test.log
+      - name: Report test results
+        if: always()
+        run: python3 scripts/report-tests.py
       - name: Build and validate native app bundle
         run: ./scripts/build-macos-app.sh
       - uses: actions/upload-artifact@v4
         with:
           name: Frontstage-macOS-development
           path: build/Frontstage-macOS.zip
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Frontstage-screenplay-validation
+          path: |
+            build/test-results.xml
+            build/test.log
+            build/test-artifacts/

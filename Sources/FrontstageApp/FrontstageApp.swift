@@ -2,6 +2,7 @@
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
+import PDFKit
 import FrontstageCore
 
 @main
@@ -25,6 +26,19 @@ struct FrontstageApp: App {
                 Button("Save As…") { workspace.saveAs() }
                     .keyboardShortcut("s", modifiers: [.command, .shift])
             }
+            CommandGroup(after: .saveItem) {
+                Button("Export Screenplay PDF…", action: workspace.exportPDF)
+                    .disabled(!workspace.hasActiveScenes)
+                Button("Print Screenplay…", action: workspace.printScreenplay).keyboardShortcut("p")
+                    .disabled(!workspace.hasActiveScenes)
+            }
+            CommandMenu("Screenplay") {
+                ForEach(Array(ScreenplayElement.editable.enumerated()), id: \.element.rawValue) { index, element in
+                    Button(element.label) { workspace.editor.format(element) }
+                        .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: [.option])
+                        .disabled(workspace.selectedScene == nil || workspace.mode != .edit)
+                }
+            }
         }
     }
 }
@@ -40,15 +54,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 @MainActor
 final class Workspace: ObservableObject {
+    enum Mode: String, CaseIterable { case edit = "Write", pages = "Pages" }
     @Published private(set) var project = Project()
     @Published var selectedSceneID: Decimal?
     @Published private(set) var hasChanges = false
     @Published var errorMessage: String?
+    @Published var mode = Mode.edit
+    @Published var paper = ScreenplayPaper.letter
+    @Published private(set) var preview: PDFDocument?
+    let editor = ScreenplayEditorController()
     private var saveURL: URL?
 
     var selectedScene: FrontstageCore.Scene? {
         project.scenes.first { $0.id == selectedSceneID }
     }
+    var hasActiveScenes: Bool { project.scenes.contains { !$0.isDisabled } }
 
     func newProject() {
         guard confirmDiscardOrSave() else { return }
@@ -56,23 +76,67 @@ final class Workspace: ObservableObject {
         saveURL = nil
         hasChanges = false
         selectedSceneID = nil
+        mode = .edit
+        preview = nil
     }
 
     func addScene() {
         selectedSceneID = project.addScene()
-        hasChanges = true
+        changed()
     }
 
-    func updateScene(id: Decimal, title: String? = nil, html: String? = nil, summary: String? = nil) {
+    func updateScene(id: Decimal, title: String? = nil, html: String? = nil, summary: String? = nil,
+                     heading: SceneHeading? = nil, sceneNumber: String? = nil) {
         do {
-            try project.updateScene(id: id, title: title, html: html, summary: summary)
-            hasChanges = true
+            try project.updateScene(id: id, title: title, html: html, summary: summary,
+                                    heading: heading, sceneNumber: sceneNumber)
+            changed()
         } catch { errorMessage = error.localizedDescription }
     }
 
     func rename(_ name: String) {
         project.name = name
+        changed()
+    }
+
+    private func changed() {
         hasChanges = true
+        preview = nil
+        if mode == .pages { makePreview() }
+    }
+
+    func makePreview() {
+        guard hasActiveScenes else { preview = nil; return }
+        do {
+            let result = try ScreenplayPDF.render(project: project, paper: paper)
+            guard let document = PDFDocument(data: result.data) else { throw ScreenplayPDFError.cannotCreatePDF }
+            preview = document
+        } catch { preview = nil; errorMessage = error.localizedDescription }
+    }
+
+    func exportPDF() {
+        do {
+            let result = try ScreenplayPDF.render(project: project, paper: paper)
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [.pdf]
+            panel.nameFieldStringValue = project.name.replacingOccurrences(of: "/", with: "-") + ".pdf"
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            try result.save(to: url)
+        } catch { errorMessage = error.localizedDescription }
+    }
+
+    func printScreenplay() {
+        do {
+            let result = try ScreenplayPDF.render(project: project, paper: paper)
+            guard let document = PDFDocument(data: result.data) else { throw ScreenplayPDFError.cannotCreatePDF }
+            let settings = NSPrintInfo.shared.copy() as! NSPrintInfo
+            settings.paperSize = NSSize(width: paper.width, height: paper.height)
+            settings.orientation = .portrait
+            guard let operation = document.printOperation(for: settings, scalingMode: .pageScaleToFit, autoRotate: false) else {
+                throw ScreenplayPDFError.cannotCreatePDF
+            }
+            operation.run()
+        } catch { errorMessage = error.localizedDescription }
     }
 
     func open() {
@@ -91,6 +155,8 @@ final class Workspace: ObservableObject {
             // Every open starts a copy. No source project is ever a default save destination.
             saveURL = nil
             hasChanges = true
+            mode = .edit
+            preview = nil
         } catch { errorMessage = error.localizedDescription }
     }
 
@@ -167,7 +233,18 @@ struct WorkspaceView: View {
             }.padding(.top)
             .navigationSplitViewColumnWidth(min: 220, ideal: 260)
         } detail: {
-            if let scene = workspace.selectedScene {
+            if workspace.mode == .pages {
+                if let preview = workspace.preview {
+                    VStack(spacing: 0) {
+                        Text("\(preview.pageCount) pages · \(workspace.paper.label)")
+                            .font(.caption).foregroundStyle(.secondary).padding(8)
+                        ScreenplayPDFView(document: preview)
+                    }
+                } else {
+                    ContentUnavailableView("No screenplay pages", systemImage: "doc.text",
+                        description: Text("Add an active scene to preview the screenplay."))
+                }
+            } else if let scene = workspace.selectedScene {
                 VStack(alignment: .leading, spacing: 16) {
                     TextField("Scene title", text: Binding(
                         get: { workspace.selectedScene?.title ?? "" },
@@ -177,10 +254,14 @@ struct WorkspaceView: View {
                         get: { workspace.selectedScene?.summary ?? "" },
                         set: { workspace.updateScene(id: scene.id, summary: $0) }))
                         .textFieldStyle(.roundedBorder)
+                    SceneHeadingFields(scene: scene, workspace: workspace)
                     Divider()
-                    RichTextEditor(html: Binding(
+                    ScreenplayFormatBar(controller: workspace.editor)
+                    ScreenplayEditor(html: Binding(
                         get: { workspace.selectedScene?.html ?? "" },
-                        set: { workspace.updateScene(id: scene.id, html: $0) }))
+                        set: { workspace.updateScene(id: scene.id, html: $0) }),
+                        controller: workspace.editor, width: workspace.paper.contentWidth,
+                        onError: { workspace.errorMessage = $0 })
                         .id(scene.id)
                     Text("Local project · \(workspace.hasChanges ? "Unsaved changes" : "Saved")")
                         .font(.caption).foregroundStyle(.secondary)
@@ -197,14 +278,66 @@ struct WorkspaceView: View {
             }
         }
         .toolbar {
+            Picker("View", selection: $workspace.mode) {
+                ForEach(Workspace.Mode.allCases, id: \.self) { mode in Text(mode.rawValue).tag(mode) }
+            }.pickerStyle(.segmented).frame(width: 150)
+            Picker("Paper", selection: $workspace.paper) {
+                ForEach(ScreenplayPaper.allCases, id: \.self) { paper in Text(paper.label).tag(paper) }
+            }.frame(width: 120)
             Button("Add Scene", systemImage: "plus", action: workspace.addScene)
             Button("Save", systemImage: "square.and.arrow.down", action: workspace.save)
+            Button("Export PDF", systemImage: "doc.richtext", action: workspace.exportPDF)
+                .disabled(!workspace.hasActiveScenes)
         }
+        .onChange(of: workspace.mode) { _, mode in if mode == .pages { workspace.makePreview() } }
+        .onChange(of: workspace.paper) { _, _ in if workspace.mode == .pages { workspace.makePreview() } }
         .alert("Frontstage", isPresented: Binding(
             get: { workspace.errorMessage != nil },
             set: { if !$0 { workspace.errorMessage = nil } })) {
                 Button("OK") { workspace.errorMessage = nil }
             } message: { Text(workspace.errorMessage ?? "") }
+    }
+}
+
+private struct SceneHeadingFields: View {
+    let scene: FrontstageCore.Scene
+    @ObservedObject var workspace: Workspace
+
+    private func heading(_ key: WritableKeyPath<SceneHeading, String>) -> Binding<String> {
+        Binding(get: { (workspace.selectedScene?.heading ?? scene.heading)[keyPath: key] }, set: { value in
+            var current = workspace.selectedScene?.heading ?? scene.heading
+            current[keyPath: key] = value
+            workspace.updateScene(id: scene.id, heading: current)
+        })
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("SCENE HEADING").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            HStack {
+                TextField("INT. / EXT.", text: heading(\.prefix)).frame(width: 90)
+                    .accessibilityLabel("Interior or exterior")
+                TextField("Location", text: heading(\.location)).accessibilityLabel("Scene location")
+                TextField("DAY / NIGHT", text: heading(\.time)).frame(width: 110).accessibilityLabel("Time of day")
+                TextField("Auto #", text: Binding(get: { workspace.selectedScene?.sceneNumber ?? "" },
+                    set: { workspace.updateScene(id: scene.id, sceneNumber: $0) }))
+                    .frame(width: 65).accessibilityLabel("Scene number override")
+            }.textFieldStyle(.roundedBorder)
+        }
+    }
+}
+
+private struct ScreenplayFormatBar: View {
+    @ObservedObject var controller: ScreenplayEditorController
+    var body: some View {
+        HStack {
+            Picker("Element", selection: Binding(get: { controller.activeElement }, set: { controller.format($0) })) {
+                ForEach(ScreenplayElement.editable, id: \.self) { element in Text(element.label).tag(element) }
+            }.frame(width: 210)
+            Spacer()
+            Text("Tab changes element · Return continues dialogue · ⌥1–7 formats")
+                .font(.caption).foregroundStyle(.secondary)
+        }
     }
 }
 #else
