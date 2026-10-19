@@ -58,12 +58,17 @@ enum ScreenplayPDF {
                     ScreenplayTypography.attributes(.action, width: paper.contentWidth, printing: true)))
             }
         }
+        return try renderText(text, title: project.name, paper: paper)
+    }
+
+    static func renderText(_ text: NSAttributedString, title: String, paper: ScreenplayPaper) throws -> RenderedScreenplay {
+        guard text.length > 0 else { throw ScreenplayPDFError.cannotLayOut }
         let pages = try layoutPages(text, paper: paper)
         let output = CFDataCreateMutable(nil, 0)!
         guard let consumer = CGDataConsumer(data: output) else { throw ScreenplayPDFError.cannotCreatePDF }
         var bounds = CGRect(x: 0, y: 0, width: paper.width, height: paper.height)
         guard let context = CGContext(consumer: consumer, mediaBox: &bounds,
-            [kCGPDFContextTitle as String: project.name, kCGPDFContextCreator as String: "Frontstage"] as CFDictionary) else {
+            [kCGPDFContextTitle as String: title, kCGPDFContextCreator as String: "Frontstage"] as CFDictionary) else {
             throw ScreenplayPDFError.cannotCreatePDF
         }
         let framesetter = CTFramesetterCreateWithAttributedString(text as CFAttributedString)

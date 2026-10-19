@@ -61,7 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @MainActor
 final class Workspace: ObservableObject {
     enum Mode: String, CaseIterable {
-        case edit = "Write", pages = "Pages", revisions = "Revisions", board = "Board", people = "People", breakdown = "Breakdown"
+        case edit = "Write", pages = "Pages", revisions = "Revisions", board = "Board", people = "People", breakdown = "Breakdown", production = "Production"
     }
     @Published private(set) var project = Project()
     @Published var selectedSceneID: Decimal?
@@ -73,12 +73,14 @@ final class Workspace: ObservableObject {
     @Published private(set) var history = ProjectHistory()
     @Published private(set) var recoveryCandidate: Project?
     @Published private(set) var recoveryStatus = ""
+    @Published private(set) var changeID = 0
     let editor = ScreenplayEditorController()
     private var saveURL: URL?
     private var savedProject: Project? = Project()
     private let recoveryStore: RecoveryStore?
     private var recoveryTask: Task<Void, Never>?
     private var checkedRecovery = false
+    private var recoveryBlocked = false
 
     init(recoveryStore: RecoveryStore? = nil) { self.recoveryStore = recoveryStore }
 
@@ -86,7 +88,11 @@ final class Workspace: ObservableObject {
         guard !checkedRecovery else { return }
         checkedRecovery = true
         do { recoveryCandidate = try recoveryStore?.load() }
-        catch { errorMessage = "The recovery copy could not be read. It has been kept on disk. \(error.localizedDescription)" }
+        catch {
+            recoveryBlocked = true
+            recoveryStatus = "Recovery disabled: unreadable copy preserved"
+            errorMessage = "The recovery copy could not be read. It has been kept on disk and will not be overwritten. \(error.localizedDescription)"
+        }
     }
 
     func recoverSession() {
@@ -107,6 +113,7 @@ final class Workspace: ObservableObject {
 
     func flushRecovery() throws {
         recoveryTask?.cancel()
+        guard !recoveryBlocked else { throw ProjectError.invalidProject("an unreadable recovery copy must be recovered manually before automatic recovery can resume") }
         if hasChanges {
             try recoveryStore?.save(project)
             if recoveryStore != nil { recoveryStatus = "Recovery copy saved" }
@@ -146,7 +153,7 @@ final class Workspace: ObservableObject {
         savedProject = project
         hasChanges = false
         recoveryTask?.cancel()
-        do { try recoveryStore?.clear(); recoveryStatus = "" }
+        do { if !recoveryBlocked { try recoveryStore?.clear(); recoveryStatus = "" } }
         catch { recoveryStatus = "Saved project; recovery cleanup failed" }
     }
 
@@ -188,11 +195,12 @@ final class Workspace: ObservableObject {
     }
 
     private func changed() {
+        changeID &+= 1
         hasChanges = project != savedProject
         preview = nil
         if mode == .pages { makePreview() }
         recoveryTask?.cancel()
-        if recoveryStore != nil {
+        if recoveryStore != nil && !recoveryBlocked {
             recoveryStatus = hasChanges ? "Recovery copy pending…" : ""
             recoveryTask = Task { [weak self] in
                 do { try await Task.sleep(for: .milliseconds(800)) } catch { return }
@@ -215,26 +223,34 @@ final class Workspace: ObservableObject {
     func exportPDF() {
         do {
             let result = try ScreenplayPDF.render(project: project, paper: paper)
-            let panel = NSSavePanel()
-            panel.allowedContentTypes = [.pdf]
-            panel.nameFieldStringValue = project.name.replacingOccurrences(of: "/", with: "-") + ".pdf"
-            guard panel.runModal() == .OK, let url = panel.url else { return }
-            try result.save(to: url)
+            try exportPDF(result, name: project.name)
         } catch { errorMessage = error.localizedDescription }
+    }
+
+    func exportPDF(_ result: RenderedScreenplay, name: String) throws {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.pdf]
+        panel.nameFieldStringValue = name.replacingOccurrences(of: "/", with: "-") + ".pdf"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        try result.save(to: url)
     }
 
     func printScreenplay() {
         do {
             let result = try ScreenplayPDF.render(project: project, paper: paper)
+            try printPDF(result)
+        } catch { errorMessage = error.localizedDescription }
+    }
+
+    func printPDF(_ result: RenderedScreenplay) throws {
             guard let document = PDFDocument(data: result.data) else { throw ScreenplayPDFError.cannotCreatePDF }
             let settings = NSPrintInfo.shared.copy() as! NSPrintInfo
-            settings.paperSize = NSSize(width: paper.width, height: paper.height)
+            settings.paperSize = NSSize(width: result.paper.width, height: result.paper.height)
             settings.orientation = .portrait
             guard let operation = document.printOperation(for: settings, scalingMode: .pageScaleToFit, autoRotate: false) else {
                 throw ScreenplayPDFError.cannotCreatePDF
             }
             operation.run()
-        } catch { errorMessage = error.localizedDescription }
     }
 
     func open() {
@@ -306,7 +322,7 @@ final class Workspace: ObservableObject {
         case .alertFirstButtonReturn: return saveCurrent()
         case .alertThirdButtonReturn:
             recoveryTask?.cancel()
-            do { try recoveryStore?.clear(); return true }
+            do { if !recoveryBlocked { try recoveryStore?.clear() }; return true }
             catch { errorMessage = error.localizedDescription; return false }
         default: return false
         }
@@ -337,7 +353,9 @@ struct WorkspaceView: View {
             }.padding(.top)
             .navigationSplitViewColumnWidth(min: 220, ideal: 260)
         } detail: {
-            if workspace.mode == .people {
+            if workspace.mode == .production {
+                ProductionView(workspace: workspace)
+            } else if workspace.mode == .people {
                 PeopleView(workspace: workspace)
             } else if workspace.mode == .breakdown {
                 BreakdownView(workspace: workspace)

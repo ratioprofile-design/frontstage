@@ -2,7 +2,7 @@
 
 A native macOS rewrite of Backstage, built with Swift, SwiftUI and AppKit. The original `ratioprofile-design/Backstage` repository is not modified. There is no React, Tauri, JavaScript runtime or web view in this client.
 
-**Status: native screenplay milestone, not a complete Backstage conversion.** The portable model passes 16 tests. The screenplay editor, pagination and PDF output have dedicated macOS tests and CI build checks. Interactive app testing and full feature parity are still outstanding; see the validation notes below for recorded runs.
+**Status: native editing and production milestones, not a complete Backstage conversion.** The portable suite has 40 passing tests. Native editing, recovery, discovery and PDF workflows have dedicated macOS tests and CI build checks. Interactive app testing and full feature parity are still outstanding; see the validation notes below for recorded runs.
 
 ## Current scope
 
@@ -16,8 +16,13 @@ A native macOS rewrite of Backstage, built with Swift, SwiftUI and AppKit. The o
 - Preservation of unported project and scene fields, including nested data. Untouched scene HTML is retained; editing a scene converts its HTML through AppKit and may normalize unsupported formatting.
 - Known legacy credential fields are removed on import/save. This is not a general secret detector: inspect legacy project data before sharing it.
 - Unsaved-change prompts when replacing a project or quitting.
+- Project undo/redo, plus a separate debounced recovery copy and startup recovery prompt.
+- Named scene revisions, text comparison, restore with automatic backup, and printed MORE/CONT'D dialogue continuations.
+- Spatial story board with drag, zoom, connections, cycle checks, omission and scene reordering.
+- Character profiles and script-cue discovery; per-role casting options, confirmation and contact details; manual scene breakdowns.
+- Shooting days, scene assignments and estimates, cast call times, call-sheet PDF/print output, and schedule/breakdown CSV exports.
 
-There is no autosave or recovery journal yet. Save explicitly. Imported projects always open as copies, including `.frontstage` files; select the destination when saving. The app does not access the old app's storage directory automatically.
+Save projects explicitly. A separate recovery copy is written after 800 ms without changes; it does not overwrite an imported file or guarantee the latest keystroke survives a crash. Imported projects always open as copies, including `.frontstage` files; select the destination when saving. The app does not access the old app's storage directory automatically. If a recovery copy is unreadable, it is preserved and automatic recovery writes are disabled for that session.
 
 ## Write and preview a screenplay
 
@@ -25,7 +30,13 @@ Add a scene, fill in its heading, then write in the editor. Choose an element fr
 
 Switch **Write → Pages** to preview the entire active screenplay. Choose US Letter or A4 in the toolbar. Use **Export PDF** or **File → Print Screenplay** (Command+P) for output. The paper choice is currently a session setting. The validation artifact includes generated example PDFs for both paper sizes.
 
-The native screenplay layout uses 12-point Courier with a 1.5-inch binding margin and 1-inch other margins. It does not yet reproduce custom Backstage font/layout settings, page locks, dual dialogue or automatic MORE/CONT'D markers. Imported HTML remains untouched until that scene is edited; editing normalizes its HTML and retains screenplay types plus bold/italic/underline, while unsupported inline styles, media and links need fidelity review.
+The native screenplay layout uses 12-point Courier with a 1.5-inch binding margin and 1-inch other margins. It does not yet reproduce custom Backstage font/layout settings, page locks or dual dialogue. Imported HTML remains untouched until that scene is edited; editing normalizes its HTML and retains screenplay types plus bold/italic/underline, while unsupported inline styles, media and links need fidelity review.
+
+## Other workspaces
+
+Use the View menu in the toolbar to choose **Revisions**, **Board**, **People**, **Breakdown** or **Production**. Revisions and breakdowns operate on the scene selected in the sidebar. Board cards open a scene with a double-click. People can discover character cues from the screenplay, then you can assign roles in Breakdown. Production assigns active scenes to shooting days; a scene moves from its previous day when assigned to another. Fill in actual location/crew/safety details before exporting or distributing a call sheet.
+
+The Project menu provides undo (Command+Option+Z) and redo (Command+Option+Shift+Z), while Command+Z remains text undo. See the [five-phase run](docs/FIVE_PHASES.md) for each milestone and its limits.
 
 ## Run on a Mac
 

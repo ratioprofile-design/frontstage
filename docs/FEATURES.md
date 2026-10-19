@@ -9,12 +9,16 @@
 | Project create/import/save | Implemented; portable model tests cover source protection |
 | Unknown project fields, Tamil HTML preservation | Implemented in portable model; rich-text edit fidelity needs macOS checks |
 | Credentials | Known legacy fields stripped; Keychain/provider integrations not implemented |
-| Undo | TextKit text undo only; project-wide undo not implemented |
-| Revisions, custom layout settings, page locks, dual dialogue, MORE/CONT'D | Not implemented |
-| Causality timeline, spatial board, Excalidraw replacement | Not implemented |
+| Undo and recovery | TextKit undo, bounded project undo/redo, app-owned debounced recovery and explicit startup recovery |
+| Scene revisions and dialogue continuation | Named snapshots, text diff, backup-before-restore, MORE/CONT'D in PDF |
+| Spatial causality board | Move/arrange cards, zoom, directed links, cycle validation/diagnosis, omission and script ordering |
+| Custom layout settings, page locks, dual dialogue | Not implemented |
+| Timeline lanes, ripple flow, group editing, Excalidraw replacement | Not implemented |
 | Tamil/Bamini conversion and two-column editor | Not implemented |
-| Character/casting/crew/breakdown/continuity | Not implemented |
-| Shots, storyboards, production plan, DOOD, call sheets | Not implemented |
+| Characters, casting and scene breakdowns | Profiles, cue discovery, assignments, casting contact/status/confirmation, manual requirements |
+| Crew and continuity workspaces, advanced auditions/media | Not implemented; crew contact fields are available on production days |
+| Shooting plan and call sheets | Day assignments/order, duration estimates, call times, basic workload/turnaround checks, printable call-sheet reports, schedule/breakdown CSV |
+| Shots, storyboards, DOOD and scheduling optimizer | Not implemented |
 | Vault, DOCX/XLSX/PDF imports and exports | Not implemented |
 | Cloud auth, sync, collaboration and permissions | Not implemented |
 | Web and Windows clients | Future separate clients; not implemented |

@@ -58,10 +58,12 @@ extension Project {
     public mutating func createCharacter(name: String) throws -> String {
         let key = name.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard !key.isEmpty else { throw ProjectError.invalidProject("a character needs a name") }
-        guard !characters.contains(where: { $0.id.caseInsensitiveCompare(key) == .orderedSame || $0.name.caseInsensitiveCompare(key) == .orderedSame }) else {
+        if let existing = state["characterData"], existing.object == nil { throw ProjectError.invalidProject("the character dictionary cannot be edited in this format") }
+        var records = state["characterData"]?.object ?? [:]
+        guard !records.keys.contains(where: { $0.caseInsensitiveCompare(key) == .orderedSame }),
+              !characters.contains(where: { $0.name.caseInsensitiveCompare(key) == .orderedSame }) else {
             throw ProjectError.invalidProject("a character with that name already exists")
         }
-        var records = state["characterData"]?.object ?? [:]
         records[key] = .object(["id": .string(UUID().uuidString), "name": .string(key), "backstory": .string(""),
                                 "artists": .array([]), "relationships": .array([]), "images": .array([])])
         state["characterData"] = .object(records)

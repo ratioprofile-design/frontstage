@@ -5,6 +5,22 @@ import FrontstageCore
 @testable import FrontstageApp
 
 final class RecoveryWorkspaceTests: XCTestCase {
+    func testUnreadableRecoveryCopyIsNotOverwrittenByNewEdits() async throws {
+        try await MainActor.run {
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let store = RecoveryStore(directory: directory)
+            let damaged = Data("unreadable recovery payload".utf8)
+            try damaged.write(to: store.fileURL)
+            let workspace = Workspace(recoveryStore: store)
+            workspace.checkRecovery()
+            XCTAssertNotNil(workspace.errorMessage)
+            workspace.addScene()
+            XCTAssertThrowsError(try workspace.flushRecovery())
+            XCTAssertEqual(try Data(contentsOf: store.fileURL), damaged)
+        }
+    }
     func testProjectUndoRedoTracksDirtyStateAndSelection() async throws {
         await MainActor.run {
             let workspace = Workspace()
