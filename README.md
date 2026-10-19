@@ -54,7 +54,7 @@ For an app bundle:
 open build/Frontstage.app
 ```
 
-The bundle is ad-hoc signed for development. It is not Developer ID signed or notarized. On a Mac, open `Package.swift` in Xcode to build/debug the Swift package. The macOS GitHub Actions workflow builds an app artifact; availability depends on a successful workflow run.
+The bundling script builds arm64 and x86_64, combines them into a universal Mac executable, verifies both architectures and ad-hoc signs the bundle for development. Native tests execute on the CI runner's architecture; Intel runtime review is still needed. The bundle is not Developer ID signed or notarized. On a Mac, open `Package.swift` in Xcode to build/debug the Swift package. The macOS GitHub Actions workflow builds an app artifact; availability depends on a successful workflow run.
 
 ## Portable core tests
 

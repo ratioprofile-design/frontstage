@@ -31,6 +31,8 @@ The portable suite now executes 40 tests. Additional coverage includes bounded/c
 
 Native tests add dirty-state/selection reconciliation, explicit recovery, protection of unreadable recovery data, character-cue discovery, undo of production edits, live call-sheet PDF text, and long-dialogue continuation headers/footers. The validation artifact includes call-sheet-sample.pdf as well as screenplay PDFs.
 
+Phase 7's combined native suite and app packaging passed in run [39336366519](https://github.com/ratioprofile-design/frontstage/actions/runs/39336366519). The final bundling script additionally compiles both arm64 and x86_64 and verifies the universal binary with lipo before signing; this is build evidence for both architectures, not an Intel runtime test.
+
 Manual checks still needed: crash/relaunch recovery in the installed app, board dragging/zoom/selection, role/casting forms, day/date/time controls across user locales, visual typography and the printer dialog. No cloud synchronization, distribution signing/notarization or full Backstage parity is claimed.
 
 ## Current cloud run
