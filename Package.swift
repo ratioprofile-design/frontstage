@@ -11,6 +11,7 @@ let package = Package(
     targets: [
         .target(name: "FrontstageCore"),
         .executableTarget(name: "FrontstageApp", dependencies: ["FrontstageCore"]),
-        .testTarget(name: "FrontstageCoreTests", dependencies: ["FrontstageCore"])
+        .testTarget(name: "FrontstageCoreTests", dependencies: ["FrontstageCore"]),
+        .testTarget(name: "FrontstageAppTests", dependencies: ["FrontstageApp"])
     ]
 )

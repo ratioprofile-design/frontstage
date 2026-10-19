@@ -2,8 +2,8 @@
 
 | Area | Status |
 | --- | --- |
-| Native macOS shell and scene list | Implemented; macOS build/runtime verification pending |
-| Scene title, summary, native rich text | Implemented; macOS verification and import fidelity review pending |
+| Native macOS shell and scene list | Implemented; macOS CI build passed, interactive runtime review pending |
+| Scene title, summary, native rich text | Implemented; native compilation passed, interactive import fidelity review pending |
 | Project create/import/save | Implemented; portable model tests cover source protection |
 | Unknown project fields, Tamil HTML preservation | Implemented in portable model; rich-text edit fidelity needs macOS checks |
 | Credentials | Known legacy fields stripped; Keychain/provider integrations not implemented |

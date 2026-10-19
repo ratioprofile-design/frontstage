@@ -2,7 +2,7 @@
 
 A native macOS rewrite of Backstage, built with Swift, SwiftUI and AppKit. The original `ratioprofile-design/Backstage` repository is not modified. There is no React, Tauri, JavaScript runtime or web view in this client.
 
-**Status: first native foundation, not a complete Backstage conversion.** The portable model and persistence are independently testable. macOS compilation and manual app testing are required before calling the native client working; see CI and the validation notes below.
+**Status: first native foundation, not a complete Backstage conversion.** The portable model and persistence pass 11 tests, and the initial macOS CI build and app bundling passed. Interactive app testing and full feature parity are still outstanding; see the validation notes below.
 
 ## Current scope
 

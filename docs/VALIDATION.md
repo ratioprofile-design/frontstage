@@ -19,4 +19,4 @@ There is no claim of full feature parity, macOS runtime validation, cloud synchr
 
 ## Current cloud run
 
-Swift 6.0.3 on Linux: 11 XCTest tests executed, 11 passed, 0 failures. The trailing Swift Testing message reports zero tests because this suite uses XCTest; it is not the suite result. Bash syntax and plist parsing also passed. macOS compilation, UI execution and the bundling script remain unverified on this host.
+Swift 6.0.3 on Linux: 11 XCTest tests executed, 11 passed, 0 failures. The trailing Swift Testing message reports zero tests because this suite uses XCTest; it is not the suite result. Bash syntax and plist parsing also passed. The first macOS CI run (91a584b, run 39330601726) succeeded, covering core tests, native compilation and the development bundling script. Interactive UI checks are still outstanding. Native TextKit/workspace tests were added afterward and require their own CI result.
