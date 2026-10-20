@@ -60,6 +60,18 @@ final class WhiteboardAcceptanceTests: XCTestCase {
             window.contentView = view; view.frame = NSRect(x: 0, y: 0, width: 1267, height: 720)
             view.layoutSubtreeIfNeeded(); window.displayIfNeeded()
             RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+            func canvas(in parent: NSView) -> NativeWhiteboard? {
+                if let result = parent as? NativeWhiteboard { return result }
+                return parent.subviews.lazy.compactMap { canvas(in: $0) }.first
+            }
+            let native = try XCTUnwrap(canvas(in: view))
+            let children = try XCTUnwrap(native.accessibilityChildren() as? [NSAccessibilityElement])
+            XCTAssertTrue(children.contains { $0.accessibilityLabel() == "The invitation" })
+            native.selection = [first]
+            let down = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                windowNumber: window.windowNumber, context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: 125))
+            native.keyDown(with: down)
+            XCTAssertEqual(workspace.selectedBoardBeatID, second)
             if let path = ProcessInfo.processInfo.environment["FRONTSTAGE_TEST_ARTIFACTS"] {
                 let output = URL(fileURLWithPath: path)
                 try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)

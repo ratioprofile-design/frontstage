@@ -50,6 +50,27 @@ final class NativeWhiteboard: NSView {
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
 
+    override func isAccessibilityElement() -> Bool { false }
+    override func accessibilityRole() -> NSAccessibility.Role? { .group }
+    override func accessibilityLabel() -> String? { "Story whiteboard" }
+    override func accessibilityChildren() -> [Any]? {
+        let visibleIDs = geometry.beats(in: visible)
+        return board.orderedBeats.filter { visibleIDs.contains($0.id) }.compactMap { beat -> NSAccessibilityElement? in
+            guard let rect = geometry.beatRects[beat.id], let frame = screenRect(rect) else { return nil }
+            let element = NSAccessibilityElement()
+            element.setAccessibilityRole(.button)
+            element.setAccessibilityLabel(beat.title)
+            element.setAccessibilityHelp("Story beat. Use Edit Beat to open its snippet editor.")
+            element.setAccessibilityValue(selection.contains(beat.id) ? "Selected" : "")
+            element.setAccessibilityFrame(frame)
+            element.setAccessibilityParent(self)
+            element.setAccessibilityCustomActions([NSAccessibilityCustomAction(name: "Edit Beat", handler: { [weak self] _ in
+                guard let self else { return false }; self.openPopup(beat.id); return true
+            })])
+            return element
+        }
+    }
+
     private var zoom: Double { board.viewport.zoom }
     private func world(_ point: NSPoint) -> BoardPoint {
         BoardPoint(x: point.x / zoom + board.viewport.origin.x, y: point.y / zoom + board.viewport.origin.y)
@@ -293,6 +314,28 @@ final class NativeWhiteboard: NSView {
         }
         if event.modifierFlags.contains(.command), event.charactersIgnoringModifiers == "a" {
             selection = Set(board.beats.map(\.id)); selected?(selection, []); needsDisplay = true; return
+        }
+        if [123, 124, 125, 126].contains(event.keyCode) {
+            let visibleBeats = board.orderedBeats.filter { geometry.beatRects[$0.id] != nil }
+            var next = visibleBeats.first?.id
+            if let id = selection.sorted().first, let current = geometry.beatRects[id]?.center {
+                let candidates = visibleBeats.compactMap { beat -> (String, Double)? in
+                    guard beat.id != id, let p = geometry.beatRects[beat.id]?.center else { return nil }
+                    let dx = p.x - current.x, dy = p.y - current.y
+                    let primary = event.keyCode == 123 ? -dx : event.keyCode == 124 ? dx : event.keyCode == 125 ? dy : -dy
+                    guard primary > 1 else { return nil }
+                    return (beat.id, primary + 2 * abs(event.keyCode == 123 || event.keyCode == 124 ? dy : dx))
+                }
+                next = candidates.min { $0.1 == $1.1 ? $0.0 < $1.0 : $0.1 < $1.1 }?.0 ?? id
+            }
+            if let next, let rect = geometry.beatRects[next] {
+                selection = [next]; blockSelection = []; selected?(selection, []); workspace?.selectBoardBeat(next)
+                let viewport = visible
+                if rect.x < viewport.x || rect.maxX > viewport.maxX { board.viewport.origin.x = rect.x - 30 }
+                if rect.y < viewport.y || rect.maxY > viewport.maxY { board.viewport.origin.y = rect.y - 30 }
+                persistViewport(); needsDisplay = true
+            }
+            return
         }
         super.keyDown(with: event)
     }
