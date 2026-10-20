@@ -153,6 +153,15 @@ final class NativeWhiteboard: NSView {
         viewStart = point; dragStart = worldPoint; dragDelta = .init()
         if spaceHeld || event.modifierFlags.contains(.option) { panStart = board.viewport.origin; return }
         if drawingMode { stroke = [worldPoint]; return }
+        if worldPoint.x - board.viewport.origin.x < 110,
+           let layer = board.layers.first(where: { layer in
+               guard let rect = geometry.layerRects[layer.id] else { return false }
+               return worldPoint.y >= rect.y && worldPoint.y < rect.y + 32
+           }) {
+            workspace?.edit("Layer Display") { try $0.editWhiteboard { board in
+                if let i = board.layers.firstIndex(where: { $0.id == layer.id }) { board.layers[i].collapsed.toggle() }
+            } }; return
+        }
         if let beat = geometry.hitBeat(worldPoint) {
             if let cause = workspace?.pendingBoardCauseID {
                 workspace?.edit("Create Dependency") { try $0.connectBoardBeats(cause: cause, effect: beat) }

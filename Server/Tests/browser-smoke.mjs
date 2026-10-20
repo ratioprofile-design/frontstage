@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
 import assert from 'node:assert/strict';
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.FRONTSTAGE_PLAYWRIGHT_MODULE || 'playwright-core');
@@ -15,7 +16,7 @@ let browser;
 async function wait(check, message) { for (let i = 0; i < 100; i++) { if (await check().catch(() => false)) return; await new Promise(r => setTimeout(r, 200)); } throw Error(message); }
 try {
   await wait(async () => (await fetch(address + '/health')).ok, 'Server startup');
-  browser = await chromium.launch({ executablePath: process.env.FRONTSTAGE_CHROMIUM || '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
+  browser = await chromium.launch({ executablePath: process.env.FRONTSTAGE_CHROMIUM || (existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : chromium.executablePath()), headless: true, args: ['--no-sandbox'] });
   const context = await browser.newContext({ viewport: { width: 1440, height: 950 } });
   const page = await context.newPage();
   const errors = []; page.on('pageerror', error => errors.push(error.message));

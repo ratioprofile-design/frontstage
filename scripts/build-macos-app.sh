@@ -14,8 +14,12 @@ mkdir -p "$app_path/Contents/MacOS" "$app_path/Contents/Resources"
 xcrun lipo -create "$arm_path/Frontstage" "$intel_path/Frontstage" -output "$app_path/Contents/MacOS/Frontstage"
 xcrun lipo "$app_path/Contents/MacOS/Frontstage" -verify_arch arm64 x86_64
 cp Resources/Info.plist "$app_path/Contents/Info.plist"
-# Ad-hoc signing is for local development, not distribution or notarization.
-codesign --force --sign - "$app_path"
+# Release identities enable hardened runtime signing; default artifacts remain development builds.
+if [[ -n "${FRONTSTAGE_SIGNING_IDENTITY:-}" ]]; then
+  codesign --force --options runtime --timestamp --sign "$FRONTSTAGE_SIGNING_IDENTITY" "$app_path"
+else
+  codesign --force --sign - "$app_path"
+fi
 plutil -lint "$app_path/Contents/Info.plist"
 codesign --verify --strict "$app_path"
 ditto -c -k --keepParent "$app_path" build/Frontstage-macOS.zip

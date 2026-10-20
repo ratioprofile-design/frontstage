@@ -1,0 +1,8 @@
+.git
+**/.build
+**/.swiftpm
+**/node_modules
+**/var
+build
+.env*
+**/.env*
