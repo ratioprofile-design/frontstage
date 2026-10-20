@@ -9,6 +9,7 @@ let token = '', current = null, doc = null, base = null, selected = null, editor
 let dirty = false, syncing = false, timer = null, pendingConflict = null;
 let documentEpoch = 0;
 let apiOrigin = '';
+let localMode = false;
 $('server-address').value = configuredOrigin || localStorage.getItem('frontstage-server') || '';
 function setServer() {
   const value = $('server-address').value.trim();
@@ -54,13 +55,41 @@ const database = new Promise((resolve, reject) => {
 });
 async function saveLocal() {
   if (!current || !doc) return;
-  const snapshot = { id: current.id, doc: clone(doc), base: clone(base), revision: current.revision, dirty };
+  const snapshot = { id: current.id, doc: clone(doc), base: clone(base), revision: current.revision, dirty, local: !!current.local, name: doc.name };
   const db = await database;
   return new Promise((resolve, reject) => { const tx = db.transaction('projects', 'readwrite'); tx.objectStore('projects').put(snapshot); tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
 }
 async function localCopy(id) {
   const db = await database;
   return new Promise((resolve, reject) => { const r = db.transaction('projects').objectStore('projects').get(id); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
+}
+async function loadLocalProjects() {
+  localMode = true;
+  const db = await database;
+  const copies = await new Promise((resolve, reject) => { const request = db.transaction('projects').objectStore('projects').getAll(); request.onsuccess = () => resolve(request.result.filter(p => p.local)); request.onerror = () => reject(request.error); });
+  $('project-list').replaceChildren();
+  for (const copy of copies) {
+    const button = element('button', `${copy.name || 'Untitled Story'} · on this device`);
+    button.onclick = () => openLocalProject(copy.id).catch(e => status(e.message)); $('project-list').append(button);
+  }
+  $('account').hidden = true; $('projects').hidden = false; $('workspace').hidden = true;
+  $('logout').textContent = 'Sign In'; status('Local projects · saved in this browser');
+  if (!copies.length) await createLocalProject('Untitled Story');
+}
+function emptyDocument(name) { return initializeBoard({ format: 'frontstage', version: 1, name, project: { beats: [], nextId: 1 } }); }
+async function createLocalProject(name, document = emptyDocument(name)) {
+  const id = 'local-' + uuid(), db = await database;
+  await new Promise((resolve, reject) => { const tx = db.transaction('projects', 'readwrite'); tx.objectStore('projects').put({ id, doc: document, base: clone(document), revision: 0, dirty: false, local: true, name: document.name }); tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
+  await openLocalProject(id);
+}
+async function openLocalProject(id) {
+  const epoch = ++documentEpoch; clearTimeout(timer);
+  const copy = await localCopy(id); if (epoch !== documentEpoch || !copy?.local) return;
+  current = { id, name: copy.name, access: 'owner', revision: 0, local: true }; localMode = true;
+  doc = initializeBoard(clone(copy.doc)); base = clone(copy.base); dirty = false;
+  history.length = 0; selected = null; source = null; editorID = null; pendingConflict = null;
+  $('editor').hidden = true; $('conflict').hidden = true; $('account').hidden = true; $('projects').hidden = true; $('workspace').hidden = false;
+  $('logout').textContent = 'Sign In'; render(); status('Saved on this device');
 }
 function board() { return doc.project.frontstageWhiteboard; }
 function initializeBoard(document) {
@@ -100,6 +129,12 @@ function edit(action) {
   catch (error) { doc = previous; status(error.message); }
 }
 async function sync() {
+  if (current?.local) {
+    const epoch = documentEpoch;
+    try { dirty = false; await saveLocal(); if (epoch === documentEpoch) status('Saved on this device'); }
+    catch (error) { if (epoch === documentEpoch) { dirty = true; status(`Local save failed: ${error.message}`); } }
+    return;
+  }
   if (!current || current.access === 'reader' || !dirty || syncing || pendingConflict) return;
   syncing = true; const sent = clone(doc);
   const epoch = documentEpoch, projectID = current.id, revision = current.revision;
@@ -122,6 +157,7 @@ async function sync() {
   finally { syncing = false; if (dirty && !pendingConflict && navigator.onLine) { clearTimeout(timer); timer = setTimeout(sync, 3000); } }
 }
 async function loadProjects() {
+  localMode = false; $('logout').textContent = 'Sign Out';
   const { data } = await api('/api/projects'); $('project-list').replaceChildren();
   for (const project of data) { const button = element('button', `${project.name} · ${project.access} · revision ${project.revision}`); button.onclick = () => openProject(project.id).catch(e => status(e.message)); $('project-list').append(button); }
   $('account').hidden = true; $('projects').hidden = false; $('workspace').hidden = true;
@@ -291,10 +327,11 @@ async function authenticate(signup = false) {
   catch (error) { $('auth-error').textContent = error.message; }
 }
 $('login').onsubmit = e => { e.preventDefault(); authenticate(); }; $('signup').onclick = () => authenticate(true);
-$('new-project').onclick = async () => { const name = prompt('Project name', 'Untitled Story'); if (!name) return; try { const document = initializeBoard({ format: 'frontstage', version: 1, name, project: { beats: [], nextId: 1 } }); const { data } = await api('/api/projects', 'POST', { document }); await openProject(data.id); } catch (error) { status(error.message); } };
-$('import-project').onchange = async e => { try { const file = e.target.files[0]; if (!file) return; const document = initializeBoard(JSON.parse(await file.text())); const { data } = await api('/api/projects', 'POST', { document }); await openProject(data.id); } catch (error) { status(error.message); } };
-$('logout').onclick = async () => { await saveLocal(); ++documentEpoch; clearTimeout(timer); try { await api('/api/logout', 'POST'); } catch {} token = ''; current = null; doc = null; pendingConflict = null; $('conflict').hidden = true; $('workspace').hidden = true; $('projects').hidden = true; $('account').hidden = false; $('editor').hidden = true; status('Signed out · local drafts retained on this device'); };
-$('back').onclick = async () => { await saveLocal(); $('editor').hidden = true; editorID = null; loadProjects().catch(e => status(e.message)); };
+$('local-mode').onclick = () => loadLocalProjects().catch(e => status(e.message));
+$('new-project').onclick = async () => { const name = prompt('Project name', 'Untitled Story'); if (!name) return; try { const document = emptyDocument(name); if (localMode) { await createLocalProject(name, document); return; } const { data } = await api('/api/projects', 'POST', { document }); await openProject(data.id); } catch (error) { status(error.message); } };
+$('import-project').onchange = async e => { try { const file = e.target.files[0]; if (!file) return; const document = initializeBoard(JSON.parse(await file.text())); if (localMode) { await createLocalProject(document.name, document); return; } const { data } = await api('/api/projects', 'POST', { document }); await openProject(data.id); } catch (error) { status(error.message); } };
+$('logout').onclick = async () => { await saveLocal(); ++documentEpoch; clearTimeout(timer); if (token) { try { await api('/api/logout', 'POST'); } catch {} } token = ''; current = null; doc = null; dirty = false; localMode = false; pendingConflict = null; $('conflict').hidden = true; $('workspace').hidden = true; $('projects').hidden = true; $('account').hidden = false; $('editor').hidden = true; status('Local projects and drafts remain in this browser'); };
+$('back').onclick = async () => { await saveLocal(); $('editor').hidden = true; editorID = null; (localMode ? loadLocalProjects() : loadProjects()).catch(e => status(e.message)); };
 $('save').onclick = sync; $('download').onclick = download; $('export-conflict').onclick = download;
 $('script-toggle').onclick = () => { $('script').hidden = !$('script').hidden; };
 $('add-beat').onclick = addBeat; $('add-block').onclick = () => { selected = null; addBeat(); };
@@ -311,12 +348,12 @@ $('bold').onclick = () => { $('snippet-editor').focus(); document.execCommand('b
 $('element').onchange = () => { const selection = window.getSelection(); let node = selection?.anchorNode?.parentElement; while (node && node.parentElement !== $('snippet-editor') && node !== $('snippet-editor')) node = node.parentElement; if (node && node !== $('snippet-editor')) { node.className = `sc-line sc-${$('element').value}`; $('snippet-editor').dispatchEvent(new Event('input')); } };
 $('keep-local').onclick = () => { if (!pendingConflict) return; base = clone(pendingConflict.document); current.revision = pendingConflict.revision; pendingConflict = null; $('conflict').hidden = true; dirty = true; sync(); };
 $('take-server').onclick = async () => { if (!pendingConflict) return; download(); doc = initializeBoard(clone(pendingConflict.document)); base = clone(pendingConflict.document); current.revision = pendingConflict.revision; dirty = false; pendingConflict = null; $('conflict').hidden = true; $('editor').hidden = true; editorID = null; await saveLocal(); render(); status('Server copy loaded; previous local copy downloaded'); };
-$('share').onclick = async () => { if (!current || current.access !== 'owner') { status('Only the project owner can change access'); return; } const username = prompt('Existing account username'); if (!username) return; const access = prompt('Access: reader or editor', 'editor'); if (!['reader', 'editor'].includes(access)) return; try { await api(`/api/projects/${current.id}/members`, 'POST', { username, access }); status(`Shared with ${username} (${access})`); } catch (error) { status(error.message); } };
+$('share').onclick = async () => { if (current?.local) { status('Download your local project, sign in, then import it to create a shared copy.'); return; } if (!current || current.access !== 'owner') { status('Only the project owner can change access'); return; } const username = prompt('Existing account username'); if (!username) return; const access = prompt('Access: reader or editor', 'editor'); if (!['reader', 'editor'].includes(access)) return; try { await api(`/api/projects/${current.id}/members`, 'POST', { username, access }); status(`Shared with ${username} (${access})`); } catch (error) { status(error.message); } };
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { $('editor').hidden = true; editorID = null; source = null; } if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); sync(); } if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !['INPUT', 'TEXTAREA'].includes(e.target.tagName) && !e.target.isContentEditable) { const previous = history.pop(); if (previous) { e.preventDefault(); doc = previous; dirty = true; saveLocal(); render(); } } if (e.key === 'Enter' && e.target === $('canvas') && selected) openEditor(selected); });
 window.addEventListener('online', () => { if (dirty) sync(); });
 window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
 setInterval(async () => {
-  if (!current || !token || dirty || syncing || editorID || pendingConflict) return;
+  if (!current || current.local || !token || dirty || syncing || editorID || pendingConflict) return;
   const epoch = documentEpoch, projectID = current.id;
   try {
     const { data } = await api(`/api/projects/${projectID}`);

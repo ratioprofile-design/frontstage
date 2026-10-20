@@ -22,7 +22,7 @@ Updated 20 October 2026. “Implemented” describes executable workflows, not c
 | Native drawing | Persisted freehand whiteboard annotations | Full Excalidraw-equivalent objects, selection and export |
 | Service | Swift/Vapor accounts, bcrypt, expiring hashed sessions, project permissions, atomic CAS revisions and retry IDs | Hosting, TLS proxy, backups, rate limits, account recovery and operations review |
 | Mac sharing | Keychain session, shared create/open, owner access controls, reader pull, explicit push/pull, three-way conflicts/backups | Background sync and cold offline shared-session restoration |
-| Browser | Whiteboard/popup/script, causes, ownership sharing, offline drafts/reconnect merge; Vercel static build and separate-origin service support | Verify public deployment, provision persistent backend, complete Mac/production/nested-group parity and cold offline launch |
+| Browser | Whiteboard/popup/script, causes, local projects with reload/offline edit/export, ownership sharing and reconnect merge; verified Vercel delivery and separate-origin service support | Provision persistent shared backend, complete Mac/production/nested-group parity and cold offline launch |
 | Windows | Native Win32 board/popup/project save/undo and shared Swift engine; CI UI smoke | Rich screenplay text, sync UI, full Mac workspace parity, installer/accessibility |
 | Public distribution | Universal Mac development builds, Windows development zip, container build, signing/notary script | Actual Developer ID signing/notarization, clean-machine installers and updates |
 

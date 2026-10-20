@@ -46,6 +46,8 @@ Command+Z is text undo; Command+Option+Z is project undo. Recovery is a separate
 
 The selected browser address is [frontstage-five.vercel.app](https://frontstage-five.vercel.app/). Its Vercel project is connected to this repository; the static deployment build is configured here. A persistent Swift backend and its HTTPS origin are still required for public accounts/sync. See [Vercel setup](Server/README.md#vercel-browser-deployment); public deployment status is not yet verified.
 
+Choose **Use on This Device** on the browser sign-in screen to work without an account or backend. Add a block/beat, double-click it for the popup, and use **Download Project** for a portable `.frontstage` copy. Local projects persist in this browser and reopen from the same button; clearing browser/site storage removes those local copies. A separate backend is required only for shared accounts and synchronization.
+
 Mac and Windows clients are Swift executables without an embedded web runtime; the service is Swift/Vapor. The browser presentation uses HTML/CSS/JavaScript and shares the document/service contract.
 
 Windows development artifacts are on [the Windows workflow](https://github.com/ratioprofile-design/frontstage/actions/workflows/windows.yml). The Windows preview has plain-text snippets and a subset of the Mac workspace; it is not yet a complete Windows release.
