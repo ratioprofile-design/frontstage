@@ -11,7 +11,7 @@ final class ScreenplayEditorController: ObservableObject {
     var typography = ScriptLayoutSettings()
 
     func selectionChanged() {
-        guard let textView, textView.isEditable, !textView.hasMarkedText() else { return }
+        guard let textView, !textView.hasMarkedText() else { return }
         let element: ScreenplayElement
         if textView.selectedRange().location == textView.string.utf16.count,
            let type = textView.typingAttributes[.screenplayElement] as? String {
@@ -23,7 +23,7 @@ final class ScreenplayEditorController: ObservableObject {
     }
 
     func format(_ element: ScreenplayElement) {
-        guard let textView, !textView.hasMarkedText() else { return }
+        guard let textView, textView.isEditable, !textView.hasMarkedText() else { return }
         textView.window?.makeFirstResponder(textView)
         let selection = textView.selectedRange()
         let range = (textView.string as NSString).paragraphRange(for: selection)

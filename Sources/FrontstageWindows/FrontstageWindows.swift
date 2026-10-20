@@ -280,6 +280,25 @@ struct FrontstageWindows {
         }
         guard let hwnd else { return }
         ShowWindow(hwnd, SW_SHOW); UpdateWindow(hwnd)
+        if CommandLine.arguments.count > 2 && CommandLine.arguments[1] == "--ui-smoke" {
+            do {
+                state.addBeat(newBlock: true)
+                guard let field = state.bodyField, let first = state.popupBeat else { throw ProjectError.invalidProject("popup was not constructed") }
+                wide("தமிழ் — native Windows popup text") { _ = SetWindowTextW(field, $0) }
+                guard try state.project.whiteboard().beats.first(where: { $0.id == first })?.html.contains("native Windows popup text") == true else { throw ProjectError.invalidProject("popup edit did not reach its beat") }
+                state.addBeat(newBlock: false)
+                guard let second = state.popupBeat else { throw ProjectError.sceneNotFound }
+                try state.project.connectBoardBeats(cause: first, effect: second)
+                try state.project.editWhiteboard { try $0.resolveCauses() }
+                let destination = URL(fileURLWithPath: CommandLine.arguments[2])
+                try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try state.project.save(to: destination)
+                let restored = try Project.load(from: destination)
+                guard try restored.whiteboard() == state.project.whiteboard() else { throw ProjectError.invalidProject("saved project differs") }
+                print("PASS: native Windows window, popup text binding, dependency solver and project save/reopen")
+                return
+            } catch { FileHandle.standardError.write(Data("Windows UI smoke failed: \(error.localizedDescription)\n".utf8)); exit(1) }
+        }
         var message = MSG()
         while GetMessageW(&message, nil, 0, 0) { TranslateMessage(&message); DispatchMessageW(&message) }
     }

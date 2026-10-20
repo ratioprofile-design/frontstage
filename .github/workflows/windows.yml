@@ -28,6 +28,11 @@ jobs:
         run: |
           swift test --filter 'WhiteboardTests|ProjectMergeTests|OfficeArchiveTests|ScreenplayToolsTests' 2>&1 | Tee-Object windows-tests.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Smoke native popup and project save
+        shell: pwsh
+        run: |
+          .build/release/FrontstageWindows.exe --ui-smoke build/windows-ui-sample.frontstage 2>&1 | Tee-Object windows-ui.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Collect development executable and runtime
         shell: pwsh
         run: |
@@ -58,3 +63,5 @@ jobs:
           path: |
             windows-build.log
             windows-tests.log
+            windows-ui.log
+            build/windows-ui-sample.frontstage
