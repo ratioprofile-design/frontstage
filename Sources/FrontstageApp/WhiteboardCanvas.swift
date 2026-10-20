@@ -64,7 +64,7 @@ final class NativeWhiteboard: NSView {
             element.setAccessibilityValue(selection.contains(beat.id) ? "Selected" : "")
             element.setAccessibilityFrame(frame)
             element.setAccessibilityParent(self)
-            element.setAccessibilityCustomActions([NSAccessibilityCustomAction(name: "Edit Beat", handler: { [weak self] _ in
+            element.setAccessibilityCustomActions([NSAccessibilityCustomAction(name: "Edit Beat", handler: { [weak self] in
                 guard let self else { return false }; self.openPopup(beat.id); return true
             })])
             return element
