@@ -61,6 +61,7 @@ struct WhiteboardWorkspace: View {
             Button { drawing.toggle() } label: { Image(systemName: "pencil.tip") }.tint(drawing ? .cyan : .gray)
                 .help("Draw board annotations")
             Button { fitRequest += 1 } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }.help("Fit selection or board")
+            Toggle("Ripple", isOn: $workspace.whiteboardRipple).toggleStyle(.button)
             Button { changeZoom(0.8) } label: { Image(systemName: "minus.magnifyingglass") }
             Text("\(Int(board.viewport.zoom * 100))%").monospacedDigit().frame(width: 36)
             Button { changeZoom(1.25) } label: { Image(systemName: "plus.magnifyingglass") }
@@ -175,6 +176,14 @@ struct WhiteboardWorkspace: View {
                     Toggle("Must Be Caused", isOn: Binding(get: { beat.mustBeCaused }, set: { value in update(beat.id, "Cause Requirement") { $0.mustBeCaused = value } }))
                     Button("Create Dependency From…") { workspace.pendingBoardCauseID = beat.id }
                     TextField("Synopsis", text: beatText(beat.id, \.synopsis, label: "Synopsis"), axis: .vertical).lineLimit(2...5)
+                    if let scene = workspace.project.scenes.first(where: { $0.id == beat.sceneID }) {
+                        DisclosureGroup("Scene Heading") {
+                            TextField("INT. / EXT.", text: headingField(scene.id, \.prefix))
+                            TextField("Location", text: headingField(scene.id, \.location))
+                            TextField("DAY / NIGHT", text: headingField(scene.id, \.time))
+                            TextField("Scene number", text: Binding(get: { workspace.project.scenes.first { $0.id == scene.id }?.sceneNumber ?? "" }, set: { workspace.updateScene(id: scene.id, sceneNumber: $0) }))
+                        }.disabled(scene.isTextLocked)
+                    }
                     Button("Open Popup Editor") { workspace.popup.open(beat.id, workspace: workspace) }
                     Button("Research & Attachments…") { workspace.openBoardResearch(beat.id) }
                     Divider()
@@ -251,6 +260,12 @@ struct WhiteboardWorkspace: View {
 
     private func beatText(_ id: String, _ path: WritableKeyPath<BoardBeat, String>, label: String) -> Binding<String> {
         Binding(get: { workspace.whiteboard.beats.first { $0.id == id }?[keyPath: path] ?? "" }, set: { value in update(id, label) { $0[keyPath: path] = value } })
+    }
+    private func headingField(_ id: Decimal, _ path: WritableKeyPath<SceneHeading, String>) -> Binding<String> {
+        Binding(get: { workspace.project.scenes.first { $0.id == id }?.heading[keyPath: path] ?? "" }, set: { text in
+            guard var heading = workspace.project.scenes.first(where: { $0.id == id })?.heading else { return }
+            heading[keyPath: path] = text; workspace.updateScene(id: id, heading: heading)
+        })
     }
     private func update(_ id: String, _ label: String, _ action: (inout BoardBeat) -> Void) {
         workspace.edit(label, key: "\(id)-\(label)") { try $0.updateBoardBeat(id, action) }

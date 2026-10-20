@@ -76,6 +76,7 @@ final class Workspace: ObservableObject {
     @Published var selectedBoardBeatID: String?
     @Published var pendingBoardCauseID: String?
     @Published var showBoardScript = false
+    @Published var whiteboardRipple = true
     @Published var selectedResearchID: String?
     @Published var mode = Mode.board {
         didSet { if oldValue != mode { editor.textView?.undoManager?.removeAllActions() } }
@@ -220,7 +221,7 @@ final class Workspace: ObservableObject {
         var id: Decimal?
         edit("Add Scene") { id = $0.addScene() }
         selectedSceneID = id
-        mode = .edit
+        mode = .board
     }
 
     func updateScene(id: Decimal, title: String? = nil, html: String? = nil, summary: String? = nil,

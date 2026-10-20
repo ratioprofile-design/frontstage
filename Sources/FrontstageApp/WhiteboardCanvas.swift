@@ -228,7 +228,8 @@ final class NativeWhiteboard: NSView {
             if let sourceLayer, sourceLayer != target.id {
                 delta.y += (geometry.layerRects[sourceLayer]?.y ?? 0) - (geometry.layerRects[target.id]?.y ?? 0)
             }
-            workspace?.edit("Move Blocks") { try $0.moveBoardBlocks(ids, delta: delta, layerID: sourceLayer == target.id ? nil : target.id) }
+            let ripple = workspace?.whiteboardRipple ?? true
+            workspace?.edit("Move Blocks") { try $0.moveBoardBlocks(ids, delta: delta, layerID: sourceLayer == target.id ? nil : target.id, ripple: ripple) }
         } else if let beat = movingBeat {
             let point = world(convert(event.locationInWindow, from: nil))
             if let block = hitBlock(point) {
@@ -252,10 +253,10 @@ final class NativeWhiteboard: NSView {
     }
 
     override func scrollWheel(with event: NSEvent) {
-        if event.modifierFlags.contains(.command) { zoomAt(convert(event.locationInWindow, from: nil), factor: exp(-event.scrollingDeltaY * 0.015)) }
+        if event.modifierFlags.contains(.command) { zoomAt(convert(event.locationInWindow, from: nil), factor: exp(event.scrollingDeltaY * 0.015)) }
         else {
-            board.viewport.origin.x += event.scrollingDeltaX / zoom
-            board.viewport.origin.y += event.scrollingDeltaY / zoom
+            board.viewport.origin.x -= event.scrollingDeltaX / zoom
+            board.viewport.origin.y -= event.scrollingDeltaY / zoom
             persistViewport()
         }
         needsDisplay = true

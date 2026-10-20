@@ -79,11 +79,11 @@ private final class WindowsWorkspace {
     }
     func popupChanged() {
         guard !loadingPopup, let id = popupBeat, let titleField, let bodyField else { return }
-        let title = text(titleField), body = text(bodyField), original = originalPopupText
+        let title = text(titleField), body = text(bodyField).replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n"), original = originalPopupText
         edit("Edit Beat", key: "popup-\(id)") { project in
             try project.updateBoardBeat(id) { beat in
                 beat.title = title
-                if body != original { beat.html = body.components(separatedBy: .newlines).map { "<div class=\"sc-line sc-action\">\(OfficeArchive.xml($0))</div>" }.joined() }
+                if body != original { beat.html = body.components(separatedBy: "\n").map { "<div class=\"sc-line sc-action\">\(OfficeArchive.xml($0))</div>" }.joined() }
             }
         }
     }
@@ -199,7 +199,7 @@ private func procedure(_ hwnd: HWND?, _ message: UINT, _ wParam: WPARAM, _ lPara
             let beat = state.board.beats.first { $0.id == state.popupBeat }
             state.titleField = control(hwnd, className: "EDIT", title: beat?.title ?? "", id: 101, x: 12, y: 12, width: 560, height: 28, style: DWORD(WS_BORDER | ES_AUTOHSCROLL))
             _ = control(hwnd, className: "STATIC", title: "Snippet text (plain-text editing; original HTML is preserved until changed)", id: 0, x: 12, y: 48, width: 560, height: 22)
-            state.bodyField = control(hwnd, className: "EDIT", title: htmlText(beat?.html ?? ""), id: 102, x: 12, y: 76, width: 560, height: 340, style: DWORD(WS_BORDER | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL))
+            state.bodyField = control(hwnd, className: "EDIT", title: htmlText(beat?.html ?? "").replacingOccurrences(of: "\n", with: "\r\n"), id: 102, x: 12, y: 76, width: 560, height: 340, style: DWORD(WS_BORDER | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL))
             _ = control(hwnd, className: "BUTTON", title: "Done", id: 103, x: 490, y: 430, width: 80, height: 28)
         } else {
             state.window = hwnd

@@ -198,4 +198,29 @@ final class WhiteboardTests: XCTestCase {
         let layout = WhiteboardLayout(board), root = try XCTUnwrap(layout.blockRects["group-0"]), leaf = try XCTUnwrap(layout.beatRects["leaf"])
         XCTAssertTrue(root.contains(leaf.center)); XCTAssertGreaterThan(root.maxY, leaf.maxY)
     }
+    func testRippleMovesDownstreamBlocksAndLockedEffectsRejectTheEntireDrag() throws {
+        var project = Project()
+        let a = try project.addBoardBeat(position: .init(x: 100, y: 60)), b = try project.addBoardBeat(position: .init(x: 500, y: 60))
+        try project.connectBoardBeats(cause: a, effect: b)
+        let board = try project.whiteboard(), source = board.beats.first { $0.id == a }!.blockID, effect = board.beats.first { $0.id == b }!.blockID
+        try project.moveBoardBlocks([source], delta: .init(x: 120, y: 0), snap: false, ripple: true)
+        let moved = try project.whiteboard()
+        XCTAssertEqual(moved.blocks.first { $0.id == source }?.position.x, 220)
+        XCTAssertEqual(moved.blocks.first { $0.id == effect }?.position.x, 620)
+        XCTAssertEqual(moved.beats.first { $0.id == b }?.start, 2.5)
+        try project.updateBoardBeat(b) { $0.locked = true }
+        let before = project
+        XCTAssertThrowsError(try project.moveBoardBlocks([source], delta: .init(x: 120, y: 0), snap: false, ripple: true))
+        XCTAssertEqual(project, before)
+    }
+    func testApplyingTimelineOrderUpdatesTheScriptWithoutChangingBoardPositions() throws {
+        var project = Project(); let a = try project.addBoardBeat()
+        let block = try project.whiteboard().beats[0].blockID, b = try project.addBoardBeat(blockID: block)
+        try project.updateBoardBeat(a) { $0.html = "<p>A</p>"; $0.start = 10 }
+        try project.updateBoardBeat(b) { $0.html = "<p>B</p>"; $0.start = 0 }
+        let positions = try project.whiteboard().blocks.map(\.position)
+        try project.applyWhiteboardStoryOrder()
+        XCTAssertEqual(project.scenes[0].html, "<p>B</p><p>A</p>")
+        XCTAssertEqual(try project.whiteboard().blocks.map(\.position), positions)
+    }
 }

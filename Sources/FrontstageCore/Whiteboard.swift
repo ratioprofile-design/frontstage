@@ -346,7 +346,7 @@ extension Project {
         return nextID
     }
 
-    public mutating func moveBoardBlocks(_ ids: Set<String>, delta: BoardPoint, layerID: String? = nil, snap: Bool = true) throws {
+    public mutating func moveBoardBlocks(_ ids: Set<String>, delta: BoardPoint, layerID: String? = nil, snap: Bool = true, ripple: Bool = false) throws {
         try editWhiteboard { board in
             guard ids.isSubset(of: Set(board.blocks.map(\.id))), delta.x.isFinite, delta.y.isFinite else { throw ProjectError.invalidProject("invalid block movement") }
             var moving = ids, changed = true
@@ -360,6 +360,18 @@ extension Project {
                 board.blocks[i].position.x = max(0, board.blocks[i].position.x + dx)
                 board.blocks[i].position.y = max(32, board.blocks[i].position.y + dy)
                 if let layerID { board.blocks[i].layerID = layerID }
+            }
+            if ripple {
+                let before = Dictionary(uniqueKeysWithValues: board.beats.map { ($0.id, $0.start) })
+                for i in board.beats.indices where moving.contains(board.beats[i].blockID) { board.beats[i].start = max(0, board.beats[i].start + dx / 120) }
+                let requested = Dictionary(uniqueKeysWithValues: board.beats.map { ($0.id, $0.start) })
+                try board.resolveCauses()
+                var pushes: [String: Double] = [:]
+                for beat in board.beats {
+                    let baseline = moving.contains(beat.blockID) ? requested[beat.id]! : before[beat.id]!
+                    pushes[beat.blockID] = max(pushes[beat.blockID] ?? 0, beat.start - baseline)
+                }
+                for i in board.blocks.indices { board.blocks[i].position.x += (pushes[board.blocks[i].id] ?? 0) * 120 }
             }
         }
     }
@@ -419,12 +431,19 @@ extension Project {
     }
 
     public mutating func applyWhiteboardStoryOrder() throws {
-        let board = try whiteboard(), order = board.orderedBeats
+        var candidate = self
+        try candidate.editWhiteboard { board in
+            let order = board.beats.sorted { $0.start == $1.start ? ($0.order == $1.order ? $0.id < $1.id : $0.order < $1.order) : $0.start < $1.start }
+            let ranks = Dictionary(uniqueKeysWithValues: order.enumerated().map { ($0.element.id, Double($0.offset)) })
+            for i in board.beats.indices { board.beats[i].order = ranks[board.beats[i].id]! }
+        }
+        let board = try candidate.whiteboard(), order = board.orderedBeats
         var seen = Set<Decimal>()
         let ids = order.map(\.sceneID).filter { seen.insert($0).inserted }
-        let raw = state["beats"]?.array ?? [], map = Dictionary(uniqueKeysWithValues: raw.compactMap { value -> (Decimal, JSONValue)? in
+        let raw = candidate.state["beats"]?.array ?? [], map = Dictionary(uniqueKeysWithValues: raw.compactMap { value -> (Decimal, JSONValue)? in
             guard let id = value.object?["id"]?.decimal else { return nil }; return (id, value)
         })
-        state["beats"] = .array(ids.compactMap { map[$0] } + raw.filter { $0.object?["id"]?.decimal.map { !seen.contains($0) } ?? true })
+        candidate.state["beats"] = .array(ids.compactMap { map[$0] } + raw.filter { $0.object?["id"]?.decimal.map { !seen.contains($0) } ?? true })
+        self = candidate
     }
 }
