@@ -137,9 +137,12 @@ extension Workspace {
         if let beat = whiteboard.beats.first(where: { $0.id == id }) { selectedSceneID = beat.sceneID }
     }
 
-    func addWhiteboardBeat(blockID: String? = nil, layerID: String = "main", position: BoardPoint = .init(x: 70, y: 60)) {
+    func addWhiteboardBeat(blockID: String? = nil, layerID: String = "main", position: BoardPoint = .init(x: 70, y: 60), before: String? = nil) {
         var created: String?
-        edit("Add Whiteboard Beat") { created = try $0.addBoardBeat(blockID: blockID, layerID: layerID, position: position) }
+        edit("Add Whiteboard Beat") { project in
+            created = try project.addBoardBeat(blockID: blockID, layerID: layerID, position: position)
+            if let created, let blockID, let before { try project.moveBoardBeat(created, toBlock: blockID, before: before) }
+        }
         if let created { selectBoardBeat(created); popup.open(created, workspace: self) }
     }
 

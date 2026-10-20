@@ -234,7 +234,9 @@ final class NativeWhiteboard: NSView {
             let point = world(convert(event.locationInWindow, from: nil))
             if let block = hitBlock(point) {
                 let before = geometry.hitBeat(point)
-                workspace?.edit("Move Beat") { try $0.moveBoardBeat(beat, toBlock: block, before: before == beat ? nil : before) }
+                let moving = selection.contains(beat) ? selection : [beat]
+                if let before, moving.contains(before) { return }
+                workspace?.edit("Move Beats") { try $0.moveBoardBeats(moving, toBlock: block, before: before) }
             }
         }
     }
@@ -305,7 +307,8 @@ final class NativeWhiteboard: NSView {
             item("Edit Beat…", #selector(editContextBeat)); item("Jump To Snippet", #selector(jumpToSnippet)); item("Show In Research", #selector(showResearch))
             menu.addItem(.separator()); item("Create Cause", #selector(createCause)); item("Create Dependency From", #selector(startDependency))
             item("Must Be Caused", #selector(toggleRequired)); item("Split Beat at Cursor…", #selector(splitContext))
-            item("Insert Beat After", #selector(insertContext)); menu.addItem(.separator())
+            item("Insert Beat Before", #selector(insertBeforeContext)); item("Insert Beat After", #selector(insertAfterContext))
+            item("Characters & Tags…", #selector(editContextBeat)); menu.addItem(.separator())
             item("Omit / Include Beat", #selector(toggleOmitted)); item("Delete Beat", #selector(deleteContext))
         } else if contextBlock != nil {
             item("Add Beat", #selector(insertContext)); item("Collapse / Expand Block", #selector(collapseContext))
@@ -334,6 +337,16 @@ final class NativeWhiteboard: NSView {
     @objc private func insertContext() {
         let layer = layerAt(contextPoint)
         workspace?.addWhiteboardBeat(blockID: contextBlock, layerID: layer.id, position: BoardPoint(x: max(0, contextPoint.x - 110), y: max(35, contextPoint.y - (geometry.layerRects[layer.id]?.y ?? 0))))
+    }
+    @objc private func insertBeforeContext() { insertRelative(after: false) }
+    @objc private func insertAfterContext() { insertRelative(after: true) }
+    private func insertRelative(after: Bool) {
+        guard let id = contextBeat, let beat = board.beats.first(where: { $0.id == id }) else { return }
+        let items = board.orderedBeats.filter { $0.blockID == beat.blockID }
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        let before = after ? (index + 1 < items.count ? items[index + 1].id : nil) : id
+        let layer = board.blocks.first { $0.id == beat.blockID }?.layerID ?? "main"
+        workspace?.addWhiteboardBeat(blockID: beat.blockID, layerID: layer, before: before)
     }
     @objc private func toggleOmitted() { if let id = contextBeat { workspace?.edit("Beat Inclusion") { try $0.updateBoardBeat(id) { $0.omitted.toggle() } } } }
     @objc private func deleteContext() { if let id = contextBeat { workspace?.edit("Delete Beat") { try $0.removeBoardBeats([id]) } } }

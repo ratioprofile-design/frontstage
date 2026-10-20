@@ -87,6 +87,7 @@ final class Workspace: ObservableObject {
     @Published private(set) var recoveryCandidate: Project?
     @Published private(set) var recoveryStatus = ""
     @Published private(set) var changeID = 0
+    private(set) var documentSessionID = UUID()
     @Published private(set) var whiteboardCache: Whiteboard?
     let editor = ScreenplayEditorController()
     let popup = BeatPopupPresenter()
@@ -118,6 +119,7 @@ final class Workspace: ObservableObject {
     }
 
     func loadCopy(_ imported: Project) {
+        documentSessionID = UUID()
         sharedProjects.detach()
         popup.close()
         selectedBoardBeatID = nil
@@ -193,6 +195,7 @@ final class Workspace: ObservableObject {
 
     func newProject() {
         guard confirmDiscardOrSave() else { return }
+        documentSessionID = UUID()
         sharedProjects.detach()
         popup.close(); selectedBoardBeatID = nil
         recoveryTask?.cancel()

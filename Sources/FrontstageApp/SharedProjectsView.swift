@@ -37,7 +37,7 @@ final class SharedProjectClient: ObservableObject {
               url.scheme == "https" || (url.scheme == "http" && ["127.0.0.1", "localhost", "::1"].contains(host)) else { throw ProjectError.invalidProject("use HTTPS for a shared server, or HTTP on localhost for development") }
         return url.appendingPathComponent(path)
     }
-    private func request<T: Decodable>(_ path: String, method: String = "GET", body: JSONValue? = nil, as type: T.Type) async throws -> (T, Int) {
+    private func send(_ path: String, method: String = "GET", body: JSONValue? = nil) async throws -> (Data, Int) {
         var request = URLRequest(url: try endpoint(path)); request.httpMethod = method; request.timeoutInterval = 30
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if !token.isEmpty { request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization") }
@@ -49,6 +49,10 @@ final class SharedProjectClient: ObservableObject {
             let reason = (try? JSONDecoder().decode(JSONValue.self, from: data).object?["reason"]?.string) ?? "Server request failed (\(code))"
             throw ProjectError.invalidProject(reason)
         }
+        return (data, code)
+    }
+    private func request<T: Decodable>(_ path: String, method: String = "GET", body: JSONValue? = nil, as type: T.Type) async throws -> (T, Int) {
+        let (data, code) = try await send(path, method: method, body: body)
         return (try JSONDecoder().decode(type, from: data), code)
     }
     func login(signup: Bool = false) async {
@@ -70,18 +74,22 @@ final class SharedProjectClient: ObservableObject {
     func refresh() async throws { projects = try await request("api/projects", as: [RemoteProject].self).0 }
     func create(from workspace: Workspace) async {
         busy = true; defer { busy = false }
+        let session = workspace.documentSessionID
         do {
             let value = try JSONDecoder().decode(JSONValue.self, from: workspace.project.encoded())
             let (snapshot, _) = try await request("api/projects", method: "POST", body: .object(["document": value]), as: RemoteProject.self)
+            guard workspace.documentSessionID == session else { try await refresh(); status = "Shared copy created; the newly opened local project remains separate."; return }
             linked = snapshot; base = snapshot.document; try cacheBase(); try await refresh(); status = "Shared project created."
         } catch { status = error.localizedDescription }
     }
     func open(_ id: UUID, workspace: Workspace) async {
         guard workspace.confirmDiscardOrSave() else { return }
         busy = true; defer { busy = false }
+        let session = workspace.documentSessionID, original = workspace.project
         do {
             let (snapshot, _) = try await request("api/projects/\(id.uuidString)", as: RemoteProject.self)
             guard let document = snapshot.document else { throw ProjectError.invalidProject("missing shared document") }
+            guard workspace.documentSessionID == session, workspace.project == original else { throw ProjectError.invalidProject("the local project changed while opening; open the shared project again when ready") }
             workspace.loadCopy(try Project(data: JSONEncoder().encode(document)))
             linked = snapshot; base = document; try cacheBase(); status = "Opened revision \(snapshot.revision)."
         } catch { status = error.localizedDescription }
@@ -89,11 +97,13 @@ final class SharedProjectClient: ObservableObject {
     func synchronize(_ workspace: Workspace) async {
         guard let link = linked, link.access != "reader", !busy else { status = "Select an editable shared project first."; return }
         busy = true; defer { busy = false }
+        let session = workspace.documentSessionID
         do {
             let sent = workspace.project, value = try JSONDecoder().decode(JSONValue.self, from: sent.encoded())
             let (result, code) = try await request("api/projects/\(link.id.uuidString)", method: "PUT", body: .object([
                 "expectedRevision": .number(Decimal(link.revision)), "changeID": .string(UUID().uuidString), "document": value
             ]), as: RemoteUpdate.self)
+            guard workspace.documentSessionID == session, linked?.id == link.id else { status = "The previous project's upload finished. Your current project remains separate."; return }
             if code == 409, let remote = result.snapshot.document, let base {
                 let local = try JSONDecoder().decode(JSONValue.self, from: workspace.project.encoded())
                 let merge = ProjectMerge.merge(base: base, local: local, remote: remote)
@@ -110,6 +120,35 @@ final class SharedProjectClient: ObservableObject {
                 status = workspace.project == sent ? "Synced revision \(result.snapshot.revision)." : "Revision \(result.snapshot.revision) uploaded; newer local edits still need sync."
             }
         } catch { status = "Sync failed; local changes retained. \(error.localizedDescription)" }
+    }
+    func pull(_ workspace: Workspace) async {
+        guard let link = linked, let base, !busy else { return }
+        busy = true; defer { busy = false }
+        let session = workspace.documentSessionID
+        do {
+            let (remote, _) = try await request("api/projects/\(link.id.uuidString)", as: RemoteProject.self)
+            guard workspace.documentSessionID == session, linked?.id == link.id, let document = remote.document else { return }
+            let local = try JSONDecoder().decode(JSONValue.self, from: workspace.project.encoded())
+            let merge = ProjectMerge.merge(base: base, local: local, remote: document)
+            if merge.conflicts.isEmpty {
+                let merged = try Project(data: JSONEncoder().encode(merge.value))
+                workspace.edit("Pull Shared Changes") { $0 = merged }
+                linked = remote; self.base = document; conflict = nil; conflicts = []; try cacheBase()
+                status = "Received revision \(remote.revision). Local changes are retained."
+            } else {
+                conflict = remote; conflicts = merge.conflicts; status = "Concurrent changes need a choice. Your local project is retained."
+            }
+        } catch { status = error.localizedDescription }
+    }
+    func share(username: String, access: String?) async {
+        guard let link = linked, link.access == "owner", !busy else { return }
+        busy = true; defer { busy = false }
+        do {
+            _ = try await send("api/projects/\(link.id.uuidString)/members", method: "POST", body: .object([
+                "username": .string(username.trimmingCharacters(in: .whitespacesAndNewlines)), "access": access.map(JSONValue.string) ?? .null
+            ]))
+            status = access == nil ? "Project access removed." : "Project access updated."
+        } catch { status = error.localizedDescription }
     }
     func keepLocal(_ workspace: Workspace) async {
         guard let remote = conflict else { return }; linked = remote; base = remote.document; conflict = nil; conflicts = []
@@ -159,6 +198,7 @@ struct SharedProjectsView: View {
     @ObservedObject var workspace: Workspace
     @ObservedObject var client: SharedProjectClient
     @State private var member = ""
+    @State private var access = "editor"
     var body: some View {
         Form {
             Text("Shared Projects").font(.title2)
@@ -188,7 +228,16 @@ struct SharedProjectsView: View {
                 if let linked = client.linked {
                     Divider()
                     Text("Linked: \(linked.name) · revision \(linked.revision)").font(.headline)
+                    Button("Get Latest Changes") { Task { await client.pull(workspace) } }.disabled(client.busy)
                     Button("Synchronize Local Changes") { Task { await client.synchronize(workspace) } }.disabled(client.busy || linked.access == "reader")
+                    if linked.access == "owner" {
+                        TextField("Registered username", text: $member)
+                        Picker("Project access", selection: $access) {
+                            Text("Editor").tag("editor"); Text("Reader").tag("reader"); Text("Remove access").tag("remove")
+                        }
+                        Button("Update Access") { Task { await client.share(username: member, access: access == "remove" ? nil : access) } }
+                            .disabled(client.busy || member.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
                 }
             }
             if client.conflict != nil {

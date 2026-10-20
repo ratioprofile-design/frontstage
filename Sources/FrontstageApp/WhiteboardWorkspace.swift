@@ -254,6 +254,12 @@ struct WhiteboardWorkspace: View {
                         if let i = board.dependencies.firstIndex(where: { $0.id == edge.id }) { board.dependencies[i].reason = value }
                     } }
                 }))
+                Toggle("Reference only", isOn: Binding(get: { edge.reference }, set: { value in
+                    workspace.edit("Dependency Type") { try $0.editWhiteboard { board in
+                        if let i = board.dependencies.firstIndex(where: { $0.id == edge.id }) { board.dependencies[i].reference = value }
+                        _ = try board.causalOrder()
+                    } }
+                }))
             }
         }
     }

@@ -377,15 +377,23 @@ extension Project {
     }
 
     public mutating func moveBoardBeat(_ id: String, toBlock: String, before: String? = nil) throws {
+        try moveBoardBeats([id], toBlock: toBlock, before: before)
+    }
+
+    public mutating func moveBoardBeats(_ ids: Set<String>, toBlock: String, before: String? = nil) throws {
         try editWhiteboard { board in
-            guard let i = board.beats.firstIndex(where: { $0.id == id }), !board.isLocked(board.beats[i]),
-                  board.blocks.contains(where: { $0.id == toBlock }), !board.isBlockLocked(toBlock), before != id else { throw ProjectError.invalidProject("invalid beat move or locked block") }
-            let items = board.orderedBeats.filter { $0.id != id }
-            var index = before.flatMap { target in items.firstIndex { $0.id == target } } ?? (items.lastIndex { $0.blockID == toBlock }.map { $0 + 1 } ?? items.count)
-            index = min(index, items.count)
-            let previous = index > 0 ? items[index - 1].order : (items.first?.order ?? 0) - 2
-            let next = index < items.count ? items[index].order : previous + 2
-            board.beats[i].blockID = toBlock; board.beats[i].order = (previous + next) / 2
+            let moving = board.orderedBeats.filter { ids.contains($0.id) }
+            guard !ids.isEmpty, moving.count == ids.count, moving.allSatisfy({ !board.isLocked($0) }),
+                  board.blocks.contains(where: { $0.id == toBlock }), !board.isBlockLocked(toBlock),
+                  before.map({ target in !ids.contains(target) && board.beats.contains(where: { $0.id == target }) }) ?? true else { throw ProjectError.invalidProject("invalid beat move or locked block") }
+            var items = board.orderedBeats.filter { !ids.contains($0.id) }
+            let index = before.flatMap { target in items.firstIndex { $0.id == target } } ?? (items.lastIndex { $0.blockID == toBlock }.map { $0 + 1 } ?? items.count)
+            items.insert(contentsOf: moving, at: index)
+            let ranks = Dictionary(uniqueKeysWithValues: items.enumerated().map { ($0.element.id, Double($0.offset)) })
+            for i in board.beats.indices {
+                board.beats[i].order = ranks[board.beats[i].id]!
+                if ids.contains(board.beats[i].id) { board.beats[i].blockID = toBlock }
+            }
         }
     }
 

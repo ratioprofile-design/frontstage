@@ -50,7 +50,7 @@ final class NativeEditingTests: XCTestCase {
             workspace.updateScene(id: first, title: "First scene", html: "<p>First</p>")
             workspace.mode = .pages
             workspace.addScene()
-            XCTAssertEqual(workspace.mode, .edit)
+            XCTAssertEqual(workspace.mode, .board)
             let second = workspace.selectedSceneID!
             workspace.updateScene(id: second, title: "Second scene", html: "<p>Second</p>")
             workspace.selectedSceneID = first

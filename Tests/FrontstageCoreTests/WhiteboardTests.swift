@@ -213,6 +213,24 @@ final class WhiteboardTests: XCTestCase {
         XCTAssertThrowsError(try project.moveBoardBlocks([source], delta: .init(x: 120, y: 0), snap: false, ripple: true))
         XCTAssertEqual(project, before)
     }
+    func testMovingMultipleSnippetsRetainsOrderAndRejectsLockedMembersAtomically() throws {
+        var project = Project(); let a = try project.addBoardBeat(title: "A")
+        let source = try project.whiteboard().beats[0].blockID
+        let b = try project.addBoardBeat(blockID: source, title: "B"), c = try project.addBoardBeat(title: "C")
+        let destination = try project.whiteboard().beats.first { $0.id == c }!.blockID
+        try project.updateBoardBeat(a) { $0.html = "<p>A</p>" }
+        try project.updateBoardBeat(b) { $0.html = "<p>B</p>"; $0.locked = true }
+        let checkpoint = project
+        XCTAssertThrowsError(try project.moveBoardBeats([a, b], toBlock: destination, before: c))
+        XCTAssertEqual(project, checkpoint)
+        try project.updateBoardBeat(b) { $0.locked = false }
+        try project.moveBoardBeats([a, b], toBlock: destination, before: c)
+        let board = try project.whiteboard()
+        XCTAssertEqual(board.orderedBeats.map(\.id), [a, b, c])
+        XCTAssertTrue(board.beats.allSatisfy { $0.blockID == destination })
+        XCTAssertEqual(project.scenes[0].html, "<p>A</p><p>B</p>")
+    }
+
     func testApplyingTimelineOrderUpdatesTheScriptWithoutChangingBoardPositions() throws {
         var project = Project(); let a = try project.addBoardBeat()
         let block = try project.whiteboard().beats[0].blockID, b = try project.addBoardBeat(blockID: block)
