@@ -173,4 +173,29 @@ final class WhiteboardTests: XCTestCase {
         XCTAssertEqual(try project.whiteboard().beats.count, 2)
         XCTAssertEqual(history.undo(current: project), before)
     }
+    func testLargeBoardSpatialQueriesMatchFullGeometry() {
+        var board = Whiteboard()
+        board.layers[0].height = 9000
+        for index in 0..<10000 {
+            let block = BoardBlock(id: "block-\(index)", name: "Block", layerID: "main", position: BoardPoint(x: Double(index % 100) * 260, y: Double(index / 100) * 70 + 60))
+            board.blocks.append(block)
+            board.beats.append(BoardBeat(id: "beat-\(index)", sceneID: Decimal(index + 1), blockID: block.id, title: "Beat", order: Double(index)))
+        }
+        let start = Date(), geometry = WhiteboardLayout(board)
+        for i in 0..<50 {
+            let viewport = BoardRect(x: Double(i) * 410, y: Double(i) * 70, width: 900, height: 500)
+            XCTAssertEqual(geometry.beats(in: viewport), Set(geometry.beatRects.filter { $0.value.intersects(viewport) }.map(\.key)))
+        }
+        print("10,000-beat geometry and 50 verified spatial queries: \(Date().timeIntervalSince(start)) seconds")
+    }
+    func testNestedLayoutBeyond32LevelsEnclosesLeaf() throws {
+        var board = Whiteboard()
+        for i in 0...60 {
+            var block = BoardBlock(id: "group-\(i)", name: "Group", layerID: "main", position: BoardPoint(x: Double(i) * 20 + 50, y: Double(i) * 25 + 60))
+            if i > 0 { block.parentID = "group-\(i - 1)" }; board.blocks.append(block)
+        }
+        board.beats = [BoardBeat(id: "leaf", sceneID: 1, blockID: "group-60", title: "Leaf")]
+        let layout = WhiteboardLayout(board), root = try XCTUnwrap(layout.blockRects["group-0"]), leaf = try XCTUnwrap(layout.beatRects["leaf"])
+        XCTAssertTrue(root.contains(leaf.center)); XCTAssertGreaterThan(root.maxY, leaf.maxY)
+    }
 }

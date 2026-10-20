@@ -129,7 +129,7 @@ extension Workspace {
         selectedResearchID = record; mode = .studio
     }
 
-    var whiteboard: Whiteboard { (try? project.whiteboard()) ?? Whiteboard() }
+    var whiteboard: Whiteboard { whiteboardCache ?? (try? project.whiteboard()) ?? Whiteboard() }
     var selectedBoardBeat: BoardBeat? { whiteboard.beats.first { $0.id == selectedBoardBeatID } }
 
     func selectBoardBeat(_ id: String) {

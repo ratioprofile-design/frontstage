@@ -53,20 +53,19 @@ public struct WhiteboardLayout: Sendable {
             }
             offset += layerHeight
         }
-        // Parent groups enclose descendants without changing their persisted free placement.
-        for _ in 0..<min(32, board.blocks.count) {
-            var changed = false
-            for block in board.blocks where !block.collapsed {
-                guard var r = blocks[block.id] else { continue }
-                for child in board.blocks where child.parentID == block.id {
-                    guard let c = blocks[child.id] else { continue }
-                    let new = BoardRect(x: min(r.x, c.x - 12), y: min(r.y, c.y - 28),
-                        width: max(r.maxX, c.maxX + 12) - min(r.x, c.x - 12), height: max(r.maxY, c.maxY + 12) - min(r.y, c.y - 28))
-                    if new != r { changed = true; r = new }
-                }
-                blocks[block.id] = r
-            }
-            if !changed { break }
+        // Fold visible descendants into parents once, from leaves upward, without a depth limit.
+        var remaining = Dictionary(uniqueKeysWithValues: blocks.keys.map { ($0, 0) })
+        for block in board.blocks where blocks[block.id] != nil {
+            if let parent = block.parentID, blocks[parent] != nil { remaining[parent, default: 0] += 1 }
+        }
+        var ready = remaining.filter { $0.value == 0 }.map(\.key), cursor = 0
+        while cursor < ready.count {
+            let id = ready[cursor]; cursor += 1
+            guard let parent = blockByID[id]?.parentID, let c = blocks[id], let r = blocks[parent], blockByID[parent]?.collapsed != true else { continue }
+            blocks[parent] = BoardRect(x: min(r.x, c.x - 12), y: min(r.y, c.y - 28),
+                width: max(r.maxX, c.maxX + 12) - min(r.x, c.x - 12), height: max(r.maxY, c.maxY + 12) - min(r.y, c.y - 28))
+            remaining[parent, default: 0] -= 1
+            if remaining[parent] == 0 { ready.append(parent) }
         }
         var index = [String: Set<String>](), big = Set<String>()
         for (id, rect) in beats {

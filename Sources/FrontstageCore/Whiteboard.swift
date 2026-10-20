@@ -123,17 +123,18 @@ public struct Whiteboard: Codable, Equatable, Sendable {
 
     public var issues: [BoardIssue] {
         var result: [BoardIssue] = []
-        let live = beats.filter { !$0.omitted && !isUnused($0) }, byID = Dictionary(uniqueKeysWithValues: beats.map { ($0.id, $0) })
+        let unusedLayers = Set(layers.filter(\.unused).map(\.id)), unusedBlocks = Set(blocks.filter { unusedLayers.contains($0.layerID) }.map(\.id))
+        let live = beats.filter { !$0.omitted && !unusedBlocks.contains($0.blockID) }, byID = Dictionary(uniqueKeysWithValues: beats.map { ($0.id, $0) })
         let incoming = Dictionary(grouping: dependencies.filter { !$0.reference }, by: \.effect)
         for beat in live where beat.mustBeCaused {
             let satisfied = (incoming[beat.id] ?? []).contains { edge in
                 guard let cause = byID[edge.cause] else { return false }
-                return !cause.omitted && !isUnused(cause)
+                return !cause.omitted && !unusedBlocks.contains(cause.blockID)
             }
             if !satisfied { result.append(BoardIssue(id: "missing-\(beat.id)", message: "\(beat.title) must be caused, but has no active cause.", beatIDs: [beat.id])) }
         }
         for edge in dependencies where !edge.reference {
-            guard let a = byID[edge.cause], let b = byID[edge.effect], !a.omitted, !b.omitted, !isUnused(a), !isUnused(b) else { continue }
+            guard let a = byID[edge.cause], let b = byID[edge.effect], !a.omitted, !b.omitted, !unusedBlocks.contains(a.blockID), !unusedBlocks.contains(b.blockID) else { continue }
             if b.start + 0.00001 < a.start + a.duration {
                 result.append(BoardIssue(id: edge.id, message: "\(b.title) begins before \(a.title) finishes.", beatIDs: [a.id, b.id]))
             }
@@ -187,11 +188,12 @@ public struct Whiteboard: Codable, Equatable, Sendable {
     public mutating func resolveCauses() throws {
         let order = try causalOrder(), incoming = Dictionary(grouping: dependencies.filter { !$0.reference }, by: \.effect)
         let indices = Dictionary(uniqueKeysWithValues: beats.indices.map { (beats[$0].id, $0) })
+        let unusedLayers = Set(layers.filter(\.unused).map(\.id)), unusedBlocks = Set(blocks.filter { unusedLayers.contains($0.layerID) }.map(\.id))
         var candidate = self
         for id in order {
-            guard let i = indices[id], !candidate.beats[i].omitted, !candidate.isUnused(candidate.beats[i]) else { continue }
+            guard let i = indices[id], !candidate.beats[i].omitted, !unusedBlocks.contains(candidate.beats[i].blockID) else { continue }
             let required = (incoming[id] ?? []).compactMap { edge -> Double? in
-                guard let j = indices[edge.cause], !candidate.beats[j].omitted, !candidate.isUnused(candidate.beats[j]) else { return nil }
+                guard let j = indices[edge.cause], !candidate.beats[j].omitted, !unusedBlocks.contains(candidate.beats[j].blockID) else { return nil }
                 return candidate.beats[j].start + candidate.beats[j].duration
             }.max() ?? 0
             if candidate.beats[i].start < required {
@@ -264,16 +266,17 @@ extension Project {
         }
         state["frontstageWhiteboard"] = .object(fields)
         let snippets = Dictionary(grouping: board.orderedBeats, by: \.sceneID)
-        let previouslyLinked = Set((fields["beats"]?.array ?? []).compactMap { $0.object?["sceneID"]?.decimal })
-        for scene in scenes where previouslyLinked.contains(scene.id) || snippets[scene.id] != nil {
-            let active = (snippets[scene.id] ?? []).filter { !$0.omitted && !board.isUnused($0) }
-            guard !scene.isTextLocked || scene.html == active.map(\.html).joined() else { throw ProjectError.invalidProject("unlock \(scene.title)'s script before changing its snippet text or inclusion") }
-            try editBeat(scene.id) { fields in
-                fields["content"] = .string(active.map(\.html).joined())
-                fields["isDisabled"] = .bool(active.isEmpty)
-                fields["characters"] = .array(Array(Set(active.flatMap(\.characters))).sorted().map(JSONValue.string))
-            }
+        let unusedLayers = Set(board.layers.filter(\.unused).map(\.id)), unusedBlocks = Set(board.blocks.filter { unusedLayers.contains($0.layerID) }.map(\.id))
+        var rawScenes = state["beats"]?.array ?? []
+        for i in rawScenes.indices {
+            guard var fields = rawScenes[i].object, let id = fields["id"]?.decimal, let linked = snippets[id] else { continue }
+            let active = linked.filter { !$0.omitted && !unusedBlocks.contains($0.blockID) }, html = active.map(\.html).joined()
+            guard fields["frontstageTextLocked"] != .bool(true) || fields["content"]?.string == html else { throw ProjectError.invalidProject("unlock \(fields["title"]?.string ?? "this scene")'s script before changing its snippet text or inclusion") }
+            fields["content"] = .string(html); fields["isDisabled"] = .bool(active.isEmpty)
+            fields["characters"] = .array(Array(Set(active.flatMap(\.characters))).sorted().map(JSONValue.string))
+            rawScenes[i] = .object(fields)
         }
+        state["beats"] = .array(rawScenes)
     }
 
     @discardableResult

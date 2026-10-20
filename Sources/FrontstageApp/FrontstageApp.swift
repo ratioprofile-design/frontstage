@@ -85,6 +85,7 @@ final class Workspace: ObservableObject {
     @Published private(set) var recoveryCandidate: Project?
     @Published private(set) var recoveryStatus = ""
     @Published private(set) var changeID = 0
+    @Published private(set) var whiteboardCache: Whiteboard?
     let editor = ScreenplayEditorController()
     let popup = BeatPopupPresenter()
     let sharedProjects = SharedProjectClient()
@@ -199,6 +200,7 @@ final class Workspace: ObservableObject {
         }
         editor.textView?.undoManager?.removeAllActions()
         project = Project()
+        whiteboardCache = nil
         savedProject = project
         history = ProjectHistory()
         saveURL = nil
@@ -234,6 +236,7 @@ final class Workspace: ObservableObject {
     }
 
     private func changed() {
+        whiteboardCache = try? project.whiteboard()
         changeID &+= 1
         hasChanges = project != savedProject
         preview = nil

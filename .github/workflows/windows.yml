@@ -21,12 +21,12 @@ jobs:
         shell: pwsh
         run: |
           swift --version
-          swift build --product FrontstageWindows -c release 2>&1 | Tee-Object windows-build.log
+          swift build --product FrontstageWindows -c release -j 2 2>&1 | Tee-Object windows-build.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Test shared model on Windows
         shell: pwsh
         run: |
-          swift test --filter 'WhiteboardTests|ProjectMergeTests|OfficeArchiveTests|ScreenplayToolsTests' 2>&1 | Tee-Object windows-tests.log
+          swift test -j 2 --filter 'WhiteboardTests|ProjectMergeTests|OfficeArchiveTests|ScreenplayToolsTests' 2>&1 | Tee-Object windows-tests.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Smoke native popup and project save
         shell: pwsh
@@ -51,7 +51,11 @@ jobs:
           if (Test-Path windows-build.log) {
             Get-Content windows-build.log | Select-String 'error:' | Select-Object -First 25 | ForEach-Object { Write-Output "::error::$($_.Line)" }
           }
-          if (Test-Path windows-tests.log) { Get-Content windows-tests.log | Select-Object -Last 20 | ForEach-Object { Write-Output "::error::$_" } }
+          if (Test-Path windows-tests.log) {
+            Get-Content windows-tests.log | Select-String 'error:|fatal|failed|LNK[0-9]|Exception|not found' | Select-Object -First 25 | ForEach-Object { Write-Output "::error::$($_.Line)" }
+            Get-Content windows-tests.log | Select-Object -Last 10 | ForEach-Object { Write-Output "::error::$_" }
+          }
+          if (Test-Path windows-ui.log) { Get-Content windows-ui.log | Select-Object -Last 15 | ForEach-Object { Write-Output "::error::$_" } }
       - uses: actions/upload-artifact@v4
         with:
           name: Frontstage-Windows-development
