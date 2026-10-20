@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.FRONTSTAGE_PLAYWRIGHT_MODULE || 'playwright-core');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -56,7 +57,7 @@ try {
   await page.locator('#blocks .beat-text').getByText('The Arrival', { exact: true }).click();
   assert.equal(await page.locator('#beat-title').inputValue(), 'The Consequence');
   const remote = structuredClone(first.document); remote.name = 'Remote project rename';
-  const updated = await fetch(endpoint, { method: 'PUT', headers, body: JSON.stringify({ expectedRevision: first.revision, changeID: crypto.randomUUID(), document: remote }) });
+  const updated = await fetch(endpoint, { method: 'PUT', headers, body: JSON.stringify({ expectedRevision: first.revision, changeID: randomUUID(), document: remote }) });
   assert.equal(updated.status, 200);
   await context.setOffline(false);
   await page.locator('#close-editor').click();
@@ -71,6 +72,10 @@ try {
   await page.screenshot({ path: path.join(artifact, 'browser-popup.png') });
   assert.deepEqual(errors, []);
   console.log('PASS: browser account, project, stacked beats, popup identity, causes, offline edits and three-way reconnect merge');
+} catch (error) {
+  const details = String(error.stack || error).replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
+  console.error(`::error::${details}`);
+  throw error;
 } finally {
   if (browser) await browser.close();
   server.kill('SIGTERM');

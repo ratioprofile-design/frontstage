@@ -285,6 +285,8 @@ struct FrontstageWindows {
                 state.addBeat(newBlock: true)
                 guard let field = state.bodyField, let first = state.popupBeat else { throw ProjectError.invalidProject("popup was not constructed") }
                 wide("தமிழ் — native Windows popup text") { _ = SetWindowTextW(field, $0) }
+                // WM_SETTEXT does not emit EN_CHANGE for multiline edit controls; emulate typing's notification.
+                _ = SendMessageW(state.popup, UINT(WM_COMMAND), WPARAM((UInt(EN_CHANGE) << 16) | 102), 0)
                 guard try state.project.whiteboard().beats.first(where: { $0.id == first })?.html.contains("native Windows popup text") == true else { throw ProjectError.invalidProject("popup edit did not reach its beat") }
                 state.addBeat(newBlock: false)
                 guard let second = state.popupBeat else { throw ProjectError.sceneNotFound }
