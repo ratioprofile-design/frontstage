@@ -60,7 +60,7 @@ final class WhiteboardAcceptanceTests: XCTestCase {
             window.contentView = view; view.frame = NSRect(x: 0, y: 0, width: 1267, height: 720)
             view.layoutSubtreeIfNeeded(); window.displayIfNeeded()
             RunLoop.main.run(until: Date().addingTimeInterval(0.1))
-            func canvas(in parent: NSView) -> NativeWhiteboard? {
+            @MainActor func canvas(in parent: NSView) -> NativeWhiteboard? {
                 if let result = parent as? NativeWhiteboard { return result }
                 return parent.subviews.lazy.compactMap { canvas(in: $0) }.first
             }
