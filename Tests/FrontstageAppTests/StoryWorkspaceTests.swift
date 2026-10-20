@@ -55,7 +55,7 @@ final class StoryWorkspaceTests: XCTestCase {
                 try project.resolveStory()
                 _ = try project.addStoryMilestone(title: "The turning point", page: 5)
             }
-            workspace.mode = .board; workspace.selectedSceneID = 3
+            workspace.mode = .board; workspace.selectedSceneID = 3; workspace.showBoardScript = true
             let before = workspace.project
             let view = NSHostingView(rootView: StoryWorkspaceView(workspace: workspace, boardFirst: true))
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1440, height: 1000),

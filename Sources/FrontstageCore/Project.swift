@@ -115,6 +115,18 @@ public struct Project: Equatable, Sendable {
         var beats = state["beats"]?.array ?? []
         guard let index = beats.firstIndex(where: { $0.object?["id"] == .number(id) }),
               var fields = beats[index].object else { throw ProjectError.sceneNotFound }
+        var native = state["frontstageWhiteboard"]?.object
+        if native != nil && (html != nil || title != nil || summary != nil) {
+            let board = try whiteboard(), linked = board.beats.filter { $0.sceneID == id }
+            if html != nil && linked.count > 1 { throw ProjectError.invalidProject("edit this scene's individual snippets on the whiteboard to preserve their ranges") }
+            if linked.count == 1, var items = native?["beats"]?.array,
+               let i = items.firstIndex(where: { $0.object?["id"]?.string == linked[0].id }), var item = items[i].object {
+                if let html { item["html"] = .string(html) }
+                if let title { item["title"] = .string(title) }
+                if let summary { item["synopsis"] = .string(summary) }
+                items[i] = .object(item); native?["beats"] = .array(items)
+            }
+        }
         if let title { fields["title"] = .string(title) }
         if let html { fields["content"] = .string(html) }
         if let summary { fields["summary"] = .string(summary) }
@@ -130,6 +142,7 @@ public struct Project: Equatable, Sendable {
         if let sceneNumber { fields["sceneNumber"] = .string(sceneNumber) }
         beats[index] = .object(fields)
         state["beats"] = .array(beats)
+        if let native { state["frontstageWhiteboard"] = .object(native) }
     }
 
     public func encoded() throws -> Data {

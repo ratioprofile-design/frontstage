@@ -7,30 +7,10 @@ import FrontstageCore
 struct StoryWorkspaceView: View {
     @ObservedObject var workspace: Workspace
     let boardFirst: Bool
-    @State private var showBoard = true
-    @State private var showScript = true
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 16) {
-                Label("Story & Script", systemImage: "point.3.connected.trianglepath.dotted").font(.headline)
-                Spacer()
-                Toggle("Sequencer", isOn: $showBoard).toggleStyle(.button)
-                Toggle("Script", isOn: $showScript).toggleStyle(.button)
-            }.padding(.horizontal, 16).padding(.vertical, 8)
-            VSplitView {
-                if showBoard {
-                    StoryBoardView(workspace: workspace)
-                        .frame(minHeight: 190, idealHeight: boardFirst ? 400 : 230)
-                }
-                if showScript {
-                    SceneWritingView(workspace: workspace).frame(minHeight: 220, idealHeight: boardFirst ? 300 : 550)
-                }
-                if !showBoard && !showScript {
-                    ContentUnavailableView("Choose a pane above", systemImage: "rectangle.split.2x1")
-                }
-            }
-        }
+        WhiteboardWorkspace(workspace: workspace)
+            .onAppear { if !boardFirst { workspace.showBoardScript = true } }
     }
 }
 

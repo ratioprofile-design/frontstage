@@ -34,7 +34,7 @@ struct FrontstageApp: App {
             }
             CommandMenu("Screenplay") {
                 ForEach(Array(ScreenplayElement.editable.enumerated()), id: \.element.rawValue) { index, element in
-                    Button(element.label) { workspace.editor.format(element) }
+                    Button(element.label) { (workspace.popup.controller ?? workspace.editor).format(element) }
                         .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: [.option])
                         .disabled(workspace.selectedScene == nil || (workspace.mode != .edit && workspace.mode != .board))
                 }
@@ -61,7 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @MainActor
 final class Workspace: ObservableObject {
     enum Mode: String, CaseIterable {
-        case edit = "Write", pages = "Pages", revisions = "Revisions", board = "Board", people = "People", breakdown = "Breakdown", production = "Production"
+        case edit = "Write", pages = "Pages", revisions = "Revisions", board = "Whiteboard", people = "People", breakdown = "Breakdown", production = "Production"
     }
     @Published private(set) var project = Project()
     @Published var selectedSceneID: Decimal? {
@@ -69,7 +69,10 @@ final class Workspace: ObservableObject {
     }
     @Published private(set) var hasChanges = false
     @Published var errorMessage: String?
-    @Published var mode = Mode.edit {
+    @Published var selectedBoardBeatID: String?
+    @Published var pendingBoardCauseID: String?
+    @Published var showBoardScript = false
+    @Published var mode = Mode.board {
         didSet { if oldValue != mode { editor.textView?.undoManager?.removeAllActions() } }
     }
     @Published var paper = ScreenplayPaper.letter
@@ -79,6 +82,7 @@ final class Workspace: ObservableObject {
     @Published private(set) var recoveryStatus = ""
     @Published private(set) var changeID = 0
     let editor = ScreenplayEditorController()
+    let popup = BeatPopupPresenter()
     private var saveURL: URL?
     private var savedProject: Project? = Project()
     private let recoveryStore: RecoveryStore?
@@ -106,6 +110,8 @@ final class Workspace: ObservableObject {
     }
 
     func loadCopy(_ imported: Project) {
+        popup.close()
+        selectedBoardBeatID = nil
         recoveryTask?.cancel()
         editor.textView?.undoManager?.removeAllActions()
         project = imported
@@ -113,7 +119,7 @@ final class Workspace: ObservableObject {
         history = ProjectHistory()
         selectedSceneID = project.scenes.first?.id
         saveURL = nil
-        mode = .edit
+        mode = .board
         preview = nil
         changed()
     }
@@ -159,6 +165,8 @@ final class Workspace: ObservableObject {
     private func reconcileSelection() {
         if !project.scenes.contains(where: { $0.id == selectedSceneID }) { selectedSceneID = project.scenes.first?.id }
         editor.textView?.undoManager?.removeAllActions()
+        popup.controller?.textView?.undoManager?.removeAllActions()
+        if !whiteboard.beats.contains(where: { $0.id == selectedBoardBeatID }) { selectedBoardBeatID = whiteboard.orderedBeats.first?.id }
     }
 
     private func didSave() {
@@ -176,6 +184,7 @@ final class Workspace: ObservableObject {
 
     func newProject() {
         guard confirmDiscardOrSave() else { return }
+        popup.close(); selectedBoardBeatID = nil
         recoveryTask?.cancel()
         if !recoveryBlocked {
             do { try recoveryStore?.clear() }
@@ -188,7 +197,7 @@ final class Workspace: ObservableObject {
         saveURL = nil
         hasChanges = false
         selectedSceneID = nil
-        mode = .edit
+        mode = .board
         preview = nil
     }
 
@@ -341,9 +350,10 @@ final class Workspace: ObservableObject {
 
 struct WorkspaceView: View {
     @ObservedObject var workspace: Workspace
+    @State private var columns = NavigationSplitViewVisibility.detailOnly
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columns) {
             VStack(alignment: .leading, spacing: 12) {
                 Text("FRONTSTAGE").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                     .padding(.horizontal)
