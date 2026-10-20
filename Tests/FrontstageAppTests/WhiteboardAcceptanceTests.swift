@@ -72,6 +72,18 @@ final class WhiteboardAcceptanceTests: XCTestCase {
                 windowNumber: window.windowNumber, context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: 125))
             native.keyDown(with: down)
             XCTAssertEqual(workspace.selectedBoardBeatID, second)
+            let sourceBlock = try XCTUnwrap(workspace.whiteboard.beats.first { $0.id == first }?.blockID)
+            let blockRect = try XCTUnwrap(WhiteboardLayout(workspace.whiteboard).blockRects[sourceBlock])
+            let originalWidth = try XCTUnwrap(workspace.whiteboard.blocks.first { $0.id == sourceBlock }?.width)
+            @MainActor func mouse(_ type: NSEvent.EventType, x: Double) throws -> NSEvent {
+                let point = native.convert(NSPoint(x: x, y: blockRect.y + 10), to: nil)
+                return try XCTUnwrap(NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: 0,
+                    windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+            }
+            native.mouseDown(with: try mouse(.leftMouseDown, x: blockRect.maxX - 2))
+            native.mouseDragged(with: try mouse(.leftMouseDragged, x: blockRect.maxX + 63))
+            native.mouseUp(with: try mouse(.leftMouseUp, x: blockRect.maxX + 63))
+            XCTAssertEqual(workspace.whiteboard.blocks.first { $0.id == sourceBlock }?.width, originalWidth + 65)
             if let path = ProcessInfo.processInfo.environment["FRONTSTAGE_TEST_ARTIFACTS"] {
                 let output = URL(fileURLWithPath: path)
                 try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)

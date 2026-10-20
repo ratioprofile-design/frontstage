@@ -231,6 +231,24 @@ final class WhiteboardTests: XCTestCase {
         XCTAssertEqual(project.scenes[0].html, "<p>A</p><p>B</p>")
     }
 
+    func testResizeHonorsAncestorLocksAndKeepsSnippetTextAndCoordinates() throws {
+        var project = Project(); let a = try project.addBoardBeat(), b = try project.addBoardBeat()
+        try project.updateBoardBeat(a) { $0.html = "<p>Preserved text</p>" }
+        let board = try project.whiteboard(), block = board.beats.first { $0.id == a }!.blockID
+        try project.groupBoardBlocks(Set(board.blocks.map(\.id)), name: "Locked group")
+        try project.editWhiteboard { board in board.blocks[board.blocks.count - 1].locked = true }
+        let locked = project
+        XCTAssertThrowsError(try project.resizeBoardBlock(block, width: 360)); XCTAssertEqual(project, locked)
+        try project.editWhiteboard { board in board.blocks[board.blocks.count - 1].locked = false }
+        let before = project, positions = try project.whiteboard().blocks.map(\.position)
+        XCTAssertThrowsError(try project.resizeBoardBlock(block, width: .nan)); XCTAssertEqual(project, before)
+        try project.resizeBoardBlock(block, width: 360)
+        XCTAssertEqual(try project.whiteboard().blocks.first { $0.id == block }?.width, 360)
+        XCTAssertEqual(try project.whiteboard().blocks.map(\.position), positions)
+        XCTAssertEqual(project.scenes, before.scenes)
+        XCTAssertEqual(try project.whiteboard().beats.first { $0.id == b }?.html, "")
+    }
+
     func testApplyingTimelineOrderUpdatesTheScriptWithoutChangingBoardPositions() throws {
         var project = Project(); let a = try project.addBoardBeat()
         let block = try project.whiteboard().beats[0].blockID, b = try project.addBoardBeat(blockID: block)

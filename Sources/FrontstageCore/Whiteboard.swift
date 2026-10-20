@@ -376,6 +376,14 @@ extension Project {
         }
     }
 
+    public mutating func resizeBoardBlock(_ id: String, width: Double) throws {
+        try editWhiteboard { board in
+            guard let index = board.blocks.firstIndex(where: { $0.id == id }), !board.isBlockLocked(id),
+                  width.isFinite, (140...2000).contains(width) else { throw ProjectError.invalidProject("unlock the block and choose a width from 140 to 2000") }
+            board.blocks[index].width = width
+        }
+    }
+
     public mutating func moveBoardBeat(_ id: String, toBlock: String, before: String? = nil) throws {
         try moveBoardBeats([id], toBlock: toBlock, before: before)
     }

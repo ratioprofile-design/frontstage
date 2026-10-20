@@ -220,9 +220,7 @@ struct WhiteboardWorkspace: View {
                         HStack {
                             Text("Width")
                             TextField("Width", value: Binding(get: { block.width }, set: { value in
-                                workspace.edit("Resize Block") { try $0.editWhiteboard { board in
-                                    if let i = board.blocks.firstIndex(where: { $0.id == block.id }) { board.blocks[i].width = value }
-                                } }
+                                workspace.edit("Resize Block") { try $0.resizeBoardBlock(block.id, width: value) }
                             }), format: .number)
                         }
                     }

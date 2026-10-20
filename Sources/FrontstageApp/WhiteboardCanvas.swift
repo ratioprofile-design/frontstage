@@ -41,6 +41,8 @@ final class NativeWhiteboard: NSView {
     private var movingBlocks = false
     private var expandedDragBlocks = Set<String>()
     private var movingBeat: String?
+    private var resizingBlock: String?
+    private var resizeWidth = 224.0
     private var marquee: BoardRect?
     private var stroke: [BoardPoint] = []
     private var spaceHeld = false
@@ -121,6 +123,7 @@ final class NativeWhiteboard: NSView {
         }
         for block in sortedBlocks {
             guard var rect = geometry.blockRects[block.id], rect.intersects(viewport) else { continue }
+            if resizingBlock == block.id { rect.width = resizeWidth }
             if movingBlocks && expandedDragBlocks.contains(block.id) { rect.x += dragDelta.x; rect.y += dragDelta.y }
             let frame = NSRect(x: rect.x, y: rect.y, width: rect.width, height: rect.height)
             NSColor(calibratedWhite: 0.9, alpha: groups.contains(block.id) ? 0.10 : 0.30).setFill()
@@ -134,6 +137,7 @@ final class NativeWhiteboard: NSView {
         }
         for id in geometry.beats(in: viewport) {
             guard let beat = byID[id], var rect = geometry.beatRects[id] else { continue }
+            if resizingBlock == beat.blockID { rect.width = resizeWidth - 12 }
             if movingBlocks && expandedDragBlocks.contains(beat.blockID) { rect.x += dragDelta.x; rect.y += dragDelta.y }
             let frame = NSRect(x: rect.x, y: rect.y, width: rect.width, height: rect.height)
             let color = NSColor(boardHex: beat.color)
@@ -175,6 +179,12 @@ final class NativeWhiteboard: NSView {
         viewStart = point; dragStart = worldPoint; dragDelta = .init()
         if spaceHeld || event.modifierFlags.contains(.option) { panStart = board.viewport.origin; return }
         if drawingMode { stroke = [worldPoint]; return }
+        if let id = hitBlock(worldPoint), let rect = geometry.blockRects[id],
+           abs(worldPoint.x - rect.maxX) <= 7 / zoom, worldPoint.y >= rect.y, !board.isBlockLocked(id) {
+            resizingBlock = id; resizeWidth = board.blocks.first { $0.id == id }?.width ?? rect.width
+            blockSelection = [id]; selection = Set(board.beats.filter { $0.blockID == id }.map(\.id))
+            selected?(selection, blockSelection); needsDisplay = true; return
+        }
         if worldPoint.x - board.viewport.origin.x < 110,
            let layer = board.layers.first(where: { layer in
                guard let rect = geometry.layerRects[layer.id] else { return false }
@@ -224,6 +234,8 @@ final class NativeWhiteboard: NSView {
             board.viewport.origin = BoardPoint(x: panStart.x - (point.x - viewStart.x) / zoom, y: panStart.y - (point.y - viewStart.y) / zoom)
         } else if drawingMode && !stroke.isEmpty {
             if stroke.count < 10000 { stroke.append(current) }
+        } else if let id = resizingBlock, let start = dragStart, let original = board.blocks.first(where: { $0.id == id }) {
+            resizeWidth = max(140, min(2000, original.width + current.x - start.x))
         } else if let start = dragStart {
             dragDelta = BoardPoint(x: current.x - start.x, y: current.y - start.y)
             if marquee != nil {
@@ -235,8 +247,12 @@ final class NativeWhiteboard: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        defer { dragStart = nil; panStart = nil; movingBlocks = false; movingBeat = nil; marquee = nil; dragDelta = .init(); stroke = []; needsDisplay = true }
+        defer { dragStart = nil; panStart = nil; movingBlocks = false; movingBeat = nil; resizingBlock = nil; marquee = nil; dragDelta = .init(); stroke = []; needsDisplay = true }
         if panStart != nil { persistViewport(); return }
+        if let id = resizingBlock {
+            let width = resizeWidth
+            workspace?.edit("Resize Block") { try $0.resizeBoardBlock(id, width: width) }; return
+        }
         if stroke.count > 1 {
             let points = stroke
             workspace?.edit("Draw Annotation") { try $0.editWhiteboard { $0.strokes.append(BoardStroke(points: points)) } }; return
