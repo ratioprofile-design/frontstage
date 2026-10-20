@@ -61,6 +61,7 @@ struct ProductionView: View {
                 }
                 Button("Export Schedule CSV") { workspace.exportCSV(workspace.project.scheduleCSV(), name: workspace.project.name + " Schedule") }
                 Button("Export Breakdown CSV") { workspace.exportCSV(workspace.project.breakdownCSV(), name: workspace.project.name + " Breakdown") }
+                Button("Export Day Out of Days") { workspace.exportCSV(workspace.project.dayOutOfDaysCSV(), name: workspace.project.name + " DOOD") }
             }.padding(16).frame(minWidth: 205, idealWidth: 230)
             if let day {
                 VStack(alignment: .leading, spacing: 10) {

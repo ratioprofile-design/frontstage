@@ -205,8 +205,13 @@ final class NativeWhiteboard: NSView {
         }
         guard abs(dragDelta.x) + abs(dragDelta.y) > 3 else { return }
         if movingBlocks {
-            let delta = dragDelta, ids = blockSelection
-            workspace?.edit("Move Blocks") { try $0.moveBoardBlocks(ids, delta: delta) }
+            var delta = dragDelta
+            let ids = blockSelection, target = layerAt(world(convert(event.locationInWindow, from: nil)))
+            let sourceLayer = board.blocks.first { ids.contains($0.id) }?.layerID
+            if let sourceLayer, sourceLayer != target.id {
+                delta.y += (geometry.layerRects[sourceLayer]?.y ?? 0) - (geometry.layerRects[target.id]?.y ?? 0)
+            }
+            workspace?.edit("Move Blocks") { try $0.moveBoardBlocks(ids, delta: delta, layerID: sourceLayer == target.id ? nil : target.id) }
         } else if let beat = movingBeat {
             let point = world(convert(event.locationInWindow, from: nil))
             if let block = hitBlock(point) {
@@ -279,7 +284,7 @@ final class NativeWhiteboard: NSView {
         let menu = NSMenu()
         func item(_ name: String, _ action: Selector) { let item = NSMenuItem(title: name, action: action, keyEquivalent: ""); item.target = self; menu.addItem(item) }
         if contextBeat != nil {
-            item("Edit Beat…", #selector(editContextBeat)); item("Jump To Snippet", #selector(jumpToSnippet))
+            item("Edit Beat…", #selector(editContextBeat)); item("Jump To Snippet", #selector(jumpToSnippet)); item("Show In Research", #selector(showResearch))
             menu.addItem(.separator()); item("Create Cause", #selector(createCause)); item("Create Dependency From", #selector(startDependency))
             item("Must Be Caused", #selector(toggleRequired)); item("Split Beat at Cursor…", #selector(splitContext))
             item("Insert Beat After", #selector(insertContext)); menu.addItem(.separator())
@@ -293,6 +298,7 @@ final class NativeWhiteboard: NSView {
     }
     @objc private func editContextBeat() { if let id = contextBeat { openPopup(id) } }
     @objc private func jumpToSnippet() { if let id = contextBeat { workspace?.selectBoardBeat(id); workspace?.showBoardScript = true } }
+    @objc private func showResearch() { if let id = contextBeat { workspace?.openBoardResearch(id) } }
     @objc private func startDependency() { workspace?.pendingBoardCauseID = contextBeat }
     @objc private func toggleRequired() { if let id = contextBeat { workspace?.edit("Cause Requirement") { try $0.updateBoardBeat(id) { $0.mustBeCaused.toggle() } } } }
     @objc private func splitContext() { editContextBeat() }

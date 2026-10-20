@@ -120,6 +120,15 @@ extension Color {
 }
 
 extension Workspace {
+    func openBoardResearch(_ id: String) {
+        var record = (try? project.studio().records.first { $0.beatID == id && $0.kind == .research })?.id
+        let beat = whiteboard.beats.first { $0.id == id }
+        if record == nil {
+            edit("Add Beat Research") { record = try $0.addStudioRecord(kind: .research, title: beat?.title ?? "Beat Research", sceneID: beat?.sceneID, beatID: id) }
+        }
+        selectedResearchID = record; mode = .studio
+    }
+
     var whiteboard: Whiteboard { (try? project.whiteboard()) ?? Whiteboard() }
     var selectedBoardBeat: BoardBeat? { whiteboard.beats.first { $0.id == selectedBoardBeatID } }
 

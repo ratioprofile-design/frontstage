@@ -61,7 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @MainActor
 final class Workspace: ObservableObject {
     enum Mode: String, CaseIterable {
-        case edit = "Write", pages = "Pages", revisions = "Revisions", board = "Whiteboard", people = "People", breakdown = "Breakdown", production = "Production", writingTools = "Writing Tools"
+        case edit = "Write", pages = "Pages", revisions = "Revisions", board = "Whiteboard", people = "People", breakdown = "Breakdown", production = "Production", writingTools = "Writing Tools", studio = "Research & Studio"
     }
     @Published private(set) var project = Project()
     @Published var selectedSceneID: Decimal? {
@@ -72,6 +72,7 @@ final class Workspace: ObservableObject {
     @Published var selectedBoardBeatID: String?
     @Published var pendingBoardCauseID: String?
     @Published var showBoardScript = false
+    @Published var selectedResearchID: String?
     @Published var mode = Mode.board {
         didSet { if oldValue != mode { editor.textView?.undoManager?.removeAllActions() } }
     }
@@ -202,6 +203,11 @@ final class Workspace: ObservableObject {
     }
 
     func addScene() {
+        if project.preservedState["frontstageWhiteboard"] != nil {
+            addWhiteboardBeat()
+            mode = .board
+            return
+        }
         var id: Decimal?
         edit("Add Scene") { id = $0.addScene() }
         selectedSceneID = id
@@ -373,7 +379,9 @@ struct WorkspaceView: View {
             }.padding(.top)
             .navigationSplitViewColumnWidth(min: 220, ideal: 260)
         } detail: {
-            if workspace.mode == .writingTools {
+            if workspace.mode == .studio {
+                StudioView(workspace: workspace)
+            } else if workspace.mode == .writingTools {
                 WritingToolsView(workspace: workspace)
             } else if workspace.mode == .production {
                 ProductionView(workspace: workspace)

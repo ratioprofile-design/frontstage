@@ -137,12 +137,23 @@ extension Project {
 
     public mutating func assignCharacter(_ key: String, to sceneID: Decimal, assigned: Bool) throws {
         guard characters.contains(where: { $0.id == key }) else { throw ProjectError.invalidProject("character not found") }
-        try editBeat(sceneID) { fields in
+        var candidate = self
+        try candidate.editBeat(sceneID) { fields in
             var names = fields["characters"]?.array ?? []
             if assigned {
                 if !names.contains(.string(key)) { names.append(.string(key)) }
             } else { names.removeAll { $0 == .string(key) } }
             fields["characters"] = .array(names)
         }
+        if state["frontstageWhiteboard"] != nil {
+            try candidate.editWhiteboard { board in
+                if assigned, let i = board.beats.firstIndex(where: { $0.sceneID == sceneID && !$0.omitted && !board.isUnused($0) }), !board.beats.contains(where: { $0.sceneID == sceneID && $0.characters.contains(key) }) {
+                    board.beats[i].characters.append(key)
+                } else if !assigned {
+                    for i in board.beats.indices where board.beats[i].sceneID == sceneID { board.beats[i].characters.removeAll { $0 == key } }
+                }
+            }
+        }
+        self = candidate
     }
 }

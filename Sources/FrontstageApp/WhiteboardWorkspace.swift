@@ -175,6 +175,7 @@ struct WhiteboardWorkspace: View {
                     Button("Create Dependency From…") { workspace.pendingBoardCauseID = beat.id }
                     TextField("Synopsis", text: beatText(beat.id, \.synopsis, label: "Synopsis"), axis: .vertical).lineLimit(2...5)
                     Button("Open Popup Editor") { workspace.popup.open(beat.id, workspace: workspace) }
+                    Button("Research & Attachments…") { workspace.openBoardResearch(beat.id) }
                     Divider()
                     Text("▾ Characters").font(.caption.weight(.semibold))
                     listField("Characters", beat: beat, characters: true)

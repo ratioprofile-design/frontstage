@@ -35,6 +35,7 @@ extension Project {
         let clean = label.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { throw ProjectError.invalidProject("a revision needs a name") }
         let id = UUID().uuidString
+        let snippets = state["frontstageWhiteboard"]?.object?["beats"]?.array?.filter { $0.object?["sceneID"]?.decimal == sceneID }
         try editBeat(sceneID) { beat in
             var snapshot: [String: JSONValue] = [
                 "id": .string(id), "frontstageLabel": .string(clean),
@@ -45,6 +46,7 @@ extension Project {
             snapshot["frontstageEditorial"] = .object([
                 "slug": beat["slug"] ?? .null, "sceneNumber": beat["sceneNumber"] ?? .null
             ])
+            if let snippets { snapshot["frontstageSnippets"] = .array(snippets) }
             var versions = beat["versions"]?.array ?? []
             versions.append(.object(snapshot))
             beat["versions"] = .array(versions)
@@ -56,8 +58,17 @@ extension Project {
         let beat = state["beats"]?.array?.first { $0.object?["id"] == .number(sceneID) }?.object
         guard let version = beat?["versions"]?.array?.first(where: { $0.object?["id"] == .string(revisionID) })?.object,
               version["content"]?.string != nil else { throw ProjectError.invalidProject("revision not found") }
-        try saveRevision(sceneID: sceneID, label: "Before restoring \(version["frontstageLabel"]?.string ?? "revision")")
-        try editBeat(sceneID) { fields in
+        var candidate = self
+        let native = state["frontstageWhiteboard"] != nil
+        let savedSnippets: [BoardBeat]?
+        if let raw = version["frontstageSnippets"] { savedSnippets = try JSONDecoder().decode([BoardBeat].self, from: JSONEncoder().encode(raw)) }
+        else { savedSnippets = nil }
+        let currentSnippets = native ? try whiteboard().beats.filter { $0.sceneID == sceneID } : []
+        if native && savedSnippets == nil && currentSnippets.count > 1 {
+            throw ProjectError.invalidProject("this older revision has no snippet boundaries; use a revision captured after whiteboard migration")
+        }
+        try candidate.saveRevision(sceneID: sceneID, label: "Before restoring \(version["frontstageLabel"]?.string ?? "revision")")
+        try candidate.editBeat(sceneID) { fields in
             for key in ["title", "summary", "content"] { if let value = version[key] { fields[key] = value } }
             if let editorial = version["frontstageEditorial"]?.object {
                 for key in ["slug", "sceneNumber"] {
@@ -66,6 +77,20 @@ extension Project {
                 }
             }
         }
+        if native {
+            try candidate.editWhiteboard { board in
+                if let savedSnippets {
+                    let oldIDs = Set(board.beats.filter { $0.sceneID == sceneID }.map(\.id))
+                    board.beats.removeAll { $0.sceneID == sceneID }; board.beats.append(contentsOf: savedSnippets)
+                    let ids = Set(board.beats.map(\.id))
+                    board.dependencies.removeAll { (oldIDs.contains($0.cause) || oldIDs.contains($0.effect)) && (!ids.contains($0.cause) || !ids.contains($0.effect)) }
+                } else if let i = board.beats.firstIndex(where: { $0.sceneID == sceneID }) {
+                    board.beats[i].html = version["content"]?.string ?? ""
+                    board.beats[i].title = version["title"]?.string ?? board.beats[i].title
+                }
+            }
+        }
+        self = candidate
     }
 }
 
