@@ -1,73 +1,51 @@
 # Frontstage
 
-A native macOS rewrite of Backstage, built with Swift, SwiftUI and AppKit. The original `ratioprofile-design/Backstage` repository is not modified. There is no React, Tauri, JavaScript runtime or web view in this client.
+A native Swift macOS writing and production app with a whiteboard-first story workspace. All development is in [ratioprofile-design/frontstage](https://github.com/ratioprofile-design/frontstage); the original Backstage repository is unchanged.
 
-**Status: native editing, story sequencing and production milestones, not a complete Backstage conversion.** Native editing, recovery, sequencing, discovery and PDF workflows have portable and macOS tests and CI build checks. Interactive app testing and full feature parity are still outstanding; see the validation notes below for recorded runs.
+The whiteboard and floating beat editor are the primary workflow. This is a working development build, with remaining parity and release gates recorded in [the phase checklist](docs/ROADMAP.md). Exact Hollywood Camera Work Causality parity has not been established.
 
-**Next priority: the Causality-style whiteboard and popup editor.** The user's supplied screenshots define the target layout; the current lane sequencer is an intermediate step. See [the remaining phases and completion gates](docs/ROADMAP.md).
+## Preview
 
-## Current scope
+On [GitHub Actions](https://github.com/ratioprofile-design/frontstage/actions/workflows/swift.yml), choose a successful **Swift** run and download **Frontstage-macOS-development** while signed into GitHub. Unzip the download, then the enclosed `Frontstage-macOS.zip`, and open `Frontstage.app`. Requires macOS 14+. These are ad-hoc signed development builds; Developer ID distribution/notarization is pending.
 
-- Native project/scene navigation; scene title and summary editing.
-- AppKit rich-text scene editing, using TextKit and its native undo support.
-- Screenplay elements: action, character, dialogue, parenthetical, transition, shot and lyrics. Backstage's `sc-*` paragraph types survive native import/edit/save.
-- Editable scene headings and optional scene-number overrides.
-- Letter/A4 page preview, PDF export and native printing, using a shared PDF renderer. Disabled scenes are omitted. Page breaks avoid orphaned headings, character cues and parentheticals where the chain fits on a page.
-- New projects and import of existing `.backstage`/JSON project copies.
-- Versioned `.frontstage` saves with atomic writes. Import source paths are never used as default save destinations; saving to `.backstage` is rejected.
-- Preservation of unported project and scene fields, including nested data. Untouched scene HTML is retained; editing a scene converts its HTML through AppKit and may normalize unsupported formatting.
-- Known legacy credential fields are removed on import/save. This is not a general secret detector: inspect legacy project data before sharing it.
-- Unsaved-change prompts when replacing a project or quitting.
-- Project undo/redo, plus a separate debounced recovery copy and startup recovery prompt.
-- Named scene revisions, text comparison, restore with automatic backup, and printed MORE/CONT'D dialogue continuations.
-- Connected story/script workspace: colored lanes, estimated duration, dependency-aware ripple, snapping, groups, milestones, locks, cause/effect inspection and explicit script reordering. See [sequencer behavior and parity coverage](docs/CAUSALITY.md).
-- Character profiles and script-cue discovery; per-role casting options, confirmation and contact details; manual scene breakdowns.
-- Shooting days, scene assignments and estimates, cast call times, call-sheet PDF/print output, and schedule/breakdown CSV exports.
-
-Save projects explicitly. A separate recovery copy is written after 800 ms without changes; it does not overwrite an imported file or guarantee the latest keystroke survives a crash. Imported projects always open as copies, including `.frontstage` files; select the destination when saving. The app does not access the old app's storage directory automatically. If a recovery copy is unreadable, it is preserved and automatic recovery writes are disabled for that session.
-
-## Write and preview a screenplay
-
-Add a scene, fill in its heading, then write in the editor. Choose an element from the format picker or use Option+1 through Option+7. Tab cycles element types; Shift+Tab cycles backward. Return moves character/parenthetical to dialogue, and dialogue to the next character cue. Return on a blank formatted line returns to action. TextKit retains control of marked text during input-method composition.
-
-Switch **Write → Pages** to preview the entire active screenplay. Choose US Letter or A4 in the toolbar. Use **Export PDF** or **File → Print Screenplay** (Command+P) for output. The paper choice is currently a session setting. The validation artifact includes generated example PDFs for both paper sizes.
-
-The native screenplay layout uses 12-point Courier with a 1.5-inch binding margin and 1-inch other margins. It does not yet reproduce custom Backstage font/layout settings, page locks or dual dialogue. Imported HTML remains untouched until that scene is edited; editing normalizes its HTML and retains screenplay types plus bold/italic/underline, while unsupported inline styles, media and links need fidelity review.
-
-## Other workspaces
-
-Use the View menu in the toolbar to choose **Revisions**, **Board**, **People**, **Breakdown** or **Production**. Write and Board show the sequencer above the selected scene's script; resize the divider or hide either pane. Selecting a beat selects its script immediately. The right dot starts a connection; select the effect beat to complete it. Shift-click selects multiple beats. The inspector shows duration, storyline/sequence names, causes, effects and issues. Revisions and breakdowns operate on the scene selected in the sidebar. People can discover character cues from the screenplay, then you can assign roles in Breakdown. Production assigns active scenes to shooting days; a scene moves from its previous day when assigned to another. Fill in actual location/crew/safety details before exporting or distributing a call sheet.
-
-The Project menu provides undo (Command+Option+Z) and redo (Command+Option+Shift+Z), while Command+Z remains text undo. See the [five-phase run](docs/FIVE_PHASES.md) for each milestone and its limits.
-
-## Run on a Mac
-
-Requires macOS 14+ and a Swift 6 toolchain (Xcode 16+ or appropriate command line tools).
+To build on a Mac with Swift 6 / Xcode 16+:
 
 ```sh
 swift test
-swift run Frontstage
-```
-
-For an app bundle:
-
-```sh
 ./scripts/build-macos-app.sh
 open build/Frontstage.app
 ```
 
-The bundling script builds arm64 and x86_64, combines them into a universal Mac executable, verifies both architectures and ad-hoc signs the bundle for development. Native tests execute on the CI runner's architecture; Intel runtime review is still needed. The bundle is not Developer ID signed or notarized. On a Mac, open `Package.swift` in Xcode to build/debug the Swift package. The macOS GitHub Actions workflow builds an app artifact; availability depends on a successful workflow run.
+The bundle contains arm64 and x86_64 executables. Linux runs the portable tests and server; it cannot display the Mac app.
 
-## Portable core tests
+## Working features
 
-`swift test` exercises JSON types, legacy import, Tamil HTML, preservation of unknown fields and large numeric IDs, scene updates, invalid project rejection, ID allocation, credential removal, atomic save/reopen, source file protection and symlink protection. On Linux, the executable only reports that macOS is required; it does not render or validate the UI.
+- Gray whiteboard, compact colored snippets in blocks, nested groups, named layers, timeline/character tracks, optional left script and right properties panels.
+- Native floating rich-text beat editor: double-click a beat or press Return. Title, synopsis, story/subtext type, characters, tags, cause requirement and split at cursor use stable snippet IDs.
+- Multi-selection, block/group movement, snippet reordering between blocks, insert before/after, grouping, collapse, locks, cursor-centered zoom, pan, fit and freehand annotations.
+- Causal/reference links, missing-cause diagnostics, cycle rejection, deterministic forward ripple, atomic rollback at locked blockers and explicit timeline-to-script ordering.
+- Native screenplay elements, headings, scene numbering, rich-text undo, revisions, recovery, typography, Bamini-to-Unicode conversion and two-column writing.
+- Letter/A4 screenplay PDF/print, MORE/CONT'D, explicit scene page starts and script text locks. Dual dialogue and locked production pagination remain pending.
+- People/casting, breakdowns, shooting days, call-sheet PDFs, DOOD and CSV/XLSX reports.
+- Research, crew, continuity, shots/storyboard attachments and auditions with media import/export; these are initial workspaces with remaining advanced parity work.
+- Project copies, atomic `.frontstage` saves and unknown-field preservation; text/PDF/RTF/DOCX import, screenplay DOCX export and first-worksheet CSV/XLSX import.
+- Swift shared-project server, Mac Keychain login, owner/editor/reader permissions, explicit synchronization, three-way merges and retained local conflicts.
+- Browser whiteboard/popup with offline drafts and reconnect merging. Native Swift/Win32 Windows whiteboard/popup preview using the same Swift domain code.
 
-## Migration and future platforms
+See [feature coverage](docs/FEATURES.md), [whiteboard behavior](docs/CAUSALITY.md) and [validation evidence](docs/VALIDATION.md).
 
-See [migration plan](docs/MIGRATION.md), [feature status](docs/FEATURES.md), and [validation checklist](docs/VALIDATION.md).
+## Save and editing behavior
 
-The selected browser direction is a web application with shared projects and sync, like Notion, rather than remote streaming of Mac windows. `FrontstageCore` keeps document operations independent of SwiftUI. Future web and Windows clients should share a versioned service/document contract; they will require separate UI implementations. A local JSON format alone does not implement synchronization.
+Imports open as copies. Choose a new save destination; the app refuses `.backstage` save targets and project-target symlinks. Untouched legacy HTML and unknown fields are preserved. Native editing normalizes supported screenplay paragraph types and inline bold/italic/underline; unsupported styles need review.
 
-Do not add private service keys to the source or document schema. Native credentials should use Keychain; shared backend credentials belong on a server. Authentication, collaboration, conflict resolution, hosted storage, AI, Maps and other integrations are not implemented yet.
+Command+Z is text undo; Command+Option+Z is project undo. Recovery is a separate debounced copy, not an automatic save to the imported source. Unreadable recovery data is kept instead of overwritten.
 
-Development builds are on the [Actions page](https://github.com/ratioprofile-design/frontstage/actions). Choose the latest successful run. Download `Frontstage-macOS-development` while signed into GitHub, unzip it, then unzip the enclosed `Frontstage-macOS.zip` to get `Frontstage.app`. The app requires macOS 14+ and is intended for development testing. `Frontstage-screenplay-validation` contains the test report, sample Letter/A4 screenplays and a sample call-sheet PDF. Per-phase validation links are recorded in [FIVE_PHASES.md](docs/FIVE_PHASES.md).
+## Shared projects and other platforms
+
+[Server setup](Server/README.md) covers local browser preview, accounts, persistence, Docker and synchronization. Run the service locally, then visit `http://127.0.0.1:8080`. No public deployment has been provisioned.
+
+Mac and Windows clients are Swift executables without an embedded web runtime; the service is Swift/Vapor. The browser presentation uses HTML/CSS/JavaScript and shares the document/service contract.
+
+Windows development artifacts are on [the Windows workflow](https://github.com/ratioprofile-design/frontstage/actions/workflows/windows.yml). The Windows preview has plain-text snippets and a subset of the Mac workspace; it is not yet a complete Windows release.
+
+[Release gates](docs/RELEASE.md) cover Apple signing, hosting, installation, accessibility and remaining client parity.

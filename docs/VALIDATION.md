@@ -1,48 +1,47 @@
-# Validation
+# Validation record
 
-## Story sequencer validation (2026-10-20)
+Updated 20 October 2026. Automated checks establish the behavior they exercise; they do not establish complete Causality parity or installed-product acceptance.
 
-The current Linux portable suite executes **59 XCTest tests, 59 passed, 0 failures**. Nineteen sequencer tests cover converging causes, lane collisions and downstream effects, cycle repair, locked blockers and atomic rollback, duration changes, snapping exclusions, references, group/metadata round trips, board isolation, milestones, deletion/undo and a 1,000-beat chain. Newly added scenes follow the main story lane without overlapping after the fourth card.
+## Current automated evidence
 
-The native suite additionally exercises one-step ripple undo/redo, shared script/board state, recovery of those changes, and construction/rendering of the combined SwiftUI/AppKit workspace with a live screenplay editor. The full macOS test step passed in run [39371929142](https://github.com/ratioprofile-design/frontstage/actions/runs/39371929142). The validation artifact includes `story-workspace.png` and `story-workspace.frontstage`; this is a synthetic native hosting-view capture, not hands-on interaction evidence.
+- Local Swift 6.0.3/Linux: **92 XCTest tests pass**, including source protection, atomic persistence, revisions, causal constraints, locks, snippet split/merge/reorder, three-way merges, Office archives, Tamil/layout models and embedded media.
+- Whiteboard geometry/index test: 10,000 blocks/beats, 50 visible-range queries, approximately 0.06 seconds in this host's debug run. Deeply nested group bounds are tested. No interactive FPS claim.
+- macOS [run 39390067427](https://github.com/ratioprofile-design/frontstage/actions/runs/39390067427) passed native tests, universal release compilation, bundle/plist/signature validation and artifact uploads. It covers TextKit, screenplay/parallel PDFs, DOCX semantics/XLSX cells and popup identity, including the multi-snippet and shared-project UI changes. Later source commits have fresh CI runs; use their actual conclusions.
+- Windows [run 39389625081](https://github.com/ratioprofile-design/frontstage/actions/runs/39389625081) passed native release compilation, selected shared-model tests, a native popup edit plus cause/resolve/save/reopen smoke, and development/validation artifact upload. It does not establish clean-machine installation or full Mac parity.
+- Browser/server [run 39390067350](https://github.com/ratioprofile-design/frontstage/actions/runs/39390067350) passed API authentication/permissions/version conflicts/retries/restart tests, JavaScript merge fixtures and actual Chromium popup/offline/reconnect editing. The browser smoke also passed locally.
+- Container [run 39389625116](https://github.com/ratioprofile-design/frontstage/actions/runs/39389625116) built the source Docker image and checked the nonroot runtime health. Local Docker builds were blocked by apt-mirror DNS in this environment; successful CI is the container evidence.
 
-Visual comparison against Hollywood Camera Work Causality remains outstanding: reference-site access returned HTTP 403. Exact parity, semantic story rules, nested groups and independent beat/script ranges are not claimed. See [CAUSALITY.md](CAUSALITY.md) for the implemented behavior and remaining coverage. Manual checks should include dragging at multiple zoom levels, cross-lane/multiple selection movement, connection handles, pane resizing, keyboard focus and locked/cyclic conflict recovery.
+Mac run 39389625132 exposed an old test expectation that adding a scene switched to Write. The implementation now intentionally defaults to Whiteboard; the test expectation was updated. Failed runs are not preview evidence. The final status links below should be checked for the newest source revision.
 
-## Automated gates
+## Artifacts and commands
 
-- Run `swift test`: the suite must execute actual tests, not just build.
-- On macOS run `./scripts/build-macos-app.sh`: compile the SwiftUI/AppKit client and verify the development bundle's plist and ad-hoc signature.
-- CI runs both gates on macOS. A workflow file alone is not evidence that they passed.
+[Swift workflow](https://github.com/ratioprofile-design/frontstage/actions/workflows/swift.yml): `Frontstage-macOS-development` contains the nested development app zip; `Frontstage-screenplay-validation` contains test XML/logs, native workspace/popup captures, sample PDFs and synthetic projects. A grouped whiteboard → popup edit → split → undo/redo → save/reopen → PDF acceptance test also generates artifacts.
 
-## Required native manual checks
+[Browser workflow](https://github.com/ratioprofile-design/frontstage/actions/workflows/server.yml): `Frontstage-browser-validation` contains `browser-whiteboard.png`, `browser-popup.png` and the browser log.
 
-1. Launch the bundle, create two scenes, edit titles, summaries and rich text. Verify scene selection keeps the right content and native text undo/redo works.
-2. Save a `.frontstage` file, quit and reopen it through Open or Import. Compare saved text, metadata and unknown fields. Select a save destination explicitly; every import starts a copy.
-3. Import a sanitized `.backstage` fixture containing Tamil, formatted dialogue, shots, nested unknown fields and a document. Verify untouched HTML remains unchanged in saved JSON. Edit one scene and inspect AppKit's formatting conversion.
-4. Confirm import and editing do not modify the source file. Confirm Save As refuses a `.backstage` destination and an alias pointing to one.
-5. Edit a project, then New/Open/Quit. Check Save, Cancel, Discard, cancelled save panels and failed writes do not silently lose current edits.
-6. Check large projects, long scripts, keyboard navigation and accessibility. These have not been performance-validated.
+[Windows workflow](https://github.com/ratioprofile-design/frontstage/actions/workflows/windows.yml): development executable/runtime zip and validation logs with the synthetic saved project.
 
-There is no claim of full feature parity, macOS runtime validation, cloud synchronization or fresh-machine restoration until the relevant checks execute.
+```sh
+swift test
+# On macOS:
+./scripts/build-macos-app.sh
+# After building Server:
+python3 Server/Tests/smoke.py
+node Server/Tests/merge.mjs
+node Server/Tests/browser-smoke.mjs
+```
 
-## Screenplay milestone checks
+The browser smoke needs Playwright/Chromium as described in [Server README](../Server/README.md). Linux builds neither display nor validate AppKit; native checks run on macOS CI.
 
-The screenplay milestone contained 16 portable tests. Native tests exercise semantic `sc-*` HTML round trips, nested wrappers, Tamil and emoji, native Return/Tab flow, and untouched-source preservation. PDF tests verify every paragraph is extractable from a long multipage screenplay, page ranges cover all source text exactly once, Letter/A4 page geometry, omitted scenes, orphan-cue movement and destination symlink protection. CI saves test results and generated PDFs in `Frontstage-screenplay-validation`.
+## Required hands-on acceptance
 
-The native suite also tests formatting undo and rich clipboard insertion into dialogue. macOS run [39333279146](https://github.com/ratioprofile-design/frontstage/actions/runs/39333279146) passed the full test step, release compilation, bundle signature/plist checks, and both artifact uploads. The log-capture pipeline explicitly enables pipefail so a test or compilation failure fails the job. Run 39333067564 is not valid test evidence: it exposed a missing `try` in a test and the pipeline status bug, both corrected before the passing run.
+1. Launch the installed app on Apple Silicon and Intel. Compare full-window layouts to both supplied screenshots and the popup to an actual open-editor reference.
+2. Exercise selection, multi-block/layer dragging, nested groups, multi-snippet movement, pan/zoom/fit, context actions and locked/cyclic failures at several zoom levels.
+3. Test native focus, keyboard formatting, Tamil IME composition, popup dismissal, text/project undo and multiple editor isolation.
+4. Import representative sanitized legacy projects with Unicode, formatting, metadata and media. Split/reorder/merge, save/reopen and inspect source preservation.
+5. Compare screenplay, two-column, call-sheet and Office exports visually; test the native printer dialog and custom fonts.
+6. Interrupt the app and relaunch recovery; cancel unsaved replacement/save panels and simulate failed writes.
+7. Use Mac/browser accounts with owner/editor/reader access on two devices; test offline edits, conflicts, permissions removal and reconnect.
+8. Measure interactive performance and accessibility with large real projects. Validate Windows runtime dependencies and installation on a clean machine.
 
-On a Mac, also review the Write/Pages switch and native Print dialog. Check Option+1–7, Tab/Shift+Tab, text undo, IME composition, scene headings and scene numbers. Compare preview and exported PDF visually. Custom imported font/layout settings are not implemented; MORE/CONT'D was added in phase 4.
-
-## Five-phase expansion
-
-The portable suite now executes 40 tests. Additional coverage includes bounded/coalesced undo, recovery, revision restore and line-diff reconstruction, cycle rejection/diagnosis, stable scene links, casting confirmation and metadata patches, legacy breakdowns, strict dates/times, overnight schedules, workload/turnaround checks, CSV quoting/source protection, and an integrated five-phase save/recover/undo workflow.
-
-Native tests add dirty-state/selection reconciliation, isolation of text undo across scenes/projects, explicit recovery, protection of unreadable recovery data, character-cue discovery, undo of production edits, live call-sheet PDF text, and long-dialogue continuation headers/footers. The validation artifact includes call-sheet-sample.pdf as well as screenplay PDFs.
-
-Phase 7's combined native suite and app packaging passed in run [39336366519](https://github.com/ratioprofile-design/frontstage/actions/runs/39336366519). The final bundling script additionally compiles both arm64 and x86_64 and verifies the universal binary with lipo before signing; this is build evidence for both architectures, not an Intel runtime test.
-
-Manual checks still needed: crash/relaunch recovery in the installed app, board dragging/zoom/selection, role/casting forms, day/date/time controls across user locales, visual typography and the printer dialog. No cloud synchronization, distribution signing/notarization or full Backstage parity is claimed.
-
-## Current cloud run
-
-Swift 6.0.3 on Linux: 11 XCTest tests executed, 11 passed, 0 failures. The trailing Swift Testing message reports zero tests because this suite uses XCTest; it is not the suite result. Bash syntax and plist parsing also passed. The first macOS CI run (91a584b, run 39330601726) succeeded, covering core tests, native compilation and the development bundling script. Interactive UI checks are still outstanding. Follow-up macOS CI run 39330835052 (8741b72) also succeeded: the suite includes three native TextKit/workspace tests, followed by a release app build, plist/signature validation and artifact upload. The development zip is available from that run.
+Developer ID signing/notarization, actual public hosting, complete Windows/browser feature parity and all phase acceptance gates remain unverified. See [release](RELEASE.md) and [roadmap](ROADMAP.md).

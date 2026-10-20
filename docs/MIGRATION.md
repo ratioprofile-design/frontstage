@@ -1,6 +1,6 @@
 # Native macOS migration preparation
 
-Status: native screenplay and five additional editing/production milestones implemented in frontstage; full migration is outstanding. See FEATURES.md, FIVE_PHASES.md and VALIDATION.md for current scope and evidence.
+Status: native whiteboard/popup, screenplay/production workflows, shared Swift service/browser and Windows development client implemented in Frontstage; full migration and acceptance remain outstanding. See FEATURES.md, ROADMAP.md and VALIDATION.md for current scope and evidence. FIVE_PHASES.md is the earlier historical milestone record.
 Current priority and remaining implementation order: [ROADMAP.md](ROADMAP.md). The user's Causality screenshots now define the whiteboard target. The whiteboard has maximum priority, and the popup beat/snippet editor is a required early deliverable before further script-page or production expansion. The sequence below is the original broad migration outline; ROADMAP.md governs the next work.
 Source inspected: ratioprofile-design/Backstage, commit 425da0c30eb3d10b47f3398dbc909989fe761d69.
 The original checkout is read-only for this migration. All implementation belongs in a new independent repository under the GitHub owner and name selected by the user. Do not push to, rename, move, or alter the source repository. Do not copy its Git metadata, local environment files, credentials, caches, generated output, or user project data.
@@ -11,7 +11,7 @@ Build a native macOS client with SwiftUI, using AppKit/TextKit for advanced scre
 
 Separate a Foundation-only domain package from macOS presentation and service adapters. Keep the persisted document schema and service contracts independent of SwiftUI. SwiftUI does not provide a Windows or browser UI: future clients require their own presentation layers. Swift on Windows can potentially reuse compatible domain code, subject to platform tests; do not assume Apple frameworks are available there.
 
-Selected future browser model: shared projects and synchronization through a common authenticated backend, rather than hosting a running Mac for each browser session. Define authentication, permissions, revisions, conflict handling, and asset URLs as shared contracts. A Swift backend is possible, but existing Supabase services can remain during migration. Replacing every existing backend is a separate scope decision.
+Selected browser model: shared projects and synchronization through a common authenticated backend. A separate Swift/Vapor service and browser client now implement accounts, project permissions, versioned updates, offline drafts and three-way merging. Mac Keychain sessions and explicit synchronization use that service. The native Swift/Win32 client reuses the portable model but still needs sync UI and full Mac workspace parity. See Server/README.md for running the local browser preview and deployment limits.
 
 If the user means remote UI streaming instead, plan Mac hosting capacity, session isolation, input forwarding, video transport, reconnect behavior, and operating costs separately. Do not implement a sync architecture while presenting it as remote streaming.
 
@@ -53,4 +53,4 @@ Do not describe a shell or first vertical slice as the completed conversion. Ful
 
 ## Validation limits
 
-The current development host is Linux. A signature-verified Swift 6.0.3 Linux toolchain runs the portable suite; Xcode is unavailable locally. Native SwiftUI/AppKit tests, release compilation and development app bundling run on macOS CI. Individual phase results are recorded in FIVE_PHASES.md. Interactive macOS and printer checks remain outstanding. No distribution signing/notarization, cloud synchronization or full application parity is claimed. GitHub writes to frontstage have been verified; Backstage remains unchanged.
+The development host is Linux. A signature-verified Swift 6.0.3 Linux toolchain runs the portable suite; Xcode is unavailable locally. Native SwiftUI/AppKit tests, release compilation and universal development bundling run on macOS CI. Windows builds and a native popup/save smoke run on Windows CI; API, browser offline/reconnect and container checks run on Linux CI. Current evidence is recorded in VALIDATION.md. Interactive installed-app/printer checks, public hosting, actual distribution signing/notarization and full application parity remain outstanding. GitHub writes to Frontstage have been verified; Backstage remains unchanged.
