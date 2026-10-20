@@ -238,4 +238,11 @@ final class StorySequencerTests: XCTestCase {
         XCTAssertEqual(project.storyGraph.links.first?.to, 3)
         XCTAssertEqual(history.undo(current: project), before)
     }
+
+    func testAddingScenesUsesSequentialStoryPositionsInsteadOfOverlappingAfterFourCards() throws {
+        var project = Project()
+        for _ in 0..<8 { _ = project.addScene() }
+        XCTAssertEqual(project.storySequencer().beats.map(\.x), (0..<8).map { Double($0 * 244) })
+        XCTAssertTrue(project.storySequencer().issues.isEmpty)
+    }
 }

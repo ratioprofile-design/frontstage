@@ -1,5 +1,13 @@
 # Validation
 
+## Story sequencer validation (2026-10-20)
+
+The current Linux portable suite executes **59 XCTest tests, 59 passed, 0 failures**. Nineteen sequencer tests cover converging causes, lane collisions and downstream effects, cycle repair, locked blockers and atomic rollback, duration changes, snapping exclusions, references, group/metadata round trips, board isolation, milestones, deletion/undo and a 1,000-beat chain. Newly added scenes follow the main story lane without overlapping after the fourth card.
+
+The native suite additionally exercises one-step ripple undo/redo, shared script/board state, recovery of those changes, and construction/rendering of the combined SwiftUI/AppKit workspace with a live screenplay editor. The full macOS test step passed in run [39371929142](https://github.com/ratioprofile-design/frontstage/actions/runs/39371929142). The validation artifact includes `story-workspace.png` and `story-workspace.frontstage`; this is a synthetic native hosting-view capture, not hands-on interaction evidence.
+
+Visual comparison against Hollywood Camera Work Causality remains outstanding: reference-site access returned HTTP 403. Exact parity, semantic story rules, nested groups and independent beat/script ranges are not claimed. See [CAUSALITY.md](CAUSALITY.md) for the implemented behavior and remaining coverage. Manual checks should include dragging at multiple zoom levels, cross-lane/multiple selection movement, connection handles, pane resizing, keyboard focus and locked/cyclic conflict recovery.
+
 ## Automated gates
 
 - Run `swift test`: the suite must execute actual tests, not just build.

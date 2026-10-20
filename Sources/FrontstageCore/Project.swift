@@ -98,9 +98,10 @@ public struct Project: Equatable, Sendable {
         if case .number(let stored) = state["nextId"], stored > maximum,
            stored == stored.roundedInteger { next = stored } else { next = maximum + 1 }
         var beats = state["beats"]?.array ?? []
+        let storyX = storySequencer().beats.filter { $0.lane == 0 }.map(\.end).max().map { $0 + StorySequencer.gap } ?? 0
         beats.append(.object([
             "id": .number(next), "title": .string("Untitled Scene"), "content": .string(""),
-            "x": .number(Decimal((beats.count % 4) * 280)), "y": .number(Decimal((beats.count / 4) * 180)), "boardId": .number(0),
+            "x": .number(Decimal(storyX)), "y": .number(36), "boardId": .number(0), "trackIndex": .number(0), "w": .number(220),
             "slug": .object(["prefix": .string("INT."), "location": .string(""), "time": .string("DAY")])
         ]))
         state["beats"] = .array(beats)
