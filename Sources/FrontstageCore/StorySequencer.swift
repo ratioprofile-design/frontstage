@@ -97,7 +97,7 @@ extension Project {
             return (id, fields)
         })
         let nodes = graph.nodes.filter { $0.boardID == boardID }
-        let maximumLane = nodes.map { Self.laneIndex(rawBeats[$0.id]?["trackIndex"]) }.max() ?? 0
+        let maximumLane = graph.nodes.map { Self.laneIndex(rawBeats[$0.id]?["trackIndex"]) }.max() ?? 0
         let storedLanes = state["causalityLanes"]?.array ?? []
         let defaults = ["Main Plot", "Character Arc", "Subplot A", "Subplot B", "Unused"]
         let palette = ["#eab308", "#38bdf8", "#ef4444", "#8b5cf6", "#22c55e"]

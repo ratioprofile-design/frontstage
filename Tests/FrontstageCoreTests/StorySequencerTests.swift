@@ -168,5 +168,74 @@ final class StorySequencerTests: XCTestCase {
         try project.moveStoryBeats([1], by: 100, snap: false)
         XCTAssertEqual(project.storySequencer().beats.last?.x, 999 * 144 + 100)
         XCTAssertTrue(project.storySequencer().issues.isEmpty)
+        XCTAssertFalse(project.storyGraph.hasCycle)
+    }
+
+    func testInvalidMovementAndMissingSelectionFailWithoutMutation() throws {
+        var project = try project([(0, 0)])
+        let before = project
+        XCTAssertThrowsError(try project.moveStoryBeats([], by: 10))
+        XCTAssertThrowsError(try project.moveStoryBeats([99], by: 10))
+        XCTAssertThrowsError(try project.moveStoryBeats([1], by: .infinity))
+        XCTAssertThrowsError(try project.moveStoryBeats([1], by: 1_000_000))
+        XCTAssertThrowsError(try project.moveStoryBeats([1], by: 10, toLane: 128))
+        XCTAssertEqual(project, before)
+    }
+
+    func testCompactingRespectsLockedAnchorAndRejectsOverlappingLockedBeats() throws {
+        var project = try project([(100, 0), (600, 0), (1000, 0)])
+        try project.setStoryBeatLocked(2, locked: true)
+        try project.resolveStory(compactLane: 0)
+        XCTAssertEqual(positions(project), [0, 600, 744])
+        try project.moveStoryBeats([1], by: 520, ripple: false, snap: false)
+        let before = project
+        XCTAssertThrowsError(try project.resolveStory())
+        XCTAssertEqual(project, before)
+    }
+
+    func testLanesAreSharedAcrossBoardsIncludingImportedHighLaneIndexes() throws {
+        var project = try project([(0, 0), (144, 8)])
+        try project.setStoryBoard(2, boardID: 2)
+        XCTAssertEqual(project.storySequencer().lanes.count, 9)
+        XCTAssertEqual(project.storySequencer(boardID: 2).lanes.count, 9)
+        try project.updateStoryLane(8, label: "Secondary board story")
+        XCTAssertEqual(project.storySequencer(boardID: 2).lanes[8].label, "Secondary board story")
+    }
+
+    func testGroupBoundsAndLinkReasonEditsKeepImportedUnknownFields() throws {
+        var project = try project([(0, 0), (144, 0)])
+        let id = try project.groupStoryBeats([1, 2], title: "Original")
+        var groups = project.state["causalityGroups"]!.array!
+        var group = groups[0].object!; group["future"] = .bool(true); groups[0] = .object(group)
+        project.state["causalityGroups"] = .array(groups)
+        try project.moveStoryBeats([1, 2], by: 120, snap: false)
+        try project.renameStoryGroup(id, title: "The reveal")
+        let saved = project.preservedState["causalityGroups"]!.array![0].object!
+        XCTAssertEqual(saved["startUnit"], .number(1))
+        XCTAssertEqual(saved["durationUnits"], .number(Decimal(2.2)))
+        XCTAssertEqual(saved["future"], .bool(true))
+        XCTAssertEqual(saved["title"], .string("The reveal"))
+        try project.connectScenes(from: 1, to: 2)
+        var links = project.state["connections"]!.array!
+        var link = links[0].object!; link["future"] = .string("preserved"); links[0] = .object(link)
+        project.state["connections"] = .array(links)
+        try project.updateStoryLink(from: 1, to: 2, label: "She opens the letter")
+        XCTAssertEqual(project.storyGraph.links[0].label, "She opens the letter")
+        XCTAssertEqual(project.preservedState["connections"]!.array![0].object?["future"], .string("preserved"))
+    }
+
+    func testDeleteRemovesOnlySelectedBeatsAndTheirLinksAndCanBeUndone() throws {
+        var project = try project([(0, 0), (144, 0), (288, 0)])
+        try project.connectScenes(from: 1, to: 2)
+        try project.connectScenes(from: 2, to: 3)
+        try project.connectScenes(from: 1, to: 3)
+        let before = project
+        var history = ProjectHistory()
+        history.record(before, label: "Delete Beat")
+        try project.removeStoryBeats([2])
+        XCTAssertEqual(project.scenes.map(\.id), [1, 3])
+        XCTAssertEqual(project.storyGraph.links.count, 1)
+        XCTAssertEqual(project.storyGraph.links.first?.to, 3)
+        XCTAssertEqual(history.undo(current: project), before)
     }
 }

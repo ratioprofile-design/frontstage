@@ -94,9 +94,12 @@ struct StoryBoardView: View {
             }
             statusBar
         }
-        .preferredColorScheme(.dark)
+        .environment(\.colorScheme, .dark)
         .onAppear { synchronizeSelection(); selectBoardForScene(); refreshModel() }
-        .onChange(of: boardID) { _, _ in pendingSource = nil; refreshModel(); selected.formIntersection(Set(model.beats.map(\.id))) }
+        .onChange(of: boardID) { _, _ in
+            pendingSource = nil; refreshModel(); selected.formIntersection(Set(model.beats.map(\.id)))
+            if !model.beats.contains(where: { $0.id == workspace.selectedSceneID }) { workspace.selectedSceneID = model.beats.first?.id }
+        }
         .onChange(of: workspace.selectedSceneID) { _, _ in synchronizeSelection(); selectBoardForScene() }
         .onChange(of: workspace.changeID) { _, _ in
             refreshModel()

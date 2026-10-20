@@ -42,8 +42,9 @@ final class StoryWorkspaceTests: XCTestCase {
             let workspace = Workspace()
             for title in ["The invitation", "A locked door", "The discovery", "A dangerous choice"] {
                 workspace.addScene()
-                workspace.updateScene(id: workspace.selectedSceneID!, title: title, summary: "Every decision changes what can happen next.",
-                    html: "<div class=\"sc-action\">Rain moves across the empty courtyard.</div><div class=\"sc-character\">MARA</div><div class=\"sc-dialogue\">Someone was here before us.</div>")
+                workspace.updateScene(id: workspace.selectedSceneID!, title: title,
+                    html: "<div class=\"sc-action\">Rain moves across the empty courtyard.</div><div class=\"sc-character\">MARA</div><div class=\"sc-dialogue\">Someone was here before us.</div>",
+                    summary: "Every decision changes what can happen next.")
             }
             workspace.edit("Example Story") { project in
                 try project.moveStoryBeats([2], by: 0, toLane: 1, ripple: false, snap: false)

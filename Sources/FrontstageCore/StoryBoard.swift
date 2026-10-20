@@ -25,16 +25,31 @@ public struct StoryGraph: Equatable, Sendable {
     public var boardIDs: [Int] { Array(Set(nodes.map(\.boardID))).sorted() }
 
     public func hasPath(from: Decimal, to: Decimal) -> Bool {
+        let adjacency = Dictionary(grouping: links.filter { $0.kind == .cause }, by: \.from)
         var queue = [from], visited = Set<Decimal>()
         while let next = queue.popLast() {
             if next == to { return true }
             guard visited.insert(next).inserted else { continue }
-            queue.append(contentsOf: links.filter { $0.from == next && $0.kind == .cause }.map(\.to))
+            queue.append(contentsOf: (adjacency[next] ?? []).map(\.to))
         }
         return false
     }
 
-    public var hasCycle: Bool { links.contains { $0.kind == .cause && hasPath(from: $0.to, to: $0.from) } }
+    public var hasCycle: Bool {
+        let causal = links.filter { $0.kind == .cause }
+        let adjacency = Dictionary(grouping: causal, by: \.from)
+        var incoming = Dictionary(uniqueKeysWithValues: nodes.map { ($0.id, 0) })
+        for link in causal { incoming[link.to, default: 0] += 1 }
+        var queue = nodes.filter { incoming[$0.id] == 0 }.map(\.id), cursor = 0
+        while cursor < queue.count {
+            let id = queue[cursor]; cursor += 1
+            for link in adjacency[id] ?? [] {
+                incoming[link.to, default: 0] -= 1
+                if incoming[link.to] == 0 { queue.append(link.to) }
+            }
+        }
+        return cursor < nodes.count
+    }
 }
 
 extension JSONValue {
