@@ -70,8 +70,35 @@ try {
   await page.screenshot({ path: path.join(artifact, 'browser-whiteboard.png') });
   await page.locator('#blocks .beat-text').getByText('The Consequence', { exact: true }).dblclick();
   await page.screenshot({ path: path.join(artifact, 'browser-popup.png') });
+  const latest = await fetch(endpoint, { headers }).then(r => r.json());
+  const secondDocument = structuredClone(latest.document); secondDocument.name = 'Second project';
+  secondDocument.project.frontstageWhiteboard.beats.find(b => b.title === 'The Consequence').title = 'Another project beat';
+  secondDocument.project.beats.forEach(scene => { scene.frontstageTextLocked = true; });
+  const secondProject = await fetch(address + '/api/projects', { method: 'POST', headers, body: JSON.stringify({ document: secondDocument }) }).then(r => r.json());
+  let releaseResponse, responseHeld = false;
+  const responseGate = new Promise(resolve => { releaseResponse = resolve; });
+  await page.route(endpoint, async route => {
+    if (route.request().method() !== 'PUT') return route.continue();
+    const response = await route.fetch(); responseHeld = true;
+    await responseGate; await route.fulfill({ response });
+  });
+  await page.locator('#beat-title').fill('Old project pending title');
+  await page.locator('#close-editor').click();
+  await page.locator('#save').click();
+  await wait(() => Promise.resolve(responseHeld), 'Delayed first-project sync response');
+  await page.locator('#back').click();
+  await page.locator('#project-list button').filter({ hasText: 'Second project' }).click();
+  await page.locator('#blocks .beat-text').getByText('Another project beat', { exact: true }).waitFor();
+  releaseResponse();
+  await page.waitForTimeout(400);
+  assert.equal(await page.locator('#blocks .beat-text').getByText('Another project beat', { exact: true }).count(), 1);
+  assert.equal(await page.locator('#blocks .beat-text').getByText('Old project pending title', { exact: true }).count(), 0);
+  await page.locator('#blocks .beat-text').getByText('Another project beat', { exact: true }).dblclick();
+  assert.equal(await page.locator('#snippet-editor').getAttribute('contenteditable'), 'false');
+  const unchanged = await fetch(address + '/api/projects/' + secondProject.id, { headers }).then(r => r.json());
+  assert.equal(unchanged.revision, 1);
   assert.deepEqual(errors, []);
-  console.log('PASS: browser account, project, stacked beats, popup identity, causes, offline edits and three-way reconnect merge');
+  console.log('PASS: browser account, stacked beats, popup identity, causes, offline/reconnect merge, delayed sync project isolation and locked script');
 } catch (error) {
   const details = String(error.stack || error).replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
   console.error(`::error::${details}`);

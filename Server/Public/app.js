@@ -6,6 +6,7 @@ const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const uuid = () => crypto.randomUUID();
 let token = '', current = null, doc = null, base = null, selected = null, editorID = null, source = null;
 let dirty = false, syncing = false, timer = null, pendingConflict = null;
+let documentEpoch = 0;
 const history = [];
 const status = text => { $('status').textContent = text; };
 function element(tag, text, className) { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (className) e.className = className; return e; }
@@ -40,8 +41,9 @@ const database = new Promise((resolve, reject) => {
 });
 async function saveLocal() {
   if (!current || !doc) return;
+  const snapshot = { id: current.id, doc: clone(doc), base: clone(base), revision: current.revision, dirty };
   const db = await database;
-  return new Promise((resolve, reject) => { const tx = db.transaction('projects', 'readwrite'); tx.objectStore('projects').put({ id: current.id, doc: clone(doc), base: clone(base), revision: current.revision, dirty }); tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
+  return new Promise((resolve, reject) => { const tx = db.transaction('projects', 'readwrite'); tx.objectStore('projects').put(snapshot); tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
 }
 async function localCopy(id) {
   const db = await database;
@@ -72,7 +74,9 @@ function compileSnippets() {
     const linked = board().beats.filter(b => b.sceneID === scene.id);
     if (!linked.length) continue;
     const active = linked.filter(b => !b.omitted && !unused(b)).sort((a, b) => a.order - b.order);
-    scene.content = active.map(b => b.html).join(''); scene.isDisabled = active.length === 0;
+    const content = active.map(b => b.html).join('');
+    if (scene.frontstageTextLocked && scene.content !== content) throw Error('Unlock the scene script before changing its snippet text or inclusion.');
+    scene.content = content; scene.isDisabled = active.length === 0;
     scene.characters = [...new Set(active.flatMap(b => b.characters))].sort();
   }
 }
@@ -83,11 +87,15 @@ function edit(action) {
   catch (error) { doc = previous; status(error.message); }
 }
 async function sync() {
-  if (!current || !dirty || syncing || pendingConflict) return;
+  if (!current || current.access === 'reader' || !dirty || syncing || pendingConflict) return;
   syncing = true; const sent = clone(doc);
-  status('Syncing…'); await saveLocal();
+  const epoch = documentEpoch, projectID = current.id, revision = current.revision;
+  status('Syncing…');
   try {
-    const { data, status: code } = await api(`/api/projects/${current.id}`, 'PUT', { expectedRevision: current.revision, changeID: uuid(), document: sent });
+    await saveLocal();
+    if (epoch !== documentEpoch) return;
+    const { data, status: code } = await api(`/api/projects/${projectID}`, 'PUT', { expectedRevision: revision, changeID: uuid(), document: sent });
+    if (epoch !== documentEpoch || current?.id !== projectID) return;
     if (code === 409) {
       const result = mergeDocuments(base, doc, data.snapshot.document);
       if (result.conflicts.length) { pendingConflict = data.snapshot; $('conflict-fields').textContent = result.conflicts.join('\n'); $('conflict').hidden = false; status('Conflict: local copy retained'); }
@@ -97,7 +105,7 @@ async function sync() {
       dirty = !equal(doc, sent); status(dirty ? 'More changes pending' : `Synced · revision ${current.revision}`);
     }
     await saveLocal();
-  } catch (error) { status(`Offline / sync failed · local copy retained: ${error.message}`); }
+  } catch (error) { if (epoch === documentEpoch) status(`Offline / sync failed · local copy retained: ${error.message}`); }
   finally { syncing = false; if (dirty && !pendingConflict && navigator.onLine) { clearTimeout(timer); timer = setTimeout(sync, 3000); } }
 }
 async function loadProjects() {
@@ -106,8 +114,11 @@ async function loadProjects() {
   $('account').hidden = true; $('projects').hidden = false; $('workspace').hidden = true;
 }
 async function openProject(id) {
+  const epoch = ++documentEpoch; clearTimeout(timer);
   const { data } = await api(`/api/projects/${id}`), offline = await localCopy(id);
+  if (epoch !== documentEpoch) return;
   current = data; history.length = 0; selected = null; editorID = null; $('editor').hidden = true;
+  pendingConflict = null; source = null; $('conflict').hidden = true;
   base = clone(data.document); doc = initializeBoard(clone(data.document)); dirty = !equal(doc, data.document);
   if (offline?.dirty) { base = offline.base; doc = initializeBoard(offline.doc); current.revision = offline.revision; dirty = true; }
   $('projects').hidden = true; $('workspace').hidden = false; render(); status(dirty ? 'Local changes ready to sync' : `Synced · revision ${current.revision}`);
@@ -177,13 +188,13 @@ function render() {
     const title = element('div', block.name, 'block-title'); node.append(title);
     title.ondblclick = () => { const value = prompt('Block name', block.name); if (value !== null) edit(() => { block.name = value; }); };
     title.onpointerdown = e => {
-      if (current.access === 'reader' || block.locked) return; e.preventDefault(); title.setPointerCapture(e.pointerId);
+      if (current.access === 'reader' || locked({ blockID: block.id })) return; e.preventDefault(); title.setPointerCapture(e.pointerId);
       const start = { x: e.clientX, y: e.clientY }, original = clone(block.position);
       title.onpointermove = event => { node.style.left = `${rect.x + event.clientX - start.x}px`; node.style.top = `${rect.y + event.clientY - start.y}px`; };
       title.onpointerup = event => { title.onpointermove = null; title.onpointerup = null; edit(() => { block.position = { x: Math.max(0, original.x + event.clientX - start.x), y: Math.max(32, original.y + event.clientY - start.y) }; }); };
     };
     node.ondragover = e => e.preventDefault(); node.ondrop = e => {
-      e.preventDefault(); const id = e.dataTransfer.getData('text/frontstage-beat'), moving = board().beats.find(b => b.id === id); if (!moving || locked(moving)) return;
+      e.preventDefault(); const id = e.dataTransfer.getData('text/frontstage-beat'), moving = board().beats.find(b => b.id === id); if (!moving || locked(moving) || locked({ blockID: block.id })) return;
       edit(() => { moving.blockID = block.id; moving.order = Math.max(-1, ...board().beats.filter(b => b.blockID === block.id && b.id !== id).map(b => b.order)) + 1; });
     };
     if (!block.collapsed) for (const beat of board().beats.filter(b => b.blockID === block.id).sort((a, b) => a.order - b.order)) {
@@ -208,7 +219,10 @@ function render() {
   }
   for (const issue of issues) { const button = element('button', issue.text, 'issue'); button.onclick = () => { if (issue.id) choose(issue.id); }; $('issues').append(button); }
   $('beat-count').textContent = `${board().beats.length} beats`; renderProperties(); renderTimeline();
-  document.querySelectorAll('.write').forEach(e => { e.disabled = current.access === 'reader'; }); $('snippet-editor').contentEditable = current.access === 'reader' ? 'false' : 'true';
+  document.querySelectorAll('.write').forEach(e => { e.disabled = current.access === 'reader'; });
+  const editingBeat = board().beats.find(b => b.id === editorID);
+  const textLocked = doc.project.beats.find(s => s.id === editingBeat?.sceneID)?.frontstageTextLocked;
+  $('snippet-editor').contentEditable = current.access === 'reader' || textLocked ? 'false' : 'true';
 }
 function renderProperties() {
   const beat = board().beats.find(b => b.id === selected), target = $('beat-properties'); target.replaceChildren(); if (!beat) { target.textContent = 'Select a beat. Double-click to edit its snippet.'; return; }
@@ -241,7 +255,9 @@ function renderTimeline() {
 function openEditor(id) {
   const beat = board().beats.find(b => b.id === id); if (!beat) return; editorID = id; selected = id;
   $('beat-title').value = beat.title; $('beat-synopsis').value = beat.synopsis; $('beat-kind').value = beat.kind; $('must-cause').checked = beat.mustBeCaused;
-  $('beat-characters').value = beat.characters.join(', '); $('beat-tags').value = beat.tags.join(', '); $('snippet-editor').innerHTML = cleanHTML(beat.html); $('editor').hidden = false; $('beat-title').focus();
+  $('beat-characters').value = beat.characters.join(', '); $('beat-tags').value = beat.tags.join(', '); $('snippet-editor').innerHTML = cleanHTML(beat.html); $('editor').hidden = false;
+  $('snippet-editor').contentEditable = current.access === 'reader' || doc.project.beats.find(s => s.id === beat.sceneID)?.frontstageTextLocked ? 'false' : 'true';
+  $('beat-title').focus();
 }
 function addBeat() {
   edit(() => {
@@ -264,7 +280,7 @@ async function authenticate(signup = false) {
 $('login').onsubmit = e => { e.preventDefault(); authenticate(); }; $('signup').onclick = () => authenticate(true);
 $('new-project').onclick = async () => { const name = prompt('Project name', 'Untitled Story'); if (!name) return; try { const document = initializeBoard({ format: 'frontstage', version: 1, name, project: { beats: [], nextId: 1 } }); const { data } = await api('/api/projects', 'POST', { document }); await openProject(data.id); } catch (error) { status(error.message); } };
 $('import-project').onchange = async e => { try { const file = e.target.files[0]; if (!file) return; const document = initializeBoard(JSON.parse(await file.text())); const { data } = await api('/api/projects', 'POST', { document }); await openProject(data.id); } catch (error) { status(error.message); } };
-$('logout').onclick = async () => { await saveLocal(); try { await api('/api/logout', 'POST'); } catch {} token = ''; current = null; doc = null; $('workspace').hidden = true; $('projects').hidden = true; $('account').hidden = false; $('editor').hidden = true; status('Signed out · local drafts retained on this device'); };
+$('logout').onclick = async () => { await saveLocal(); ++documentEpoch; clearTimeout(timer); try { await api('/api/logout', 'POST'); } catch {} token = ''; current = null; doc = null; pendingConflict = null; $('conflict').hidden = true; $('workspace').hidden = true; $('projects').hidden = true; $('account').hidden = false; $('editor').hidden = true; status('Signed out · local drafts retained on this device'); };
 $('back').onclick = async () => { await saveLocal(); $('editor').hidden = true; editorID = null; loadProjects().catch(e => status(e.message)); };
 $('save').onclick = sync; $('download').onclick = download; $('export-conflict').onclick = download;
 $('script-toggle').onclick = () => { $('script').hidden = !$('script').hidden; };
@@ -286,4 +302,12 @@ $('share').onclick = async () => { if (!current || current.access !== 'owner') {
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { $('editor').hidden = true; editorID = null; source = null; } if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); sync(); } if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !['INPUT', 'TEXTAREA'].includes(e.target.tagName) && !e.target.isContentEditable) { const previous = history.pop(); if (previous) { e.preventDefault(); doc = previous; dirty = true; saveLocal(); render(); } } if (e.key === 'Enter' && e.target === $('canvas') && selected) openEditor(selected); });
 window.addEventListener('online', () => { if (dirty) sync(); });
 window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
-setInterval(async () => { if (!current || !token || dirty || syncing || editorID || pendingConflict) return; try { const { data } = await api(`/api/projects/${current.id}`); if (data.revision !== current.revision) { current = data; base = clone(data.document); doc = initializeBoard(clone(data.document)); render(); await saveLocal(); status(`Updated · revision ${current.revision}`); } } catch {} }, 5000);
+setInterval(async () => {
+  if (!current || !token || dirty || syncing || editorID || pendingConflict) return;
+  const epoch = documentEpoch, projectID = current.id;
+  try {
+    const { data } = await api(`/api/projects/${projectID}`);
+    if (epoch !== documentEpoch || current?.id !== projectID || dirty || syncing || editorID || pendingConflict) return;
+    if (data.revision !== current.revision) { current = data; base = clone(data.document); doc = initializeBoard(clone(data.document)); render(); await saveLocal(); status(`Updated · revision ${current.revision}`); }
+  } catch {}
+}, 5000);
