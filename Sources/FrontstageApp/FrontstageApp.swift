@@ -20,6 +20,7 @@ struct FrontstageApp: App {
             CommandGroup(replacing: .newItem) {
                 Button("New Project", action: workspace.newProject).keyboardShortcut("n")
                 Button("Open or Import…", action: workspace.open).keyboardShortcut("o")
+                Button("Import Script Document…", action: workspace.importScriptDocument)
             }
             CommandGroup(replacing: .saveItem) {
                 Button("Save", action: workspace.save).keyboardShortcut("s")
@@ -29,6 +30,8 @@ struct FrontstageApp: App {
             CommandGroup(after: .saveItem) {
                 Button("Export Screenplay PDF…", action: workspace.exportPDF)
                     .disabled(!workspace.hasActiveScenes)
+                Button("Export Screenplay DOCX…", action: workspace.exportDOCX).disabled(!workspace.hasActiveScenes)
+                Button("Export Schedule XLSX…", action: workspace.exportScheduleXLSX)
                 Button("Print Screenplay…", action: workspace.printScreenplay).keyboardShortcut("p")
                     .disabled(!workspace.hasActiveScenes)
             }
@@ -61,7 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @MainActor
 final class Workspace: ObservableObject {
     enum Mode: String, CaseIterable {
-        case edit = "Write", pages = "Pages", revisions = "Revisions", board = "Whiteboard", people = "People", breakdown = "Breakdown", production = "Production", writingTools = "Writing Tools", studio = "Research & Studio"
+        case edit = "Write", pages = "Pages", revisions = "Revisions", board = "Whiteboard", people = "People", breakdown = "Breakdown", production = "Production", writingTools = "Writing Tools", studio = "Research & Studio", shared = "Shared Projects"
     }
     @Published private(set) var project = Project()
     @Published var selectedSceneID: Decimal? {
@@ -84,6 +87,7 @@ final class Workspace: ObservableObject {
     @Published private(set) var changeID = 0
     let editor = ScreenplayEditorController()
     let popup = BeatPopupPresenter()
+    let sharedProjects = SharedProjectClient()
     private var saveURL: URL?
     private var savedProject: Project? = Project()
     private let recoveryStore: RecoveryStore?
@@ -111,6 +115,7 @@ final class Workspace: ObservableObject {
     }
 
     func loadCopy(_ imported: Project) {
+        sharedProjects.detach()
         popup.close()
         selectedBoardBeatID = nil
         recoveryTask?.cancel()
@@ -185,6 +190,7 @@ final class Workspace: ObservableObject {
 
     func newProject() {
         guard confirmDiscardOrSave() else { return }
+        sharedProjects.detach()
         popup.close(); selectedBoardBeatID = nil
         recoveryTask?.cancel()
         if !recoveryBlocked {
@@ -379,7 +385,9 @@ struct WorkspaceView: View {
             }.padding(.top)
             .navigationSplitViewColumnWidth(min: 220, ideal: 260)
         } detail: {
-            if workspace.mode == .studio {
+            if workspace.mode == .shared {
+                SharedProjectsView(workspace: workspace, client: workspace.sharedProjects)
+            } else if workspace.mode == .studio {
                 StudioView(workspace: workspace)
             } else if workspace.mode == .writingTools {
                 WritingToolsView(workspace: workspace)

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Frontstage Whiteboard</title><link rel="stylesheet" href="/style.css"><script src="/app.js" type="module"></script></head>
+<body>
+<header><strong>FRONTSTAGE</strong><span id="status" role="status">Sign in to shared projects</span><div class="spacer"></div><button id="script-toggle">Script</button><button id="fit">Fit Board</button><button id="save" class="write">Sync</button><button id="download">Download Project</button><button id="logout">Sign Out</button></header>
+<section id="account">
+  <form id="login"><h1>Your story, connected.</h1><p>Sign in to open a shared whiteboard.</p><label>Username<input name="username" autocomplete="username" required pattern="[A-Za-z0-9_]{3,40}"></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><div class="buttons"><button type="submit">Sign In</button><button type="button" id="signup">Create Account</button></div><p id="auth-error" role="alert"></p></form>
+</section>
+<section id="projects" hidden><h1>Projects</h1><div class="buttons"><button id="new-project">New Whiteboard</button><label class="file-button">Import Project<input id="import-project" type="file" accept=".frontstage,.backstage,.json"></label></div><div id="project-list"></div></section>
+<main id="workspace" hidden>
+  <aside id="script" hidden><h2>Script & Snippets</h2><div id="snippet-list"></div></aside>
+  <section id="board-area"><div id="timeline"></div><div id="canvas" tabindex="0" aria-label="Story whiteboard"><svg id="links" aria-hidden="true"></svg><div id="layers"></div><div id="blocks"></div></div><footer><button id="add-layer" class="write">+ Layer</button><button id="add-block" class="write">+ Block</button><button id="add-beat" class="write">+ Beat</button><button id="cause" class="write">Create Dependency From</button><button id="resolve" class="write">Resolve Causes</button><span id="beat-count"></span><div class="spacer"></div><button id="back">Projects</button><button id="share">Share</button></footer></section>
+  <aside id="properties"><h2>Beat Properties</h2><div id="beat-properties">Select a beat. Double-click to edit its snippet.</div><h2>Story Issues</h2><div id="issues"></div></aside>
+</main>
+<section id="editor" class="floating" role="dialog" aria-modal="false" aria-labelledby="editor-label" hidden>
+  <div class="editor-header"><strong id="editor-label">Edit Beat</strong><button id="close-editor">Done</button></div>
+  <label>Beat name<input id="beat-title" class="write"></label><label>Synopsis<input id="beat-synopsis" class="write"></label>
+  <div class="buttons"><select id="beat-kind" class="write"><option value="story">Story Beat</option><option value="subtext">Subtext Beat</option></select><label><input id="must-cause" type="checkbox" class="write"> Must Be Caused</label></div>
+  <label>Characters<input id="beat-characters" class="write" placeholder="Comma-separated names"></label><label>Tags<input id="beat-tags" class="write" placeholder="Comma-separated tags"></label>
+  <div class="buttons"><select id="element" class="write"><option value="action">Action</option><option value="character">Character</option><option value="dialogue">Dialogue</option><option value="parenthetical">Parenthetical</option><option value="transition">Transition</option><option value="shot">Shot</option><option value="lyrics">Lyrics</option></select><button id="bold" class="write"><b>B</b></button><button id="italic" class="write"><i>I</i></button></div>
+  <div id="snippet-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Snippet text"></div>
+  <p class="muted">Changes are saved locally while offline. Esc closes the editor.</p>
+</section>
+<section id="conflict" class="floating" role="alertdialog" hidden><h2>Concurrent edits need a choice</h2><p>Both copies changed these fields. Your local copy remains saved on this device.</p><pre id="conflict-fields"></pre><button id="keep-local">Keep Local Copy</button><button id="take-server">Use Server Copy</button><button id="export-conflict">Download Local Backup</button></section>
+</body></html>

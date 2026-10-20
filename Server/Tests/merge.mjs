@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import { mergeDocuments } from '../Public/merge.js';
+const base = { beats: [{ id: 'a', title: 'Original', x: 0, future: true }] };
+const local = structuredClone(base); local.beats[0].title = 'Edited';
+const remote = structuredClone(base); remote.beats[0].x = 50;
+const result = mergeDocuments(base, local, remote);
+assert.deepEqual(result.conflicts, []);
+assert.deepEqual(result.value.beats[0], { id: 'a', title: 'Edited', x: 50, future: true });
+remote.beats[0].title = 'Remote';
+assert.deepEqual(mergeDocuments(base, local, remote).conflicts, ['/beats/a/title']);
+assert.deepEqual(mergeDocuments(base, { beats: [] }, remote).conflicts, ['/beats/a']);
+assert.equal(mergeDocuments([{ id: 'a' }, { id: 'z' }], [{ id: 'a' }, { id: 'b' }, { id: 'z' }], [{ id: 'a' }, { id: 'c' }, { id: 'z' }]).value.length, 4);
+console.log('PASS: browser merge preserves independent fields, detects edit/delete conflicts and combines independent insertions');

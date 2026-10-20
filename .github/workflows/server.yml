@@ -1,0 +1,19 @@
+name: Shared project server
+on:
+  push:
+    paths: ['Server/**', 'Sources/FrontstageCore/**', '.github/workflows/server.yml', 'Package.swift']
+  pull_request:
+    paths: ['Server/**', 'Sources/FrontstageCore/**', '.github/workflows/server.yml', 'Package.swift']
+permissions:
+  contents: read
+jobs:
+  server:
+    runs-on: ubuntu-24.04
+    container: swift:6.0.3-noble
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned server dependencies
+        run: swift build --package-path Server -j 3
+      - name: Exercise authentication and concurrent document updates
+        run: python3 Server/Tests/smoke.py
