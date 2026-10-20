@@ -38,6 +38,7 @@ with tempfile.TemporaryDirectory(prefix="frontstage-sync-test-") as directory:
     env = os.environ.copy()
     env["FRONTSTAGE_DATA_DIR"] = directory
     env["FRONTSTAGE_ALLOW_SIGNUP"] = "1"
+    env["FRONTSTAGE_WEB_ORIGIN"] = "https://frontstage-five.vercel.app"
     log = open(Path(directory) / "server.log", "wb")
 
     def start():
@@ -54,6 +55,16 @@ with tempfile.TemporaryDirectory(prefix="frontstage-sync-test-") as directory:
 
     process = start()
     try:
+        preflight = urllib.request.Request(base + "/api/projects", method="OPTIONS", headers={
+            "Origin": "https://frontstage-five.vercel.app", "Access-Control-Request-Method": "PUT",
+            "Access-Control-Request-Headers": "authorization,content-type"})
+        with urllib.request.urlopen(preflight, timeout=20) as response:
+            assert response.headers["Access-Control-Allow-Origin"] == "https://frontstage-five.vercel.app"
+            assert "PUT" in response.headers["Access-Control-Allow-Methods"]
+            assert "authorization" in response.headers["Access-Control-Allow-Headers"].lower()
+        preflight.add_header("Origin", "https://unrelated.invalid")
+        with urllib.request.urlopen(preflight, timeout=20) as response:
+            assert response.headers["Access-Control-Allow-Origin"] != "https://unrelated.invalid"
         accounts = {}
         for name in ("owner", "editor", "reader"):
             credentials = {"username": name, "password": secrets.token_urlsafe(20)}
@@ -91,7 +102,7 @@ with tempfile.TemporaryDirectory(prefix="frontstage-sync-test-") as directory:
         request(path, token=accounts["editor"], expected=404)
         request("/api/logout", "POST", token=accounts["owner"], expected=204)
         request(path, token=accounts["owner"], expected=401)
-        print("PASS: authentication, permissions, revisions, conflict rejection, retry idempotency, restart durability and logout")
+        print("PASS: restricted browser origin, authentication, permissions, revisions, conflict rejection, retry idempotency, restart durability and logout")
     finally:
         process.terminate()
         process.wait(timeout=20)

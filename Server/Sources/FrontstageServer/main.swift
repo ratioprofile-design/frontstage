@@ -27,6 +27,16 @@ do {
     app.routes.defaultMaxBodySize = "96mb"
     let directory = URL(fileURLWithPath: Environment.get("FRONTSTAGE_DATA_DIR") ?? app.directory.workingDirectory + "var")
     let store = try ProjectStore(directory: directory)
+    if let value = Environment.get("FRONTSTAGE_WEB_ORIGIN"), !value.isEmpty {
+        guard let url = URLComponents(string: value), let host = url.host, !host.isEmpty,
+              url.scheme == "https" || (url.scheme == "http" && ["127.0.0.1", "localhost", "[::1]"].contains(host)),
+              url.user == nil, url.password == nil, url.query == nil, url.fragment == nil, ["", "/"].contains(url.path) else {
+            throw Abort(.internalServerError, reason: "FRONTSTAGE_WEB_ORIGIN must be an HTTPS origin or loopback HTTP origin")
+        }
+        let origin = url.scheme! + "://" + host + (url.port.map { ":\($0)" } ?? "")
+        app.middleware.use(CORSMiddleware(configuration: .init(allowedOrigin: .custom(origin),
+            allowedMethods: [.GET, .POST, .PUT, .OPTIONS], allowedHeaders: [.authorization, .contentType, .accept])), at: .beginning)
+    }
     app.middleware.use(BrowserHeaders())
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
     app.get("health") { _ in Health(status: "ok", protocolVersion: 1) }

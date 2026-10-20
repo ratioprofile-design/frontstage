@@ -8,6 +8,8 @@ Double-click a beat or select it and press Return to open the native floating ed
 
 Shift-click/marquee selects multiple snippets. Drag selected snippets into another block to reorder them while preserving scene ownership. Drag block title/background to move blocks and nested descendants; shift-select blocks to group them. The inspector edits names, layer and width. Block context actions collapse and lock. Use Option/Space-drag to pan, pinch/Command-scroll to zoom around the cursor, and Fit for selection or the whole board. Freehand annotations are project data.
 
+Drag a block's right edge to resize it; inherited block/group/layer locks protect this action. Arrow keys navigate visible beats spatially, and Return opens their popup. Visible beats also expose labels and an Edit Beat action to macOS accessibility. These automated paths still need hands-on assistive-technology review.
+
 Beat context actions include edit, jump to snippet, research, create cause/dependency, must-cause, split, insert before/after, omission and delete. Characters and tags are editable in the popup/inspector. This is not yet exact context-menu parity.
 
 ## Causal behavior

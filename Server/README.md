@@ -29,3 +29,17 @@ node Server/Tests/merge.mjs
 For browser interaction tests, install Playwright in `Server/Tests`, install Chromium using Playwright, then run `node Server/Tests/browser-smoke.mjs`. The CI workflow installs these dependencies and uploads `browser-whiteboard.png` and `browser-popup.png`. The smoke scripts use temporary data, create synthetic accounts, and clean up their own server processes.
 
 Docker build (from repository root): `docker build -f Server/Dockerfile -t frontstage-server .`. Mount a persistent volume at `/data`; enable account registration only while enrolling users. A committed Dockerfile is not evidence of a deployed or reviewed production service.
+
+## Vercel browser deployment
+
+The selected browser address is **https://frontstage-five.vercel.app/**, connected by the owner to `ratioprofile-design/frontstage/main`. The root `vercel.json` builds the static browser with `node scripts/build-web.mjs` and publishes `build/web`; it needs no npm dependencies. Keep the Vercel project's root at the repository root. Git pushes can trigger that connected deployment, but a successful source build does not establish its public deployment status.
+
+The Swift/Vapor service requires a separate persistent container/VM host. Vercel's static deployment does not run it or store accounts/projects. Once a service host has an HTTPS address, configure:
+
+- On Vercel: `FRONTSTAGE_API_ORIGIN` = the service's HTTPS origin, without `/api` or another path, then redeploy. This is a public address, not a secret. Alternatively enter it in **Shared server** on the sign-in form.
+- On the Swift host: `FRONTSTAGE_WEB_ORIGIN=https://frontstage-five.vercel.app`, plus a private persistent `FRONTSTAGE_DATA_DIR`. This enables CORS only for the configured browser origin; bearer-token authorization and project permissions still apply.
+- Enable `FRONTSTAGE_ALLOW_SIGNUP=1` only while enrolling accounts, then restart with signup disabled. Keep the service behind HTTPS and back up its persistent data.
+
+An unset API origin lets the browser load but cannot supply accounts or sync on Vercel. No backend host has been provisioned yet. The owner's Apple signing configuration will be supplied separately in the release environment.
+
+For the static/browser split test, run `node scripts/build-web.mjs`, then `FRONTSTAGE_STATIC_BROWSER=1 node Server/Tests/browser-smoke.mjs` with Playwright installed. It serves the actual static build and talks to a separately started Swift service with CORS enabled. Same-origin and cross-origin flows are both covered; public HTTPS deployment is a separate acceptance gate.

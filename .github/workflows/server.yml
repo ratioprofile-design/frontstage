@@ -1,9 +1,9 @@
 name: Shared project server
 on:
   push:
-    paths: ['Server/**', 'Sources/FrontstageCore/**', '.github/workflows/server.yml', 'Package.swift']
+    paths: ['Server/**', 'Sources/FrontstageCore/**', '.github/workflows/server.yml', 'Package.swift', 'scripts/build-web.mjs', 'vercel.json']
   pull_request:
-    paths: ['Server/**', 'Sources/FrontstageCore/**', '.github/workflows/server.yml', 'Package.swift']
+    paths: ['Server/**', 'Sources/FrontstageCore/**', '.github/workflows/server.yml', 'Package.swift', 'scripts/build-web.mjs', 'vercel.json']
 permissions:
   contents: read
 jobs:
@@ -34,6 +34,8 @@ jobs:
           mkdir -p build
           node Server/Tests/merge.mjs
           node Server/Tests/browser-smoke.mjs 2>&1 | tee build/browser.log
+          node scripts/build-web.mjs
+          FRONTSTAGE_STATIC_BROWSER=1 node Server/Tests/browser-smoke.mjs 2>&1 | tee build/browser-static.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -1,4 +1,5 @@
 import { mergeDocuments } from './merge.js';
+import { apiOrigin as configuredOrigin } from './config.js';
 
 const $ = id => document.getElementById(id);
 const clone = value => structuredClone(value);
@@ -7,6 +8,17 @@ const uuid = () => crypto.randomUUID();
 let token = '', current = null, doc = null, base = null, selected = null, editorID = null, source = null;
 let dirty = false, syncing = false, timer = null, pendingConflict = null;
 let documentEpoch = 0;
+let apiOrigin = '';
+$('server-address').value = configuredOrigin || localStorage.getItem('frontstage-server') || '';
+function setServer() {
+  const value = $('server-address').value.trim();
+  if (!value) { apiOrigin = ''; localStorage.removeItem('frontstage-server'); return; }
+  const url = new URL(value);
+  const local = ['127.0.0.1', 'localhost', '[::1]'];
+  if ((url.protocol !== 'https:' && !(url.protocol === 'http:' && local.includes(url.hostname) && local.includes(location.hostname))) ||
+      url.username || url.password || url.search || url.hash || !['', '/'].includes(url.pathname)) throw Error('Enter the shared server’s HTTPS address without a path or credentials.');
+  apiOrigin = url.origin; localStorage.setItem('frontstage-server', apiOrigin);
+}
 const history = [];
 const status = text => { $('status').textContent = text; };
 function element(tag, text, className) { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (className) e.className = className; return e; }
@@ -29,7 +41,8 @@ function cleanHTML(source) {
 }
 function plain(html) { const node = document.createElement('div'); node.innerHTML = cleanHTML(html); return node.textContent; }
 async function api(path, method = 'GET', body) {
-  const response = await fetch(path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const response = await fetch(apiOrigin + path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
+  if (!(response.headers.get('Content-Type') || '').includes('application/json') && response.status !== 204) throw Error('Shared service unavailable. Enter your Frontstage server address to sign in.');
   const data = response.status === 204 ? null : await response.json();
   if (!response.ok && response.status !== 409) throw Error(data?.reason || `Request failed (${response.status})`);
   return { data, status: response.status };
@@ -274,7 +287,7 @@ function addBeat() {
 function download() { if (!doc) return; const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' }); const link = element('a'); link.href = URL.createObjectURL(blob); link.download = `${doc.name || 'Story'}.frontstage`; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 1000); }
 async function authenticate(signup = false) {
   const form = new FormData($('login')); $('auth-error').textContent = '';
-  try { const { data } = await api(`/api/${signup ? 'signup' : 'login'}`, 'POST', Object.fromEntries(form)); token = data.token; $('login').reset(); await loadProjects(); status(`Signed in as ${data.username}`); }
+  try { setServer(); const { data } = await api(`/api/${signup ? 'signup' : 'login'}`, 'POST', Object.fromEntries(form)); token = data.token; $('login').reset(); $('server-address').value = apiOrigin; await loadProjects(); status(`Signed in as ${data.username}`); }
   catch (error) { $('auth-error').textContent = error.message; }
 }
 $('login').onsubmit = e => { e.preventDefault(); authenticate(); }; $('signup').onclick = () => authenticate(true);

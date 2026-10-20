@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
-import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, readFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,16 +13,29 @@ const { chromium } = require(process.env.FRONTSTAGE_PLAYWRIGHT_MODULE || 'playwr
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const directory = await mkdtemp(path.join(tmpdir(), 'frontstage-browser-'));
 const port = 17843, address = `http://127.0.0.1:${port}`;
-const server = spawn(path.join(root, '.build/debug/FrontstageServer'), ['serve', '--hostname', '127.0.0.1', '--port', String(port)], { cwd: root, env: { ...process.env, FRONTSTAGE_DATA_DIR: directory, FRONTSTAGE_ALLOW_SIGNUP: '1' }, stdio: 'ignore' });
+const staticMode = process.env.FRONTSTAGE_STATIC_BROWSER === '1', webAddress = staticMode ? 'http://127.0.0.1:17844' : address;
+const server = spawn(path.join(root, '.build/debug/FrontstageServer'), ['serve', '--hostname', '127.0.0.1', '--port', String(port)], { cwd: root, env: { ...process.env, FRONTSTAGE_DATA_DIR: directory, FRONTSTAGE_ALLOW_SIGNUP: '1', ...(staticMode ? { FRONTSTAGE_WEB_ORIGIN: webAddress } : {}) }, stdio: 'ignore' });
+let staticServer;
 let browser;
 async function wait(check, message) { for (let i = 0; i < 100; i++) { if (await check().catch(() => false)) return; await new Promise(r => setTimeout(r, 200)); } throw Error(message); }
 try {
   await wait(async () => (await fetch(address + '/health')).ok, 'Server startup');
+  if (staticMode) {
+    const types = { 'index.html': 'text/html', 'style.css': 'text/css', 'app.js': 'application/javascript', 'merge.js': 'application/javascript', 'config.js': 'application/javascript' };
+    staticServer = createServer(async (request, response) => {
+      const file = request.url === '/' ? 'index.html' : request.url.slice(1);
+      if (!types[file]) { response.writeHead(404); response.end(); return; }
+      try { response.setHeader('Content-Type', types[file]); response.end(await readFile(path.resolve(root, '../build/web', file))); }
+      catch { response.writeHead(500); response.end('Static build missing'); }
+    });
+    await new Promise(resolve => staticServer.listen(17844, '127.0.0.1', resolve));
+  }
   browser = await chromium.launch({ executablePath: process.env.FRONTSTAGE_CHROMIUM || (existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : chromium.executablePath()), headless: true, args: ['--no-sandbox'] });
   const context = await browser.newContext({ viewport: { width: 1440, height: 950 } });
   const page = await context.newPage();
   const errors = []; page.on('pageerror', error => errors.push(error.message));
-  await page.goto(address);
+  await page.goto(webAddress);
+  if (staticMode) await page.getByLabel('Shared server', { exact: true }).fill(address);
   const credentials = { username: 'browser_test', password: 'Only-a-local-fixture-12345' };
   await page.getByLabel('Username', { exact: true }).fill(credentials.username);
   await page.getByLabel('Password', { exact: true }).fill(credentials.password);
@@ -67,9 +81,9 @@ try {
     return snapshot.document.name === 'Remote project rename' && snapshot.document.project.frontstageWhiteboard.beats.some(b => b.html.includes('edited offline'));
   }, 'Offline/reconnect merge');
   const artifact = path.resolve(root, '../build'); await mkdir(artifact, { recursive: true });
-  await page.screenshot({ path: path.join(artifact, 'browser-whiteboard.png') });
+  await page.screenshot({ path: path.join(artifact, `browser-${staticMode ? 'static-' : ''}whiteboard.png`) });
   await page.locator('#blocks .beat-text').getByText('The Consequence', { exact: true }).dblclick();
-  await page.screenshot({ path: path.join(artifact, 'browser-popup.png') });
+  await page.screenshot({ path: path.join(artifact, `browser-${staticMode ? 'static-' : ''}popup.png`) });
   const latest = await fetch(endpoint, { headers }).then(r => r.json());
   const secondDocument = structuredClone(latest.document); secondDocument.name = 'Second project';
   secondDocument.project.frontstageWhiteboard.beats.find(b => b.title === 'The Consequence').title = 'Another project beat';
@@ -98,13 +112,14 @@ try {
   const unchanged = await fetch(address + '/api/projects/' + secondProject.id, { headers }).then(r => r.json());
   assert.equal(unchanged.revision, 1);
   assert.deepEqual(errors, []);
-  console.log('PASS: browser account, stacked beats, popup identity, causes, offline/reconnect merge, delayed sync project isolation and locked script');
+  console.log(`PASS (${staticMode ? 'static cross-origin' : 'same-origin'}): browser account, stacked beats, popup identity, causes, offline/reconnect merge, delayed sync project isolation and locked script`);
 } catch (error) {
   const details = String(error.stack || error).replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
   console.error(`::error::${details}`);
   throw error;
 } finally {
   if (browser) await browser.close();
+  if (staticServer) { staticServer.closeAllConnections(); await new Promise(resolve => staticServer.close(resolve)); }
   server.kill('SIGTERM');
   await new Promise(resolve => server.once('exit', resolve));
   await rm(directory, { recursive: true, force: true });
