@@ -12,6 +12,7 @@
 | Undo and recovery | TextKit undo, bounded project undo/redo, app-owned debounced recovery and explicit startup recovery |
 | Scene revisions and dialogue continuation | Named snapshots, text diff, backup-before-restore, MORE/CONT'D in PDF |
 | Story sequencer and linked script | Colored editable/lockable/collapsible lanes, beat duration, snapping, atomic ripple across lane/causal constraints, groups, milestones, cause/effect inspector and connection reasons, omission and explicit script ordering; see CAUSALITY.md for limits |
+| Causality reference whiteboard and popup editor | Maximum priority; screenshot-based whiteboard redesign and native popup editing pending; phases 8–12 in ROADMAP.md |
 | Custom layout settings, page locks, dual dialogue | Not implemented |
 | Advanced story logic and drawing | Proprietary Causality logic/rules, arbitrary nested groups, independent beat-to-script ranges and Excalidraw replacement not implemented |
 | Tamil/Bamini conversion and two-column editor | Not implemented |

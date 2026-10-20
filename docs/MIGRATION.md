@@ -1,6 +1,7 @@
 # Native macOS migration preparation
 
 Status: native screenplay and five additional editing/production milestones implemented in frontstage; full migration is outstanding. See FEATURES.md, FIVE_PHASES.md and VALIDATION.md for current scope and evidence.
+Current priority and remaining implementation order: [ROADMAP.md](ROADMAP.md). The user's Causality screenshots now define the whiteboard target. The whiteboard has maximum priority, and the popup beat/snippet editor is a required early deliverable before further script-page or production expansion. The sequence below is the original broad migration outline; ROADMAP.md governs the next work.
 Source inspected: ratioprofile-design/Backstage, commit 425da0c30eb3d10b47f3398dbc909989fe761d69.
 The original checkout is read-only for this migration. All implementation belongs in a new independent repository under the GitHub owner and name selected by the user. Do not push to, rename, move, or alter the source repository. Do not copy its Git metadata, local environment files, credentials, caches, generated output, or user project data.
 

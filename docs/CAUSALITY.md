@@ -1,6 +1,6 @@
 # Story sequencer
 
-The requested reference is Hollywood Camera Work's **Causality Story Sequencer**, confirmed by the user. This implementation brings its general linked story/script workflow into Frontstage. It is not a verified pixel-identical or feature-complete reproduction. Requests to the reference website returned HTTP 403 from this environment, so no current official screenshots, manual or proprietary engine could be inspected here. The available implementation reference was the original Backstage lane/ripple engine, read without modifying that checkout.
+The requested reference is Hollywood Camera Work's **Causality Story Sequencer**, confirmed by the user. This implementation brings its general linked story/script workflow into Frontstage. It is not a verified pixel-identical or feature-complete reproduction. The user has now supplied two reference screenshots: these define the target whiteboard layout. The whiteboard has maximum priority, and a Causality-style popup editor is required. See [the remaining roadmap](ROADMAP.md) for phases 8–19 and acceptance gates. The current lane-based split view is an intermediate implementation. Reference-site requests returned HTTP 403; the current implementation's algorithm reference was the original Backstage lane/ripple engine, read without modifying that checkout.
 
 ## Available workflow
 
@@ -34,7 +34,8 @@ Text is still modeled as one script scene per beat. Project undo/recovery includ
 | Linked sequencer/script panes | Implemented with native SwiftUI/AppKit; interactive macOS review required |
 | Dependencies, lane ripple, snapping, durations and locks | Implemented Swift constraint engine; portable regression tests |
 | Groups, milestones and cause/effect inspector | Implemented basic same-lane sequences and visual markers |
-| Exact fonts, colors, spacing, window/panel arrangement and gestures | Not verified against official reference screenshots/version |
+| Whiteboard layout, compact stacked beats and popup editor | User reference screenshots received; board redesign and popup implementation pending, prioritized in ROADMAP.md |
+| Exact fonts, colors, spacing, window/panel arrangement and gestures | Visual/interaction comparison pending; supplied second image shows a context menu, not an open text editor |
 | Arbitrary nested beats/groups and independent script ranges per beat | Not implemented; one scene per beat |
 | Semantic story conditions, alternative outcomes, character knowledge/state rules | Not implemented; the engine validates explicit ordering, not screenplay meaning |
 | Automatic bidirectional compaction, advanced conflict suggestions | Not implemented; forward ripple plus explicit lane compaction |

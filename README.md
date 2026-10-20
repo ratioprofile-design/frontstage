@@ -4,6 +4,8 @@ A native macOS rewrite of Backstage, built with Swift, SwiftUI and AppKit. The o
 
 **Status: native editing, story sequencing and production milestones, not a complete Backstage conversion.** Native editing, recovery, sequencing, discovery and PDF workflows have portable and macOS tests and CI build checks. Interactive app testing and full feature parity are still outstanding; see the validation notes below for recorded runs.
 
+**Next priority: the Causality-style whiteboard and popup editor.** The user's supplied screenshots define the target layout; the current lane sequencer is an intermediate step. See [the remaining phases and completion gates](docs/ROADMAP.md).
+
 ## Current scope
 
 - Native project/scene navigation; scene title and summary editing.
