@@ -1,0 +1,29 @@
+name: Browser deployment
+on:
+  push:
+    branches: [main]
+    paths: ['Server/Public/**', 'scripts/build-web.mjs', 'scripts/check-web-deployment.mjs', 'vercel.json', '.github/workflows/web.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build dependency-free browser client
+        run: |
+          node scripts/build-web.mjs
+          node --check build/web/app.js
+          node --check build/web/merge.js
+      - name: Verify connected Vercel production deployment
+        run: node scripts/check-web-deployment.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Frontstage-web-deployment-validation
+          path: build/web-deployment.txt
