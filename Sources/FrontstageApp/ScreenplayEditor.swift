@@ -8,6 +8,7 @@ final class ScreenplayEditorController: ObservableObject {
     @Published private(set) var activeElement = ScreenplayElement.action
     weak var textView: NSTextView?
     var contentWidth: CGFloat = 432
+    var typography = ScriptLayoutSettings()
 
     func selectionChanged() {
         guard let textView, !textView.hasMarkedText() else { return }
@@ -29,12 +30,12 @@ final class ScreenplayEditorController: ObservableObject {
         if range.length > 0 {
             let replacement = NSMutableAttributedString(attributedString: textView.attributedString().attributedSubstring(from: range))
             ScreenplayTypography.apply(element, to: replacement,
-                range: NSRange(location: 0, length: replacement.length), width: contentWidth)
+                range: NSRange(location: 0, length: replacement.length), width: contentWidth, settings: typography)
             // NSTextView's insertion API participates in native undo, unlike direct storage mutations.
             textView.insertText(replacement, replacementRange: range)
             textView.setSelectedRange(selection)
         }
-        textView.typingAttributes = ScreenplayTypography.attributes(element, width: contentWidth)
+        textView.typingAttributes = ScreenplayTypography.attributes(element, width: contentWidth, settings: typography)
         activeElement = element
     }
 
@@ -55,14 +56,14 @@ final class ScreenplayEditorController: ObservableObject {
             return true
         }
         // A literal insertion bypasses command dispatch and leaves IME composition to TextKit.
-        let attributes = ScreenplayTypography.attributes(next, width: contentWidth)
+        let attributes = ScreenplayTypography.attributes(next, width: contentWidth, settings: typography)
         textView.insertText(NSAttributedString(string: "\n", attributes: attributes), replacementRange: selected)
         let caret = textView.selectedRange()
         let nextRange = (textView.string as NSString).paragraphRange(for: caret)
         if nextRange.length > 0 {
             let replacement = NSMutableAttributedString(attributedString: textView.attributedString().attributedSubstring(from: nextRange))
             ScreenplayTypography.apply(next, to: replacement,
-                range: NSRange(location: 0, length: replacement.length), width: contentWidth)
+                range: NSRange(location: 0, length: replacement.length), width: contentWidth, settings: typography)
             textView.insertText(replacement, replacementRange: nextRange)
             textView.setSelectedRange(caret)
         }
@@ -76,6 +77,7 @@ struct ScreenplayEditor: NSViewRepresentable {
     @Binding var html: String
     @ObservedObject var controller: ScreenplayEditorController
     var width: CGFloat = 432
+    var typography = ScriptLayoutSettings()
     var onError: (String) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(html: $html, controller: controller, onError: onError) }
@@ -95,6 +97,7 @@ struct ScreenplayEditor: NSViewRepresentable {
         text.delegate = context.coordinator
         controller.textView = text
         controller.contentWidth = width
+        controller.typography = typography
         context.coordinator.load(html, into: text)
         return scroll
     }
@@ -104,8 +107,9 @@ struct ScreenplayEditor: NSViewRepresentable {
         context.coordinator.onError = onError
         guard let text = scroll.documentView as? NSTextView else { return }
         controller.textView = text
-        if controller.contentWidth != width {
+        if controller.contentWidth != width || controller.typography != typography {
             controller.contentWidth = width
+            controller.typography = typography
             text.textContainer?.containerSize.width = width
             context.coordinator.load(html, into: text)
         } else if context.coordinator.lastHTML != html { context.coordinator.load(html, into: text) }
@@ -136,11 +140,11 @@ struct ScreenplayEditor: NSViewRepresentable {
                 }
             }
             do {
-                let attributed = try ScreenplayTextCodec.decode(source, width: controller.contentWidth)
+                let attributed = try ScreenplayTextCodec.decode(source, width: controller.contentWidth, settings: controller.typography)
                 text.textStorage?.setAttributedString(attributed)
                 text.setSelectedRange(NSRange(location: 0, length: 0))
                 text.typingAttributes = ScreenplayTypography.attributes(
-                    ScreenplayTextCodec.element(in: attributed, at: 0), width: controller.contentWidth)
+                    ScreenplayTextCodec.element(in: attributed, at: 0), width: controller.contentWidth, settings: controller.typography)
                 lastHTML = source
             } catch {
                 // Show the original source as a recoverable fallback; never silently blank an import.
@@ -161,7 +165,7 @@ struct ScreenplayEditor: NSViewRepresentable {
                     let range = (storage.string as NSString).paragraphRange(for: NSRange(location: location, length: 0))
                     if storage.attribute(.screenplayElement, at: location, effectiveRange: nil) == nil {
                         ScreenplayTypography.apply(pendingElement ?? controller.activeElement, to: storage,
-                            range: range, width: controller.contentWidth)
+                            range: range, width: controller.contentWidth, settings: controller.typography)
                     }
                     location = NSMaxRange(range)
                 }

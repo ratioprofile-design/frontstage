@@ -89,7 +89,7 @@ struct BeatPopupView: View {
                 Picker("Format", selection: Binding(get: { controller.activeElement }, set: { controller.format($0) })) {
                     ForEach(ScreenplayElement.editable, id: \.self) { Text($0.label).tag($0) }
                 }.frame(width: 200)
-                ScreenplayEditor(html: text(\.html, label: "Snippet Text"), controller: controller, width: 432,
+                ScreenplayEditor(html: text(\.html, label: "Snippet Text"), controller: controller, width: 432, typography: workspace.project.scriptLayout,
                     onError: { workspace.errorMessage = $0 }).id(beatID)
                 HStack {
                     Text("Changes save to your project as you type. Esc closes this editor.")

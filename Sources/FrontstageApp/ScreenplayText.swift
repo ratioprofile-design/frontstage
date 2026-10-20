@@ -9,11 +9,11 @@ extension NSAttributedString.Key {
 @MainActor
 enum ScreenplayTypography {
     static func attributes(_ element: ScreenplayElement, width: CGFloat,
-                           printing: Bool = false) -> [NSAttributedString.Key: Any] {
+                           printing: Bool = false, settings: ScriptLayoutSettings = .init()) -> [NSAttributedString.Key: Any] {
         let paragraph = NSMutableParagraphStyle()
-        paragraph.minimumLineHeight = 14
-        paragraph.maximumLineHeight = 14
-        paragraph.paragraphSpacing = 10
+        paragraph.minimumLineHeight = settings.lineHeight
+        paragraph.maximumLineHeight = settings.lineHeight
+        paragraph.paragraphSpacing = settings.paragraphSpacing
         switch element {
         case .character:
             paragraph.headIndent = width * 0.37
@@ -36,7 +36,7 @@ enum ScreenplayTypography {
         default: break
         }
         paragraph.firstLineHeadIndent = paragraph.headIndent
-        let base = NSFont(name: "Courier", size: 12) ?? .monospacedSystemFont(ofSize: 12, weight: .regular)
+        let base = NSFont(name: settings.fontName, size: settings.fontSize) ?? .monospacedSystemFont(ofSize: settings.fontSize, weight: .regular)
         let font: NSFont
         if [.sceneHeading, .character, .transition, .shot].contains(element) {
             font = NSFontManager.shared.convert(base, toHaveTrait: .boldFontMask)
@@ -49,9 +49,9 @@ enum ScreenplayTypography {
     }
 
     static func apply(_ element: ScreenplayElement, to text: NSMutableAttributedString,
-                      range: NSRange, width: CGFloat, printing: Bool = false) {
+                      range: NSRange, width: CGFloat, printing: Bool = false, settings: ScriptLayoutSettings = .init()) {
         guard range.length > 0 else { return }
-        let attributes = attributes(element, width: width, printing: printing)
+        let attributes = attributes(element, width: width, printing: printing, settings: settings)
         // Retain inline emphasis while normalizing the screenplay font and paragraph geometry.
         var fonts: [(NSRange, NSFontTraitMask)] = []
         text.enumerateAttribute(.font, in: range) { value, run, _ in
@@ -73,7 +73,7 @@ enum ScreenplayTypography {
 @MainActor
 enum ScreenplayTextCodec {
     static func decode(_ html: String, width: CGFloat = 432,
-                       printing: Bool = false) throws -> NSMutableAttributedString {
+                       printing: Bool = false, settings: ScriptLayoutSettings = .init()) throws -> NSMutableAttributedString {
         let token = "FS\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))_"
         let marked = markLeafBlocks(html, token: token)
         let text = try NSMutableAttributedString(data: Data(marked.html.utf8), options: [
@@ -105,7 +105,7 @@ enum ScreenplayTextCodec {
         while location < text.length {
             let range = (text.string as NSString).paragraphRange(for: NSRange(location: location, length: 0))
             let element = element(in: text, at: location)
-            ScreenplayTypography.apply(element, to: text, range: range, width: width, printing: printing)
+            ScreenplayTypography.apply(element, to: text, range: range, width: width, printing: printing, settings: settings)
             location = NSMaxRange(range)
         }
         return text

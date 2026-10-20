@@ -142,7 +142,7 @@ struct WhiteboardWorkspace: View {
                 }.padding(.horizontal, 8)
                 ScreenplayEditor(html: Binding(get: { workspace.whiteboard.beats.first { $0.id == beat.id }?.html ?? "" }, set: { html in
                     workspace.edit("Edit Snippet", key: "snippet-\(beat.id)") { try $0.updateBoardBeat(beat.id) { $0.html = html } }
-                }), controller: workspace.editor, width: 260, onError: { workspace.errorMessage = $0 }).id(beat.id)
+                }), controller: workspace.editor, width: 260, typography: workspace.project.scriptLayout, onError: { workspace.errorMessage = $0 }).id(beat.id)
                 Divider()
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 1) {

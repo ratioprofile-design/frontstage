@@ -50,8 +50,8 @@ enum ScreenplayPDF {
         for (index, scene) in active.enumerated() {
             let number = scene.sceneNumber.isEmpty ? String(index + 1) : scene.sceneNumber
             text.append(NSAttributedString(string: "\(number)  \(scene.heading.text)\n",
-                attributes: ScreenplayTypography.attributes(.sceneHeading, width: paper.contentWidth, printing: true)))
-            let body = try ScreenplayTextCodec.decode(scene.html, width: paper.contentWidth, printing: true)
+                attributes: ScreenplayTypography.attributes(.sceneHeading, width: paper.contentWidth, printing: true, settings: project.scriptLayout)))
+            let body = try ScreenplayTextCodec.decode(scene.html, width: paper.contentWidth, printing: true, settings: project.scriptLayout)
             text.append(body)
             if !text.string.hasSuffix("\n") {
                 text.append(NSAttributedString(string: "\n", attributes:
