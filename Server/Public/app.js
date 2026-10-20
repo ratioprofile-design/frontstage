@@ -24,6 +24,12 @@ const history = [];
 const status = text => { $('status').textContent = text; };
 function element(tag, text, className) { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (className) e.className = className; return e; }
 function list(value) { return [...new Set(value.split(',').map(s => s.trim()).filter(Boolean))]; }
+const legacyCredentialKeys = new Set(['geminiapikey', 'openrouterkey', 'openrouterapikey', 'tokenrouterapikey', 'apikey', 'r2accesskeyid', 'r2secretaccesskey', 'vite_r2_access_key_id', 'vite_r2_secret_access_key']);
+function stripLegacyCredentials(value) {
+  if (Array.isArray(value)) return value.map(stripLegacyCredentials);
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).filter(([key]) => !legacyCredentialKeys.has(key.toLowerCase())).map(([key, child]) => [key, stripLegacyCredentials(child)]));
+  return value;
+}
 function cleanHTML(source) {
   const parsed = new DOMParser().parseFromString(source, 'text/html');
   const allowed = new Set(['DIV', 'P', 'BR', 'B', 'STRONG', 'I', 'EM', 'U', 'SPAN']);
@@ -86,13 +92,14 @@ async function openLocalProject(id) {
   const epoch = ++documentEpoch; clearTimeout(timer);
   const copy = await localCopy(id); if (epoch !== documentEpoch || !copy?.local) return;
   current = { id, name: copy.name, access: 'owner', revision: 0, local: true }; localMode = true;
-  doc = initializeBoard(clone(copy.doc)); base = clone(copy.base); dirty = false;
+  doc = initializeBoard(clone(copy.doc)); base = stripLegacyCredentials(clone(copy.base)); dirty = false;
   history.length = 0; selected = null; source = null; editorID = null; pendingConflict = null;
   $('editor').hidden = true; $('conflict').hidden = true; $('account').hidden = true; $('projects').hidden = true; $('workspace').hidden = false;
   $('logout').textContent = 'Sign In'; render(); status('Saved on this device');
 }
 function board() { return doc.project.frontstageWhiteboard; }
 function initializeBoard(document) {
+  document = stripLegacyCredentials(document);
   if (document.format !== 'frontstage') document = { format: 'frontstage', version: 1, name: 'Imported Story', project: document };
   if (document.version !== 1 || !Array.isArray(document.project.beats)) throw Error('Unsupported project format');
   if (document.project.beats.some(beat => !Number.isSafeInteger(beat.id) || beat.id < 0)) throw Error('This project uses numeric identifiers outside browser precision. Open it with the native Swift client.');

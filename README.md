@@ -44,7 +44,7 @@ Command+Z is text undo; Command+Option+Z is project undo. Recovery is a separate
 
 [Server setup](Server/README.md) covers local browser preview, accounts, persistence, Docker and synchronization. Run the service locally, then visit `http://127.0.0.1:8080`. No public deployment has been provisioned.
 
-The selected browser address is [frontstage-five.vercel.app](https://frontstage-five.vercel.app/). Its Vercel project is connected to this repository; the static deployment build is configured here. A persistent Swift backend and its HTTPS origin are still required for public accounts/sync. See [Vercel setup](Server/README.md#vercel-browser-deployment); public deployment status is not yet verified.
+The browser is available at [frontstage-five.vercel.app](https://frontstage-five.vercel.app/), with static delivery verified by the Browser deployment workflow. Its Vercel project is connected to this repository. A persistent Swift backend and its HTTPS origin are still required for public accounts/sync. See [Vercel setup](Server/README.md#vercel-browser-deployment).
 
 Choose **Use on This Device** on the browser sign-in screen to work without an account or backend. Add a block/beat, double-click it for the popup, and use **Download Project** for a portable `.frontstage` copy. Local projects persist in this browser and reopen from the same button; clearing browser/site storage removes those local copies. A separate backend is required only for shared accounts and synchronization.
 
