@@ -14,6 +14,7 @@ public struct StoryLink: Identifiable, Equatable, Sendable {
     public let from: Decimal
     public let to: Decimal
     public let label: String
+    public var kind: StoryLinkKind = .cause
     public var id: String { "\(from)->\(to)" }
 }
 
@@ -28,12 +29,12 @@ public struct StoryGraph: Equatable, Sendable {
         while let next = queue.popLast() {
             if next == to { return true }
             guard visited.insert(next).inserted else { continue }
-            queue.append(contentsOf: links.filter { $0.from == next }.map(\.to))
+            queue.append(contentsOf: links.filter { $0.from == next && $0.kind == .cause }.map(\.to))
         }
         return false
     }
 
-    public var hasCycle: Bool { links.contains { hasPath(from: $0.to, to: $0.from) } }
+    public var hasCycle: Bool { links.contains { $0.kind == .cause && hasPath(from: $0.to, to: $0.from) } }
 }
 
 extension JSONValue {
@@ -56,7 +57,8 @@ extension Project {
         let links = (state["connections"]?.array ?? []).compactMap { value -> StoryLink? in
             guard let item = value.object, let from = item["from"]?.decimal, let to = item["to"]?.decimal,
                   ids.contains(from), ids.contains(to) else { dangling += 1; return nil }
-            let link = StoryLink(from: from, to: to, label: item["label"]?.string ?? "")
+            let link = StoryLink(from: from, to: to, label: item["label"]?.string ?? "",
+                kind: StoryLinkKind(rawValue: item["frontstageKind"]?.string ?? "") ?? .cause)
             return seen.insert(link.id).inserted ? link : nil
         }
         return StoryGraph(nodes: nodes, links: links, danglingConnections: dangling)
@@ -76,18 +78,19 @@ extension Project {
         }
     }
 
-    public mutating func connectScenes(from: Decimal, to: Decimal, label: String = "") throws {
+    public mutating func connectScenes(from: Decimal, to: Decimal, label: String = "", kind: StoryLinkKind = .cause) throws {
         let graph = storyGraph
         guard let source = graph.nodes.first(where: { $0.id == from }),
               let target = graph.nodes.first(where: { $0.id == to }) else { throw ProjectError.sceneNotFound }
         guard source.boardID == target.boardID else { throw ProjectError.invalidProject("connect scenes on the same board") }
-        guard from != to, !graph.hasPath(from: to, to: from) else { throw ProjectError.invalidProject("a connection cannot create a cycle") }
+        guard from != to, kind == .reference || !graph.hasPath(from: to, to: from) else { throw ProjectError.invalidProject("a connection cannot create a cycle") }
         guard !graph.links.contains(where: { $0.from == from && $0.to == to }) else {
             throw ProjectError.invalidProject("these scenes are already connected")
         }
         var links = state["connections"]?.array ?? []
         links.append(.object(["from": .number(from), "to": .number(to), "label": .string(label),
-                              "style": .string("curve"), "boardId": .number(Decimal(source.boardID))]))
+                              "style": .string("curve"), "boardId": .number(Decimal(source.boardID)),
+                              "frontstageKind": .string(kind.rawValue)]))
         state["connections"] = .array(links)
     }
 

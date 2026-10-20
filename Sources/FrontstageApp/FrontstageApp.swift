@@ -36,7 +36,7 @@ struct FrontstageApp: App {
                 ForEach(Array(ScreenplayElement.editable.enumerated()), id: \.element.rawValue) { index, element in
                     Button(element.label) { workspace.editor.format(element) }
                         .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: [.option])
-                        .disabled(workspace.selectedScene == nil || workspace.mode != .edit)
+                        .disabled(workspace.selectedScene == nil || (workspace.mode != .edit && workspace.mode != .board))
                 }
             }
             CommandMenu("Project") {
@@ -370,7 +370,7 @@ struct WorkspaceView: View {
             } else if workspace.mode == .breakdown {
                 BreakdownView(workspace: workspace)
             } else if workspace.mode == .board {
-                StoryBoardView(workspace: workspace)
+                StoryWorkspaceView(workspace: workspace, boardFirst: true)
             } else if workspace.mode == .revisions {
                 RevisionsView(workspace: workspace)
             } else if workspace.mode == .pages {
@@ -384,35 +384,8 @@ struct WorkspaceView: View {
                     ContentUnavailableView("No screenplay pages", systemImage: "doc.text",
                         description: Text("Add an active scene to preview the screenplay."))
                 }
-            } else if let scene = workspace.selectedScene {
-                VStack(alignment: .leading, spacing: 16) {
-                    TextField("Scene title", text: Binding(
-                        get: { workspace.selectedScene?.title ?? "" },
-                        set: { workspace.updateScene(id: scene.id, title: $0) }))
-                        .font(.title.weight(.semibold)).textFieldStyle(.plain)
-                    TextField("Scene summary", text: Binding(
-                        get: { workspace.selectedScene?.summary ?? "" },
-                        set: { workspace.updateScene(id: scene.id, summary: $0) }))
-                        .textFieldStyle(.roundedBorder)
-                    SceneHeadingFields(scene: scene, workspace: workspace)
-                    Divider()
-                    ScreenplayFormatBar(controller: workspace.editor)
-                    ScreenplayEditor(html: Binding(
-                        get: { workspace.selectedScene?.html ?? "" },
-                        set: { workspace.updateScene(id: scene.id, html: $0) }),
-                        controller: workspace.editor, width: workspace.paper.contentWidth,
-                        onError: { workspace.errorMessage = $0 })
-                        .id(scene.id)
-                }.padding(28)
             } else {
-                ContentUnavailableView {
-                    Label("Your next story starts here", systemImage: "doc.richtext")
-                } description: {
-                    Text("Create a scene, or import an existing Backstage project as a copy.")
-                } actions: {
-                    Button("Add Scene", action: workspace.addScene)
-                    Button("Open or Import…", action: workspace.open)
-                }
+                StoryWorkspaceView(workspace: workspace, boardFirst: false)
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -452,6 +425,46 @@ struct WorkspaceView: View {
             set: { if !$0 { workspace.errorMessage = nil } })) {
                 Button("OK") { workspace.errorMessage = nil }
             } message: { Text(workspace.errorMessage ?? "") }
+    }
+}
+
+struct SceneWritingView: View {
+    @ObservedObject var workspace: Workspace
+
+    var body: some View {
+        if let scene = workspace.selectedScene {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Image(systemName: "doc.text").foregroundStyle(.secondary)
+                    TextField("Scene title", text: Binding(
+                        get: { workspace.selectedScene?.title ?? "" },
+                        set: { workspace.updateScene(id: scene.id, title: $0) }))
+                        .font(.title3.weight(.semibold)).textFieldStyle(.plain)
+                    if scene.isDisabled { Text("OMITTED").font(.caption).foregroundStyle(.orange) }
+                }
+                TextField("Beat summary — what changes because of this scene?", text: Binding(
+                    get: { workspace.selectedScene?.summary ?? "" },
+                    set: { workspace.updateScene(id: scene.id, summary: $0) }))
+                    .textFieldStyle(.roundedBorder)
+                SceneHeadingFields(scene: scene, workspace: workspace)
+                ScreenplayFormatBar(controller: workspace.editor)
+                ScreenplayEditor(html: Binding(
+                    get: { workspace.selectedScene?.html ?? "" },
+                    set: { workspace.updateScene(id: scene.id, html: $0) }),
+                    controller: workspace.editor, width: workspace.paper.contentWidth,
+                    onError: { workspace.errorMessage = $0 })
+                    .id(scene.id)
+            }.padding(16)
+        } else {
+            ContentUnavailableView {
+                Label("Your next story starts here", systemImage: "doc.richtext")
+            } description: {
+                Text("Create a beat in the sequencer, or import a Backstage project as a copy.")
+            } actions: {
+                Button("Add Scene", action: workspace.addScene)
+                Button("Open or Import…", action: workspace.open)
+            }
+        }
     }
 }
 

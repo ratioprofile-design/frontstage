@@ -11,9 +11,9 @@
 | Credentials | Known legacy fields stripped; Keychain/provider integrations not implemented |
 | Undo and recovery | TextKit undo, bounded project undo/redo, app-owned debounced recovery and explicit startup recovery |
 | Scene revisions and dialogue continuation | Named snapshots, text diff, backup-before-restore, MORE/CONT'D in PDF |
-| Spatial causality board | Move/arrange cards, zoom, directed links, cycle validation/diagnosis, omission and script ordering |
+| Story sequencer and linked script | Colored editable/lockable/collapsible lanes, beat duration, snapping, atomic ripple across lane/causal constraints, groups, milestones, cause/effect inspector and connection reasons, omission and explicit script ordering; see CAUSALITY.md for limits |
 | Custom layout settings, page locks, dual dialogue | Not implemented |
-| Timeline lanes, ripple flow, group editing, Excalidraw replacement | Not implemented |
+| Advanced story logic and drawing | Proprietary Causality logic/rules, arbitrary nested groups, independent beat-to-script ranges and Excalidraw replacement not implemented |
 | Tamil/Bamini conversion and two-column editor | Not implemented |
 | Characters, casting and scene breakdowns | Profiles, cue discovery, assignments, casting contact/status/confirmation, manual requirements |
 | Crew and continuity workspaces, advanced auditions/media | Not implemented; crew contact fields are available on production days |

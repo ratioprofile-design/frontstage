@@ -2,7 +2,7 @@
 
 A native macOS rewrite of Backstage, built with Swift, SwiftUI and AppKit. The original `ratioprofile-design/Backstage` repository is not modified. There is no React, Tauri, JavaScript runtime or web view in this client.
 
-**Status: native editing and production milestones, not a complete Backstage conversion.** The portable suite has 40 passing tests. Native editing, recovery, discovery and PDF workflows have dedicated macOS tests and CI build checks. Interactive app testing and full feature parity are still outstanding; see the validation notes below for recorded runs.
+**Status: native editing, story sequencing and production milestones, not a complete Backstage conversion.** Native editing, recovery, sequencing, discovery and PDF workflows have portable and macOS tests and CI build checks. Interactive app testing and full feature parity are still outstanding; see the validation notes below for recorded runs.
 
 ## Current scope
 
@@ -18,7 +18,7 @@ A native macOS rewrite of Backstage, built with Swift, SwiftUI and AppKit. The o
 - Unsaved-change prompts when replacing a project or quitting.
 - Project undo/redo, plus a separate debounced recovery copy and startup recovery prompt.
 - Named scene revisions, text comparison, restore with automatic backup, and printed MORE/CONT'D dialogue continuations.
-- Spatial story board with drag, zoom, connections, cycle checks, omission and scene reordering.
+- Connected story/script workspace: colored lanes, estimated duration, dependency-aware ripple, snapping, groups, milestones, locks, cause/effect inspection and explicit script reordering. See [sequencer behavior and parity coverage](docs/CAUSALITY.md).
 - Character profiles and script-cue discovery; per-role casting options, confirmation and contact details; manual scene breakdowns.
 - Shooting days, scene assignments and estimates, cast call times, call-sheet PDF/print output, and schedule/breakdown CSV exports.
 
@@ -34,7 +34,7 @@ The native screenplay layout uses 12-point Courier with a 1.5-inch binding margi
 
 ## Other workspaces
 
-Use the View menu in the toolbar to choose **Revisions**, **Board**, **People**, **Breakdown** or **Production**. Revisions and breakdowns operate on the scene selected in the sidebar. Board cards open a scene with a double-click. People can discover character cues from the screenplay, then you can assign roles in Breakdown. Production assigns active scenes to shooting days; a scene moves from its previous day when assigned to another. Fill in actual location/crew/safety details before exporting or distributing a call sheet.
+Use the View menu in the toolbar to choose **Revisions**, **Board**, **People**, **Breakdown** or **Production**. Write and Board show the sequencer above the selected scene's script; resize the divider or hide either pane. Selecting a beat selects its script immediately. The right dot starts a connection; select the effect beat to complete it. Shift-click selects multiple beats. The inspector shows duration, storyline/sequence names, causes, effects and issues. Revisions and breakdowns operate on the scene selected in the sidebar. People can discover character cues from the screenplay, then you can assign roles in Breakdown. Production assigns active scenes to shooting days; a scene moves from its previous day when assigned to another. Fill in actual location/crew/safety details before exporting or distributing a call sheet.
 
 The Project menu provides undo (Command+Option+Z) and redo (Command+Option+Shift+Z), while Command+Z remains text undo. See the [five-phase run](docs/FIVE_PHASES.md) for each milestone and its limits.
 
