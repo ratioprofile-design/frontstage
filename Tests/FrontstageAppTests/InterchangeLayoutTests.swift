@@ -32,5 +32,23 @@ final class InterchangeLayoutTests: XCTestCase {
             XCTAssertTrue(pdf.string?.contains("Left source") == true); XCTAssertTrue(pdf.string?.contains("Right translation") == true)
         }
     }
+    func testNativeOfficeImportsRetainOwnDOCXTypesAndXLSXCells() async throws {
+        try await MainActor.run {
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            var project = Project(); let id = project.addScene()
+            try project.updateScene(id: id, html: "<div class=\"sc-character\">MARA</div><div class=\"sc-dialogue\">A typed line.</div>")
+            let docx = directory.appendingPathComponent("script.docx")
+            try ScreenplayDOCX.render(project).write(to: docx)
+            let imported = try OfficeImport.docx(docx)
+            let last = (imported.string as NSString).range(of: "A typed line.").location
+            XCTAssertNotEqual(last, NSNotFound)
+            XCTAssertEqual(ScreenplayTextCodec.element(in: imported, at: last), .dialogue)
+            let xlsx = directory.appendingPathComponent("table.xlsx"), rows = [["Name", "Text"], ["தமிழ்", "=literal & <text>"]]
+            try OfficeArchive.spreadsheet(rows: rows).write(to: xlsx)
+            XCTAssertEqual(try OfficeImport.spreadsheet(xlsx), rows)
+        }
+    }
 }
 #endif

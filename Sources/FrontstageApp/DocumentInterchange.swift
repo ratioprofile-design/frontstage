@@ -58,7 +58,8 @@ extension Workspace {
                 text = NSAttributedString(string: value)
             } else if url.pathExtension.lowercased() == "txt" || url.pathExtension.lowercased() == "fountain" {
                 text = NSAttributedString(string: try String(contentsOf: url, encoding: .utf8))
-            } else { text = try NSAttributedString(url: url, options: [:], documentAttributes: nil) }
+            } else if url.pathExtension.lowercased() == "docx" { text = try OfficeImport.docx(url) }
+            else { text = try NSAttributedString(url: url, options: [:], documentAttributes: nil) }
             let html = ScreenplayTextCodec.encode(text)
             var id: String?
             edit("Import Script Document") { project in

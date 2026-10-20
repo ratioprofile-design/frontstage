@@ -21,6 +21,7 @@ struct FrontstageApp: App {
                 Button("New Project", action: workspace.newProject).keyboardShortcut("n")
                 Button("Open or Import…", action: workspace.open).keyboardShortcut("o")
                 Button("Import Script Document…", action: workspace.importScriptDocument)
+                Button("Import Spreadsheet to Research…", action: workspace.importSpreadsheet)
             }
             CommandGroup(replacing: .saveItem) {
                 Button("Save", action: workspace.save).keyboardShortcut("s")
