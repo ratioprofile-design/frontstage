@@ -267,6 +267,7 @@ extension Project {
         let previouslyLinked = Set((fields["beats"]?.array ?? []).compactMap { $0.object?["sceneID"]?.decimal })
         for scene in scenes where previouslyLinked.contains(scene.id) || snippets[scene.id] != nil {
             let active = (snippets[scene.id] ?? []).filter { !$0.omitted && !board.isUnused($0) }
+            guard !scene.isTextLocked || scene.html == active.map(\.html).joined() else { throw ProjectError.invalidProject("unlock \(scene.title)'s script before changing its snippet text or inclusion") }
             try editBeat(scene.id) { fields in
                 fields["content"] = .string(active.map(\.html).joined())
                 fields["isDisabled"] = .bool(active.isEmpty)

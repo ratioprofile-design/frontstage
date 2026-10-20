@@ -43,14 +43,17 @@ struct ScreenplayPageLayout {
 
 @MainActor
 enum ScreenplayPDF {
+    private static let explicitPageStart = NSAttributedString.Key("design.ratioprofile.frontstage.pageStart")
     static func render(project: Project, paper: ScreenplayPaper) throws -> RenderedScreenplay {
         let active = project.scenes.filter { !$0.isDisabled }
         guard !active.isEmpty else { throw ScreenplayPDFError.noScenes }
         let text = NSMutableAttributedString(string: "")
         for (index, scene) in active.enumerated() {
             let number = scene.sceneNumber.isEmpty ? String(index + 1) : scene.sceneNumber
+            let headingStart = text.length
             text.append(NSAttributedString(string: "\(number)  \(scene.heading.text)\n",
                 attributes: ScreenplayTypography.attributes(.sceneHeading, width: paper.contentWidth, printing: true, settings: project.scriptLayout)))
+            if scene.startsNewPage { text.addAttribute(explicitPageStart, value: true, range: NSRange(location: headingStart, length: 1)) }
             let body = try ScreenplayTextCodec.decode(scene.html, width: paper.contentWidth, printing: true, settings: project.scriptLayout)
             text.append(body)
             if !text.string.hasSuffix("\n") {
@@ -109,6 +112,10 @@ enum ScreenplayPDF {
     static func layoutPages(_ text: NSAttributedString, paper: ScreenplayPaper) throws -> [ScreenplayPageLayout] {
         let framesetter = CTFramesetterCreateWithAttributedString(text as CFAttributedString)
         let source = text.string as NSString
+        var forcedStarts: [Int] = []
+        text.enumerateAttribute(explicitPageStart, in: NSRange(location: 0, length: text.length)) { value, range, _ in
+            if value as? Bool == true { forcedStarts.append(range.location) }
+        }
         var pages: [ScreenplayPageLayout] = []
         var offset = 0
         while offset < text.length {
@@ -125,6 +132,7 @@ enum ScreenplayPDF {
                 let visible = CTFrameGetVisibleStringRange(frame)
                 guard visible.length > 0 else { throw ScreenplayPDFError.cannotLayOut }
                 end = min(text.length, offset + visible.length)
+                if let forced = forcedStarts.first(where: { $0 > offset && $0 < end }) { end = forced }
                 if end < text.length {
                 // Avoid stranding a scene heading, character cue or parenthetical at the bottom.
                 // A chain (heading -> character -> parenthetical) moves together when necessary.

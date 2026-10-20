@@ -1,0 +1,28 @@
+name: Server container
+on:
+  push:
+    paths: ['Server/Dockerfile', 'Server/Package*', 'Server/Sources/**', 'Sources/FrontstageCore/**', 'Package.swift', '.github/workflows/container.yml']
+  pull_request:
+    paths: ['Server/Dockerfile', 'Server/Package*', 'Server/Sources/**', 'Sources/FrontstageCore/**', 'Package.swift', '.github/workflows/container.yml']
+permissions:
+  contents: read
+jobs:
+  container:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build server container
+        run: docker build -f Server/Dockerfile -t frontstage-server:validation .
+      - name: Verify non-root service health
+        run: |
+          docker run -d --name frontstage-validation -p 127.0.0.1:18080:8080 frontstage-server:validation
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18080/health; then exit 0; fi
+            sleep 1
+          done
+          docker logs frontstage-validation
+          exit 1
+      - name: Stop validation service
+        if: always()
+        run: docker rm -f frontstage-validation || true

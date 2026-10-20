@@ -24,6 +24,8 @@ public struct Scene: Identifiable, Equatable, Sendable {
     public var heading: SceneHeading
     public var sceneNumber: String
     public var isDisabled: Bool
+    public var startsNewPage: Bool = false
+    public var isTextLocked: Bool = false
 }
 
 /// An explicit, versioned envelope isolates native saves from the original application.
@@ -86,7 +88,9 @@ public struct Project: Equatable, Sendable {
                          heading: SceneHeading(prefix: slug["prefix"]?.string ?? "INT.",
                              location: slug["location"]?.string ?? "", time: slug["time"]?.string ?? "DAY"),
                          sceneNumber: fields["sceneNumber"]?.string ?? "",
-                         isDisabled: fields["isDisabled"] == .bool(true))
+                         isDisabled: fields["isDisabled"] == .bool(true),
+                         startsNewPage: fields["frontstagePageStart"] == .bool(true),
+                         isTextLocked: fields["frontstageTextLocked"] == .bool(true))
         }
     }
 
@@ -115,6 +119,9 @@ public struct Project: Equatable, Sendable {
         var beats = state["beats"]?.array ?? []
         guard let index = beats.firstIndex(where: { $0.object?["id"] == .number(id) }),
               var fields = beats[index].object else { throw ProjectError.sceneNotFound }
+        if fields["frontstageTextLocked"] == .bool(true) && (html != nil || heading != nil || sceneNumber != nil) {
+            throw ProjectError.invalidProject("unlock this scene's script before changing its text or heading")
+        }
         var native = state["frontstageWhiteboard"]?.object
         if native != nil && (html != nil || title != nil || summary != nil) {
             let board = try whiteboard(), linked = board.beats.filter { $0.sceneID == id }

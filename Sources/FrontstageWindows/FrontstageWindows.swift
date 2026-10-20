@@ -73,7 +73,7 @@ private final class WindowsWorkspace {
         if let popup { DestroyWindow(popup) }
         popupBeat = id; originalPopupText = htmlText(beat.html); loadingPopup = true
         popup = wide("FrontstageWindow") { className in wide("Edit Beat") { title in
-            CreateWindowExW(DWORD(WS_EX_TOOLWINDOW), className, title, DWORD(WS_OVERLAPPEDWINDOW | WS_VISIBLE), 180, 160, 610, 530, window, nil, GetModuleHandleW(nil), UnsafeMutableRawPointer(bitPattern: 1))
+            CreateWindowExW(DWORD(WS_EX_TOOLWINDOW), className, title, DWORD(WS_OVERLAPPEDWINDOW) | DWORD(WS_VISIBLE), 180, 160, 610, 530, window, nil, GetModuleHandleW(nil), UnsafeMutableRawPointer(bitPattern: 1))
         } }
         loadingPopup = false
     }
@@ -189,7 +189,7 @@ private func control(_ parent: HWND?, className: String, title: String, id: Int,
 }
 
 private func procedure(_ hwnd: HWND?, _ message: UINT, _ wParam: WPARAM, _ lParam: LPARAM) -> LRESULT {
-    if message == UINT(WM_NCCREATE), let creation = UnsafePointer<CREATESTRUCTW>(bitPattern: lParam) {
+    if message == UINT(WM_NCCREATE), let creation = UnsafePointer<CREATESTRUCTW>(bitPattern: Int(truncatingIfNeeded: lParam)) {
         _ = SetWindowLongPtrW(hwnd, GWLP_USERDATA, creation.pointee.lpCreateParams == UnsafeMutableRawPointer(bitPattern: 1) ? 1 : 0)
     }
     let popup = GetWindowLongPtrW(hwnd, GWLP_USERDATA) == 1
@@ -276,12 +276,12 @@ struct FrontstageWindows {
             cls.style = UINT(CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS); cls.lpfnWndProc = procedure; cls.hInstance = instance
             cls.hCursor = LoadCursorW(nil, UnsafePointer<WCHAR>(bitPattern: 32512)); cls.lpszClassName = name
             guard RegisterClassExW(&cls) != 0 else { return nil }
-            return wide("Frontstage — Whiteboard") { title in CreateWindowExW(0, name, title, DWORD(WS_OVERLAPPEDWINDOW | WS_VISIBLE), 80, 80, 1280, 850, nil, nil, instance, nil) }
+            return wide("Frontstage — Whiteboard") { title in CreateWindowExW(0, name, title, DWORD(WS_OVERLAPPEDWINDOW) | DWORD(WS_VISIBLE), 80, 80, 1280, 850, nil, nil, instance, nil) }
         }
         guard let hwnd else { return }
         ShowWindow(hwnd, SW_SHOW); UpdateWindow(hwnd)
         var message = MSG()
-        while GetMessageW(&message, nil, 0, 0) > 0 { TranslateMessage(&message); DispatchMessageW(&message) }
+        while GetMessageW(&message, nil, 0, 0) { TranslateMessage(&message); DispatchMessageW(&message) }
     }
 }
 #else

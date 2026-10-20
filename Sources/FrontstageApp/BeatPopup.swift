@@ -90,7 +90,7 @@ struct BeatPopupView: View {
                     ForEach(ScreenplayElement.editable, id: \.self) { Text($0.label).tag($0) }
                 }.frame(width: 200)
                 ScreenplayEditor(html: text(\.html, label: "Snippet Text"), controller: controller, width: 432, typography: workspace.project.scriptLayout,
-                    onError: { workspace.errorMessage = $0 }).id(beatID)
+                    onError: { workspace.errorMessage = $0 }, editable: workspace.project.scenes.first { $0.id == beat.sceneID }?.isTextLocked != true).id(beatID)
                 HStack {
                     Text("Changes save to your project as you type. Esc closes this editor.")
                     Spacer()

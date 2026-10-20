@@ -29,6 +29,8 @@ public struct ParallelScriptRow: Codable, Identifiable, Equatable, Sendable {
 }
 
 extension Project {
+    public mutating func setSceneTextLocked(_ id: Decimal, locked: Bool) throws { try editBeat(id) { $0["frontstageTextLocked"] = .bool(locked) } }
+    public mutating func setScenePageStart(_ id: Decimal, newPage: Bool) throws { try editBeat(id) { $0["frontstagePageStart"] = .bool(newPage) } }
     public var scriptLayout: ScriptLayoutSettings {
         guard let value = state["frontstageScriptLayout"], let data = try? JSONEncoder().encode(value),
               let result = try? JSONDecoder().decode(ScriptLayoutSettings.self, from: data), (try? result.validate()) != nil else { return ScriptLayoutSettings() }

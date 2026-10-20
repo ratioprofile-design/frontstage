@@ -11,7 +11,7 @@ final class ScreenplayEditorController: ObservableObject {
     var typography = ScriptLayoutSettings()
 
     func selectionChanged() {
-        guard let textView, !textView.hasMarkedText() else { return }
+        guard let textView, textView.isEditable, !textView.hasMarkedText() else { return }
         let element: ScreenplayElement
         if textView.selectedRange().location == textView.string.utf16.count,
            let type = textView.typingAttributes[.screenplayElement] as? String {
@@ -41,7 +41,7 @@ final class ScreenplayEditorController: ObservableObject {
 
     @discardableResult
     func handleCommand(_ selector: Selector, in textView: NSTextView) -> Bool {
-        guard !textView.hasMarkedText() else { return false }
+        guard textView.isEditable, !textView.hasMarkedText() else { return false }
         if selector == #selector(NSResponder.insertTab(_:)) || selector == #selector(NSResponder.insertBacktab(_:)) {
             format(activeElement.cycled(backward: selector == #selector(NSResponder.insertBacktab(_:))))
             return true
@@ -79,6 +79,7 @@ struct ScreenplayEditor: NSViewRepresentable {
     var width: CGFloat = 432
     var typography = ScriptLayoutSettings()
     var onError: (String) -> Void
+    var editable = true
 
     func makeCoordinator() -> Coordinator { Coordinator(html: $html, controller: controller, onError: onError) }
 
@@ -86,6 +87,7 @@ struct ScreenplayEditor: NSViewRepresentable {
         let scroll = NSTextView.scrollableTextView()
         guard let text = scroll.documentView as? NSTextView else { return scroll }
         text.isRichText = true
+        text.isEditable = editable
         text.importsGraphics = false
         text.allowsUndo = true
         text.isAutomaticQuoteSubstitutionEnabled = false
@@ -106,6 +108,7 @@ struct ScreenplayEditor: NSViewRepresentable {
         context.coordinator.html = $html
         context.coordinator.onError = onError
         guard let text = scroll.documentView as? NSTextView else { return }
+        text.isEditable = editable
         controller.textView = text
         if controller.contentWidth != width || controller.typography != typography {
             controller.contentWidth = width

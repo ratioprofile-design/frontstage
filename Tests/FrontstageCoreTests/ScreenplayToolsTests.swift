@@ -31,4 +31,16 @@ final class ScreenplayToolsTests: XCTestCase {
         XCTAssertThrowsError(try project.updateScene(id: scene, html: "Lost ranges"))
         XCTAssertEqual(project, before)
     }
+    func testSceneTextLockPreventsSnippetChangesAndPersistsPageStarts() throws {
+        var project = Project(); let beat = try project.addBoardBeat(), scene = project.scenes[0].id
+        try project.updateBoardBeat(beat) { $0.html = "<p>Locked</p>" }
+        try project.setSceneTextLocked(scene, locked: true)
+        try project.setScenePageStart(scene, newPage: true)
+        let before = project
+        XCTAssertThrowsError(try project.updateBoardBeat(beat) { $0.html = "<p>Overwrite</p>" })
+        XCTAssertThrowsError(try project.updateScene(id: scene, html: "Overwrite"))
+        XCTAssertEqual(project, before)
+        let restored = try Project(data: project.encoded())
+        XCTAssertTrue(restored.scenes[0].isTextLocked); XCTAssertTrue(restored.scenes[0].startsNewPage)
+    }
 }

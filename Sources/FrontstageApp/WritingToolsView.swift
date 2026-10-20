@@ -12,6 +12,15 @@ struct WritingToolsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 Text("Writing Tools").font(.title2)
+                if let scene = workspace.selectedScene {
+                    GroupBox("Scene script") {
+                        VStack(alignment: .leading) {
+                            Text(scene.title).font(.headline)
+                            Toggle("Lock script text and heading", isOn: Binding(get: { scene.isTextLocked }, set: { value in workspace.edit("Scene Script Lock") { try $0.setSceneTextLocked(scene.id, locked: value) } }))
+                            Toggle("Start this scene on a new page", isOn: Binding(get: { scene.startsNewPage }, set: { value in workspace.edit("Scene Page Break") { try $0.setScenePageStart(scene.id, newPage: value) } }))
+                        }.padding(8)
+                    }
+                }
                 GroupBox("Screenplay typography") {
                     VStack(alignment: .leading) {
                         TextField("Font name", text: Binding(get: { layout.fontName }, set: { name in changeLayout { $0.fontName = name } }))
