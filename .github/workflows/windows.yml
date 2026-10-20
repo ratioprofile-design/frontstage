@@ -16,6 +16,7 @@ jobs:
         with:
           swift-version: swift-6.0.3-release
           swift-build: 6.0.3-RELEASE
+          update-sdk-modules: true
       - name: Build native Windows whiteboard
         shell: pwsh
         run: |

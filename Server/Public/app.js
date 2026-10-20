@@ -51,6 +51,7 @@ function board() { return doc.project.frontstageWhiteboard; }
 function initializeBoard(document) {
   if (document.format !== 'frontstage') document = { format: 'frontstage', version: 1, name: 'Imported Story', project: document };
   if (document.version !== 1 || !Array.isArray(document.project.beats)) throw Error('Unsupported project format');
+  if (document.project.beats.some(beat => !Number.isSafeInteger(beat.id) || beat.id < 0)) throw Error('This project uses numeric identifiers outside browser precision. Open it with the native Swift client.');
   if (!document.project.frontstageWhiteboard) {
     const beats = document.project.beats;
     document.project.frontstageWhiteboard = {

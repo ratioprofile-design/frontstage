@@ -373,6 +373,34 @@ extension Project {
         }
     }
 
+    public mutating func mergeBoardBeats(_ ids: Set<String>) throws {
+        try editWhiteboard { board in
+            let chosen = board.orderedBeats.filter { ids.contains($0.id) }
+            guard chosen.count == ids.count, chosen.count > 1, Set(chosen.map(\.sceneID)).count == 1,
+                  chosen.allSatisfy({ !board.isLocked($0) }) else { throw ProjectError.invalidProject("select at least two unlocked snippets from one scene") }
+            let inScene = board.orderedBeats.filter { $0.sceneID == chosen[0].sceneID }
+            guard let first = inScene.firstIndex(where: { $0.id == chosen.first!.id }),
+                  let last = inScene.firstIndex(where: { $0.id == chosen.last!.id }), last - first + 1 == chosen.count else {
+                throw ProjectError.invalidProject("merge consecutive snippets to preserve their text order")
+            }
+            var survivor = chosen[0]
+            survivor.html = chosen.map(\.html).joined()
+            survivor.characters = Array(Set(chosen.flatMap(\.characters))).sorted()
+            survivor.tags = Array(Set(chosen.flatMap(\.tags))).sorted()
+            survivor.duration = max(0.05, (chosen.map { $0.start + $0.duration }.max() ?? survivor.start + survivor.duration) - survivor.start)
+            board.beats.removeAll { ids.contains($0.id) }; board.beats.append(survivor)
+            var seen = Set<String>()
+            board.dependencies = board.dependencies.compactMap { edge in
+                var edge = edge
+                if ids.contains(edge.cause) { edge.cause = survivor.id }
+                if ids.contains(edge.effect) { edge.effect = survivor.id }
+                guard edge.cause != edge.effect, seen.insert(edge.cause + "→" + edge.effect).inserted else { return nil }
+                return edge
+            }
+            _ = try board.causalOrder()
+        }
+    }
+
     public mutating func groupBoardBlocks(_ ids: Set<String>, name: String) throws {
         try editWhiteboard { board in
             let items = board.blocks.filter { ids.contains($0.id) }

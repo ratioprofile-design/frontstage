@@ -39,6 +39,7 @@ final class NativeWhiteboard: NSView {
     private var dragDelta = BoardPoint()
     private var panStart: BoardPoint?
     private var movingBlocks = false
+    private var expandedDragBlocks = Set<String>()
     private var movingBeat: String?
     private var marquee: BoardRect?
     private var stroke: [BoardPoint] = []
@@ -99,7 +100,7 @@ final class NativeWhiteboard: NSView {
         }
         for block in sortedBlocks {
             guard var rect = geometry.blockRects[block.id], rect.intersects(viewport) else { continue }
-            if movingBlocks && blockSelection.contains(block.id) { rect.x += dragDelta.x; rect.y += dragDelta.y }
+            if movingBlocks && expandedDragBlocks.contains(block.id) { rect.x += dragDelta.x; rect.y += dragDelta.y }
             let frame = NSRect(x: rect.x, y: rect.y, width: rect.width, height: rect.height)
             NSColor(calibratedWhite: 0.9, alpha: groups.contains(block.id) ? 0.10 : 0.30).setFill()
             NSBezierPath(roundedRect: frame, xRadius: 5, yRadius: 5).fill()
@@ -112,7 +113,7 @@ final class NativeWhiteboard: NSView {
         }
         for id in geometry.beats(in: viewport) {
             guard let beat = byID[id], var rect = geometry.beatRects[id] else { continue }
-            if movingBlocks && blockSelection.contains(beat.blockID) { rect.x += dragDelta.x; rect.y += dragDelta.y }
+            if movingBlocks && expandedDragBlocks.contains(beat.blockID) { rect.x += dragDelta.x; rect.y += dragDelta.y }
             let frame = NSRect(x: rect.x, y: rect.y, width: rect.width, height: rect.height)
             let color = NSColor(boardHex: beat.color)
             (beat.omitted || board.isUnused(beat) ? color.withAlphaComponent(0.25) : color).setFill()
@@ -176,7 +177,14 @@ final class NativeWhiteboard: NSView {
         } else if let block = hitBlock(worldPoint) {
             if event.modifierFlags.contains(.shift) { if !blockSelection.insert(block).inserted { blockSelection.remove(block) } }
             else if !blockSelection.contains(block) { blockSelection = [block] }
-            selection = Set(board.beats.filter { blockSelection.contains($0.blockID) }.map(\.id))
+            expandedDragBlocks = blockSelection
+            var changed = true
+            while changed {
+                let old = expandedDragBlocks
+                expandedDragBlocks.formUnion(board.blocks.filter { $0.parentID.map(expandedDragBlocks.contains) == true }.map(\.id))
+                changed = old != expandedDragBlocks
+            }
+            selection = Set(board.beats.filter { expandedDragBlocks.contains($0.blockID) }.map(\.id))
             movingBlocks = true; selected?(selection, blockSelection)
             if let id = selection.sorted().first { workspace?.selectBoardBeat(id) }
         } else {

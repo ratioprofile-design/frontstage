@@ -48,7 +48,7 @@ struct WhiteboardWorkspace: View {
         .onChange(of: workspace.selectedSceneID) { _, id in
             if workspace.selectedBoardBeat?.sceneID != id, let beat = board.orderedBeats.first(where: { $0.sceneID == id }) { workspace.selectBoardBeat(beat.id); selection = [beat.id] }
         }
-        .onChange(of: workspace.selectedBoardBeatID) { _, id in if let id { selection = [id] } }
+        .onChange(of: workspace.selectedBoardBeatID) { _, id in if let id, !selection.contains(id) { selection = [id] } }
         .onChange(of: workspace.changeID) { _, _ in
             selection.formIntersection(Set(board.beats.map(\.id)))
             blockSelection.formIntersection(Set(board.blocks.map(\.id)))
@@ -76,6 +76,7 @@ struct WhiteboardWorkspace: View {
                     .disabled(blockSelection.count < 2)
                 Button("Resolve Causal Flow") { workspace.edit("Resolve Causes") { try $0.editWhiteboard { try $0.resolveCauses() } } }
                 Button("Apply Story Order to Script") { workspace.edit("Apply Story Order") { try $0.applyWhiteboardStoryOrder() } }
+                Button("Merge Selected Snippets") { workspace.edit("Merge Snippets") { try $0.mergeBoardBeats(selection) } }.disabled(selection.count < 2)
                 Button("Clear Annotations") { workspace.edit("Clear Drawing") { try $0.editWhiteboard { $0.strokes = [] } } }
             } label: { Image(systemName: "ellipsis.circle") }
             Text("\(board.beats.count) beats").foregroundStyle(.secondary)

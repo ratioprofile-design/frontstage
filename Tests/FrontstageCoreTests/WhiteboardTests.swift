@@ -160,4 +160,17 @@ final class WhiteboardTests: XCTestCase {
         XCTAssertThrowsError(try project.splitBoardBeat(id, firstHTML: "A", secondHTML: "B"))
         XCTAssertEqual(project, locked)
     }
+    func testSplitMergeRoundTripPreservesTextAndExternalDependencies() throws {
+        var project = Project(), history = ProjectHistory()
+        let a = try project.addBoardBeat(), effect = try project.addBoardBeat()
+        try project.updateBoardBeat(a) { $0.html = "<p>One</p><p>Two</p>" }
+        try project.connectBoardBeats(cause: a, effect: effect)
+        let second = try project.splitBoardBeat(a, firstHTML: "<p>One</p>", secondHTML: "<p>Two</p>")
+        let before = project; history.record(before, label: "Merge")
+        try project.mergeBoardBeats([a, second])
+        XCTAssertEqual(try project.whiteboard().beats.first { $0.id == a }?.html, "<p>One</p><p>Two</p>")
+        XCTAssertTrue(try project.whiteboard().dependencies.contains { $0.cause == a && $0.effect == effect })
+        XCTAssertEqual(try project.whiteboard().beats.count, 2)
+        XCTAssertEqual(history.undo(current: project), before)
+    }
 }
