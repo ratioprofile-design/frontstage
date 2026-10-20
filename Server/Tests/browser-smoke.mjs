@@ -37,9 +37,9 @@ try {
   await page.locator('#snippet-editor').fill('தமிழ் — the second decision.');
   await page.locator('#must-cause').check();
   await page.locator('#close-editor').click();
-  await page.getByText('The Arrival', { exact: true }).first().click();
+  await page.locator('#blocks .beat-text').getByText('The Arrival', { exact: true }).click();
   await page.locator('#cause').click();
-  await page.getByText('The Consequence', { exact: true }).first().click();
+  await page.locator('#blocks .beat-text').getByText('The Consequence', { exact: true }).click();
   await page.locator('#resolve').click();
   await wait(async () => /^Synced/.test(await page.locator('#status').innerText()), 'Initial sync');
   const login = await fetch(address + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(credentials) }).then(r => r.json());
@@ -49,10 +49,10 @@ try {
   const first = await fetch(endpoint, { headers }).then(r => r.json());
   assert.equal(first.document.project.frontstageWhiteboard.beats.length, 2);
   assert.equal(first.document.project.frontstageWhiteboard.dependencies.length, 1);
-  await page.getByText('The Consequence', { exact: true }).first().dblclick();
+  await page.locator('#blocks .beat-text').getByText('The Consequence', { exact: true }).dblclick();
   await context.setOffline(true);
   await page.locator('#snippet-editor').fill('தமிழ் — edited offline.');
-  await page.getByText('The Arrival', { exact: true }).first().click();
+  await page.locator('#blocks .beat-text').getByText('The Arrival', { exact: true }).click();
   assert.equal(await page.locator('#beat-title').inputValue(), 'The Consequence');
   const remote = structuredClone(first.document); remote.name = 'Remote project rename';
   const updated = await fetch(endpoint, { method: 'PUT', headers, body: JSON.stringify({ expectedRevision: first.revision, changeID: crypto.randomUUID(), document: remote }) });
@@ -66,7 +66,7 @@ try {
   }, 'Offline/reconnect merge');
   const artifact = path.resolve(root, '../build'); await mkdir(artifact, { recursive: true });
   await page.screenshot({ path: path.join(artifact, 'browser-whiteboard.png') });
-  await page.getByText('The Consequence', { exact: true }).first().dblclick();
+  await page.locator('#blocks .beat-text').getByText('The Consequence', { exact: true }).dblclick();
   await page.screenshot({ path: path.join(artifact, 'browser-popup.png') });
   assert.deepEqual(errors, []);
   console.log('PASS: browser account, project, stacked beats, popup identity, causes, offline edits and three-way reconnect merge');

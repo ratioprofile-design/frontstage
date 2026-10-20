@@ -1,0 +1,59 @@
+name: Windows native client
+on:
+  push:
+    paths: ['Sources/FrontstageWindows/**', 'Sources/FrontstageCore/**', 'Tests/FrontstageCoreTests/**', 'Package.swift', '.github/workflows/windows.yml']
+  pull_request:
+    paths: ['Sources/FrontstageWindows/**', 'Sources/FrontstageCore/**', 'Tests/FrontstageCoreTests/**', 'Package.swift', '.github/workflows/windows.yml']
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: compnerd/gha-setup-swift@775d3f4111c5be58a0f62f2efdd353bb8fac15c7
+        with:
+          swift-version: swift-6.0.3-release
+          swift-build: 6.0.3-RELEASE
+      - name: Build native Windows whiteboard
+        shell: pwsh
+        run: |
+          swift --version
+          swift build --product FrontstageWindows -c release 2>&1 | Tee-Object windows-build.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Test shared model on Windows
+        shell: pwsh
+        run: |
+          swift test --filter 'WhiteboardTests|ProjectMergeTests|OfficeArchiveTests|ScreenplayToolsTests' 2>&1 | Tee-Object windows-tests.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Collect development executable and runtime
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force build/Frontstage-Windows | Out-Null
+          Copy-Item .build/release/FrontstageWindows.exe build/Frontstage-Windows/
+          foreach ($directory in ($env:Path -split ';')) {
+            if ($directory -and (Test-Path (Join-Path $directory 'swiftCore.dll'))) {
+              Copy-Item (Join-Path $directory '*.dll') build/Frontstage-Windows/ -Force
+            }
+          }
+          Compress-Archive -Path build/Frontstage-Windows -DestinationPath build/Frontstage-Windows.zip
+      - name: Report build failures
+        if: failure()
+        shell: pwsh
+        run: |
+          if (Test-Path windows-build.log) {
+            Get-Content windows-build.log | Select-String 'error:' | Select-Object -First 25 | ForEach-Object { Write-Output "::error::$($_.Line)" }
+          }
+          if (Test-Path windows-tests.log) { Get-Content windows-tests.log | Select-Object -Last 20 | ForEach-Object { Write-Output "::error::$_" } }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Frontstage-Windows-development
+          path: build/Frontstage-Windows.zip
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Frontstage-Windows-validation
+          path: |
+            windows-build.log
+            windows-tests.log
