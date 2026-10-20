@@ -2,6 +2,7 @@ import Foundation
 
 public struct BoardRect: Equatable, Sendable {
     public var x: Double, y: Double, width: Double, height: Double
+    public init(x: Double, y: Double, width: Double, height: Double) { self.x = x; self.y = y; self.width = width; self.height = height }
     public var maxX: Double { x + width }
     public var maxY: Double { y + height }
     public var center: BoardPoint { BoardPoint(x: x + width / 2, y: y + height / 2) }
