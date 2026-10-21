@@ -39,6 +39,8 @@ PDF and DOCX export follow consecutive snippet ranges. A scene can return after 
 
 Shared document merging treats snippet text as authoritative only when all inputs contain matching, canonical scene projections. Independent edits to different snippets in one scene rebuild the combined text/characters. Same-snippet text conflicts, incompatible script locks and noncanonical imported scene text still need a choice.
 
+An imported native project whose whole-scene text disagrees with its snippets cannot overwrite that text through a board edit or silently omit it in export. Reconcile the source copies first. Browser opening validates identifiers, bounds, references and container cycles before replacing the current project; a failed cached-project load leaves its original data intact. Imported causal cycles remain available for diagnosis.
+
 In the browser, shift-click block title tabs to select blocks and use Board Actions for group, ungroup, protected deletion, compaction and act markers. Undo/Redo apply project edits. The popup opens near its beat and can be moved by its header. Local projects can reopen offline after the app shell has been cached on a previous online visit; API/account responses are excluded from that shell cache.
 
 Portable tests cover cycles, locks, atomic failures, grouping, split/merge, unknown fields, source protection, ripple and script ordering. Geometry uses a spatial index and viewport culling, with a 10,000-beat regression. That is not an interactive frame-rate benchmark.

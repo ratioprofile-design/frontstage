@@ -18,7 +18,7 @@ Updated 21 October 2026. “Implemented” describes executable workflows, not c
 | People and breakdown | Character discovery/profiles, role assignments, casting contacts/status, manual requirements | Advanced audition workflows and provider integrations |
 | Research/media | Scene/beat-linked records, crew/continuity/shot/audition fields, embedded attachments, image preview/export, CSV | Dedicated advanced production UI, large external asset storage |
 | Production | Shooting days, ordering/durations, cast calls, workload/turnaround diagnostics, call sheets, DOOD, CSV/XLSX | Constraint scheduling optimizer, location/maps services |
-| Interchange | Project JSON; text/RTF/PDF/DOCX text import; DOCX screenplay export; CSV/XLSX first worksheet; attachment portability | Scanned PDF OCR, full Office styling/formulas/multiple sheets, native Causality files |
+| Interchange | Project JSON with browser identifier/geometry/reference validation and transactional opening; unprojected scene text protected; text/RTF/PDF/DOCX import, DOCX export, CSV/XLSX first worksheet and portable attachments | Scanned PDF OCR, full Office styling/formulas/multiple sheets, native Causality files |
 | Native drawing | Persisted freehand whiteboard annotations | Full Excalidraw-equivalent objects, selection and export |
 | Service | Swift/Vapor accounts, bcrypt, expiring hashed sessions, project permissions, atomic CAS revisions and retry IDs | Hosting, TLS proxy, backups, rate limits, account recovery and operations review |
 | Mac sharing | Keychain, shared create/open, owner access/reader pull, explicit sync, snippet-aware merge with genuine text/lock conflict retention | Background sync and cold offline shared-session restoration |
