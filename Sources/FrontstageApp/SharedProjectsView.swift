@@ -106,7 +106,7 @@ final class SharedProjectClient: ObservableObject {
             guard workspace.documentSessionID == session, linked?.id == link.id else { status = "The previous project's upload finished. Your current project remains separate."; return }
             if code == 409, let remote = result.snapshot.document, let base {
                 let local = try JSONDecoder().decode(JSONValue.self, from: workspace.project.encoded())
-                let merge = ProjectMerge.merge(base: base, local: local, remote: remote)
+                let merge = ProjectMerge.mergeDocuments(base: base, local: local, remote: remote)
                 if !merge.conflicts.isEmpty {
                     conflict = result.snapshot; conflicts = merge.conflicts; status = "Concurrent edits need a choice. Your local project is retained."
                 } else {
@@ -129,7 +129,7 @@ final class SharedProjectClient: ObservableObject {
             let (remote, _) = try await request("api/projects/\(link.id.uuidString)", as: RemoteProject.self)
             guard workspace.documentSessionID == session, linked?.id == link.id, let document = remote.document else { return }
             let local = try JSONDecoder().decode(JSONValue.self, from: workspace.project.encoded())
-            let merge = ProjectMerge.merge(base: base, local: local, remote: document)
+            let merge = ProjectMerge.mergeDocuments(base: base, local: local, remote: document)
             if merge.conflicts.isEmpty {
                 let merged = try Project(data: JSONEncoder().encode(merge.value))
                 workspace.edit("Pull Shared Changes") { $0 = merged }

@@ -71,6 +71,8 @@ try {
   await page.locator('#blocks .beat-text').getByText('The Arrival', { exact: true }).click();
   assert.equal(await page.locator('#beat-title').inputValue(), 'The Consequence');
   const remote = structuredClone(first.document); remote.name = 'Remote project rename';
+  remote.project.frontstageWhiteboard.beats.find(b => b.title === 'The Arrival').html = '<div class="sc-action">Remote cause text.</div>';
+  for (const scene of remote.project.beats) scene.content = remote.project.frontstageWhiteboard.beats.filter(b => b.sceneID === scene.id && !b.omitted).sort((a, b) => a.order - b.order).map(b => b.html).join('');
   const updated = await fetch(endpoint, { method: 'PUT', headers, body: JSON.stringify({ expectedRevision: first.revision, changeID: randomUUID(), document: remote }) });
   assert.equal(updated.status, 200);
   await context.setOffline(false);
@@ -78,7 +80,7 @@ try {
   await page.locator('#save').click();
   await wait(async () => {
     const snapshot = await fetch(endpoint, { headers }).then(r => r.json());
-    return snapshot.document.name === 'Remote project rename' && snapshot.document.project.frontstageWhiteboard.beats.some(b => b.html.includes('edited offline'));
+    return snapshot.document.name === 'Remote project rename' && snapshot.document.project.frontstageWhiteboard.beats.some(b => b.html.includes('edited offline')) && snapshot.document.project.beats.some(s => s.content.includes('Remote cause text.') && s.content.includes('edited offline'));
   }, 'Offline/reconnect merge');
   const artifact = path.resolve(root, '../build'); await mkdir(artifact, { recursive: true });
   await page.screenshot({ path: path.join(artifact, `browser-${staticMode ? 'static-' : ''}whiteboard.png`) });
