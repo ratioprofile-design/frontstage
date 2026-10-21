@@ -2,3 +2,5 @@
 #layers { z-index: 0; }
 #links { z-index: 1; }
 #blocks { z-index: 2; }
+.selected-block{outline:2px solid white}.act-marker{position:absolute;top:1px;height:19px;background:#3c65a8;padding:2px 6px;font-size:9px;white-space:nowrap}footer select{font-size:10px;padding:3px;max-width:170px}
+#editor{max-height:calc(100vh - 16px);overflow:auto}.editor-header{touch-action:none}

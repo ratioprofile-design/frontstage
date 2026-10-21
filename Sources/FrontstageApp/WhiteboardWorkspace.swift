@@ -77,7 +77,7 @@ struct WhiteboardWorkspace: View {
                 Button("Story Layer") { addLayer(unused: false) }
                 Button("Unused Layer") { addLayer(unused: true) }
             }
-            Button("+ Block") { workspace.addWhiteboardBeat(position: BoardPoint(x: board.viewport.origin.x + 70, y: 70)) }
+            Button("+ Block") { workspace.addWhiteboardBeat() }
             Button("+ Beat") { workspace.addWhiteboardBeat(blockID: workspace.selectedBoardBeat?.blockID) }
             Menu {
                 Button("Group Selected Blocks") { workspace.edit("Group Blocks") { try $0.groupBoardBlocks(blockSelection, name: "New Group") } }

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const origin = 'https://frontstage-five.vercel.app';
 const digest = value => createHash('sha256').update(value).digest('hex');
-const files = ['index.html', 'app.js', 'merge.js', 'style.css'];
+const files = ['index.html', 'app.js', 'merge.js', 'board-operations.js', 'style.css'];
 const expected = new Map(await Promise.all(files.map(async file => [file, digest(await readFile(path.join(root, 'build/web', file)))])));
 let last = '';
 for (let attempt = 1; attempt <= 12; attempt++) {

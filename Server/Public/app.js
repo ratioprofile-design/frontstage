@@ -1,5 +1,6 @@
 import { mergeDocuments } from './merge.js';
 import { apiOrigin as configuredOrigin } from './config.js';
+import { causalOrder as orderCauses, compactCausalTime, groupBlocks, ungroupBlocks, moveBlocks, descendantBlocks, deleteBlocks } from './board-operations.js';
 
 const $ = id => document.getElementById(id);
 const clone = value => structuredClone(value);
@@ -10,6 +11,7 @@ let dirty = false, syncing = false, timer = null, pendingConflict = null;
 let documentEpoch = 0;
 let apiOrigin = '';
 let localMode = false;
+let selectedBlocks = new Set(), selectedBeats = new Set();
 $('server-address').value = configuredOrigin || localStorage.getItem('frontstage-server') || '';
 function setServer() {
   const value = $('server-address').value.trim();
@@ -21,6 +23,7 @@ function setServer() {
   apiOrigin = url.origin; localStorage.setItem('frontstage-server', apiOrigin);
 }
 const history = [];
+const future = [];
 const status = text => { $('status').textContent = text; };
 function element(tag, text, className) { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (className) e.className = className; return e; }
 function list(value) { return [...new Set(value.split(',').map(s => s.trim()).filter(Boolean))]; }
@@ -93,7 +96,7 @@ async function openLocalProject(id) {
   const copy = await localCopy(id); if (epoch !== documentEpoch || !copy?.local) return;
   current = { id, name: copy.name, access: 'owner', revision: 0, local: true }; localMode = true;
   doc = initializeBoard(clone(copy.doc)); base = stripLegacyCredentials(clone(copy.base)); dirty = false;
-  history.length = 0; selected = null; source = null; editorID = null; pendingConflict = null;
+  history.length = 0; future.length = 0; selectedBlocks.clear(); selectedBeats.clear(); selected = null; source = null; editorID = null; pendingConflict = null;
   $('editor').hidden = true; $('conflict').hidden = true; $('account').hidden = true; $('projects').hidden = true; $('workspace').hidden = false;
   $('logout').textContent = 'Sign In'; render(); status('Saved on this device');
 }
@@ -132,8 +135,13 @@ function compileSnippets() {
 function edit(action) {
   if (!doc || current.access === 'reader') return;
   const previous = clone(doc);
-  try { action(); compileSnippets(); history.push(previous); if (history.length > 40) history.shift(); dirty = true; saveLocal().catch(e => status(`Local save failed: ${e.message}`)); render(); clearTimeout(timer); timer = setTimeout(sync, 800); }
-  catch (error) { doc = previous; status(error.message); }
+  try { action(); compileSnippets(); if (equal(previous, doc)) return; history.push(previous); future.length = 0; if (history.length > 40) history.shift(); dirty = true; saveLocal().catch(e => status(`Local save failed: ${e.message}`)); render(); clearTimeout(timer); timer = setTimeout(sync, 800); }
+  catch (error) { doc = previous; render(); status(error.message); }
+}
+function restoreHistory(from, to) {
+  if (!doc || current.access === 'reader' || !from.length) return;
+  to.push(clone(doc)); doc = from.pop(); dirty = true; editorID = null; $('editor').hidden = true;
+  saveLocal().catch(e => status(`Local save failed: ${e.message}`)); render(); clearTimeout(timer); timer = setTimeout(sync, 800);
 }
 async function sync() {
   if (current?.local) {
@@ -173,26 +181,25 @@ async function openProject(id) {
   const epoch = ++documentEpoch; clearTimeout(timer);
   const { data } = await api(`/api/projects/${id}`), offline = await localCopy(id);
   if (epoch !== documentEpoch) return;
-  current = data; history.length = 0; selected = null; editorID = null; $('editor').hidden = true;
+  current = data; history.length = 0; future.length = 0; selectedBlocks.clear(); selectedBeats.clear(); selected = null; editorID = null; $('editor').hidden = true;
   pendingConflict = null; source = null; $('conflict').hidden = true;
   base = clone(data.document); doc = initializeBoard(clone(data.document)); dirty = !equal(doc, data.document);
   if (offline?.dirty) { base = offline.base; doc = initializeBoard(offline.doc); current.revision = offline.revision; dirty = true; }
   $('projects').hidden = true; $('workspace').hidden = false; render(); status(dirty ? 'Local changes ready to sync' : `Synced · revision ${current.revision}`);
   if (dirty) sync();
 }
-function choose(id) {
+function choose(id, multiple = false) {
   if (source && source !== id) {
     const cause = source; source = null;
     edit(() => { if (board().dependencies.some(e => e.cause === cause && e.effect === id)) throw Error('Already connected'); board().dependencies.push({ id: uuid(), cause, effect: id, reason: '', reference: false }); causalOrder(); });
   }
+  selectedBlocks.clear();
+  if (multiple) { if (selectedBeats.has(id)) selectedBeats.delete(id); else selectedBeats.add(id); }
+  else selectedBeats = new Set([id]);
   selected = id; render();
 }
 function causalOrder() {
-  const incoming = new Map(board().beats.map(b => [b.id, 0])), outgoing = new Map();
-  for (const edge of board().dependencies.filter(e => !e.reference)) { incoming.set(edge.effect, (incoming.get(edge.effect) || 0) + 1); if (!outgoing.has(edge.cause)) outgoing.set(edge.cause, []); outgoing.get(edge.cause).push(edge.effect); }
-  const ready = board().beats.filter(b => !incoming.get(b.id)).sort((a, b) => a.order - b.order).map(b => b.id), result = [];
-  while (ready.length) { const id = ready.shift(); result.push(id); for (const next of outgoing.get(id) || []) { incoming.set(next, incoming.get(next) - 1); if (!incoming.get(next)) ready.push(next); } }
-  if (result.length !== board().beats.length) throw Error('A dependency would create a causal loop'); return result;
+  return orderCauses(board());
 }
 function resolve() {
   for (const id of causalOrder()) {
@@ -227,37 +234,58 @@ function geometry() {
     }
     y += height;
   }
+  const byID = new Map(board().blocks.map(b => [b.id, b])), remaining = new Map([...blocks.keys()].map(id => [id, 0]));
+  for (const block of board().blocks) if (blocks.has(block.id) && blocks.has(block.parentID)) remaining.set(block.parentID, remaining.get(block.parentID) + 1);
+  const ready = [...remaining].filter(([, count]) => count === 0).map(([id]) => id);
+  for (let i = 0; i < ready.length; i++) {
+    const id = ready[i], parent = byID.get(id)?.parentID, c = blocks.get(id), r = blocks.get(parent);
+    if (!c || !r || byID.get(parent).collapsed) continue;
+    const left = Math.min(r.x, c.x - 12), top = Math.min(r.y, c.y - 28);
+    blocks.set(parent, { x: left, y: top, width: Math.max(r.x + r.width, c.x + c.width + 12) - left, height: Math.max(r.y + r.height, c.y + c.height + 12) - top });
+    remaining.set(parent, remaining.get(parent) - 1); if (!remaining.get(parent)) ready.push(parent);
+  }
+  maxX = Math.max(maxX, ...storyMarkers().map(m => 110 + m.unit * 120 + 200));
   return { blocks, beats, layers, width: maxX, height: Math.max(800, y) };
 }
 function position(node, rect) { node.style.left = `${rect.x}px`; node.style.top = `${rect.y}px`; node.style.width = `${rect.width}px`; node.style.height = `${rect.height}px`; }
 function render() {
   if (!doc) return;
+  const beatIDs = new Set(board().beats.map(b => b.id)), blockIDs = new Set(board().blocks.map(b => b.id));
+  selectedBeats = new Set([...selectedBeats].filter(id => beatIDs.has(id))); selectedBlocks = new Set([...selectedBlocks].filter(id => blockIDs.has(id)));
+  if (!beatIDs.has(selected)) selected = null;
   const g = geometry(), issues = storyIssues(), warning = new Set(issues.map(i => i.id));
   $('layers').replaceChildren(); $('blocks').replaceChildren(); $('links').replaceChildren(); $('snippet-list').replaceChildren(); $('issues').replaceChildren();
   for (const layer of board().layers) {
     const rect = g.layers.get(layer.id), node = element('div', undefined, 'layer'); position(node, { x: 0, y: rect.y, width: g.width, height: rect.height });
     const label = element('button', `${layer.collapsed ? '▸' : '▾'} ${layer.name}`, 'layer-label'); label.onclick = () => edit(() => { layer.collapsed = !layer.collapsed; }); node.append(label); $('layers').append(node);
   }
-  for (const block of board().blocks) {
+  const blockOrder = [...board().blocks].sort((a, b) => { const x = g.blocks.get(a.id), y = g.blocks.get(b.id); return (y ? y.width * y.height : 0) - (x ? x.width * x.height : 0); });
+  for (const block of blockOrder) {
     const rect = g.blocks.get(block.id); if (!rect) continue;
-    const node = element('div', undefined, 'block'); position(node, rect);
+    const node = element('div', undefined, `block${selectedBlocks.has(block.id) ? ' selected-block' : ''}`); node.dataset.blockId = block.id; position(node, rect);
     const title = element('div', block.name, 'block-title'); node.append(title);
     title.ondblclick = () => { const value = prompt('Block name', block.name); if (value !== null) edit(() => { block.name = value; }); };
     title.onpointerdown = e => {
       if (current.access === 'reader' || locked({ blockID: block.id })) return; e.preventDefault(); title.setPointerCapture(e.pointerId);
-      const start = { x: e.clientX, y: e.clientY }, original = clone(block.position);
-      title.onpointermove = event => { node.style.left = `${rect.x + event.clientX - start.x}px`; node.style.top = `${rect.y + event.clientY - start.y}px`; };
-      title.onpointerup = event => { title.onpointermove = null; title.onpointerup = null; edit(() => { block.position = { x: Math.max(0, original.x + event.clientX - start.x), y: Math.max(32, original.y + event.clientY - start.y) }; }); };
+      if (e.shiftKey) { if (selectedBlocks.has(block.id)) selectedBlocks.delete(block.id); else selectedBlocks.add(block.id); }
+      else if (!selectedBlocks.has(block.id)) selectedBlocks = new Set([block.id]);
+      selectedBeats.clear();
+      const moving = descendantBlocks(board(), selectedBlocks), start = { x: e.clientX, y: e.clientY };
+      const nodes = [...$('blocks').children].filter(n => moving.has(n.dataset.blockId));
+      title.onpointermove = event => { for (const item of nodes) { const r = g.blocks.get(item.dataset.blockId); item.style.left = `${r.x + event.clientX - start.x}px`; item.style.top = `${r.y + event.clientY - start.y}px`; } };
+      title.onpointerup = event => { title.onpointermove = null; title.onpointerup = null; if (selectedBlocks.size) edit(() => { doc.project.frontstageWhiteboard = moveBlocks(board(), selectedBlocks, event.clientX - start.x, event.clientY - start.y); }); render(); };
+      title.onpointercancel = () => { title.onpointermove = null; title.onpointerup = null; render(); };
     };
     node.ondragover = e => e.preventDefault(); node.ondrop = e => {
       e.preventDefault(); const id = e.dataTransfer.getData('text/frontstage-beat'), moving = board().beats.find(b => b.id === id); if (!moving || locked(moving) || locked({ blockID: block.id })) return;
       edit(() => { moving.blockID = block.id; moving.order = Math.max(-1, ...board().beats.filter(b => b.blockID === block.id && b.id !== id).map(b => b.order)) + 1; });
     };
     if (!block.collapsed) for (const beat of board().beats.filter(b => b.blockID === block.id).sort((a, b) => a.order - b.order)) {
-      const tile = element('div', undefined, `beat${beat.id === selected ? ' selected' : ''}`); tile.style.backgroundColor = /^#[a-f0-9]{6}$/i.test(beat.color) ? beat.color : '#a34eae';
+      const tile = element('div', undefined, `beat${selectedBeats.has(beat.id) ? ' selected' : ''}`); tile.style.backgroundColor = /^#[a-f0-9]{6}$/i.test(beat.color) ? beat.color : '#a34eae';
+      tile.dataset.beatId = beat.id;
       tile.append(element('span', beat.title, 'beat-text')); tile.draggable = current.access !== 'reader' && !locked(beat);
       if (warning.has(beat.id)) tile.append(element('span', '!', 'badge'));
-      tile.onclick = e => { e.stopPropagation(); choose(beat.id); }; tile.ondblclick = () => openEditor(beat.id);
+      tile.onclick = e => { e.stopPropagation(); choose(beat.id, e.shiftKey); }; tile.ondblclick = () => openEditor(beat.id);
       tile.ondragstart = e => e.dataTransfer.setData('text/frontstage-beat', beat.id);
       node.append(tile);
     }
@@ -270,12 +298,17 @@ function render() {
     path.setAttribute('d', `M${a.x + a.width},${a.y + 20} C${a.x + a.width + bend},${a.y + 20} ${b.x - bend},${b.y + 20} ${b.x},${b.y + 20}`);
     path.setAttribute('stroke', edge.cause === selected || edge.effect === selected ? '#8be8f2' : '#d1d1d3'); path.setAttribute('fill', 'none'); if (edge.reference) path.setAttribute('stroke-dasharray', '4 4'); $('links').append(path);
   }
+  for (const marker of storyMarkers()) {
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'path'), x = 110 + marker.unit * 120;
+    line.setAttribute('d', `M${x},0 V${g.height}`); line.setAttribute('stroke', '#4d8ed6'); line.setAttribute('stroke-dasharray', '3 5'); $('links').append(line);
+  }
   for (const beat of [...board().beats].sort((a, b) => a.order - b.order)) {
     const card = element('article', undefined, 'snippet-card'); card.append(element('strong', beat.title), element('p', plain(beat.html))); card.onclick = () => { choose(beat.id); openEditor(beat.id); }; $('snippet-list').append(card);
   }
   for (const issue of issues) { const button = element('button', issue.text, 'issue'); button.onclick = () => { if (issue.id) choose(issue.id); }; $('issues').append(button); }
   $('beat-count').textContent = `${board().beats.length} beats`; renderProperties(); renderTimeline();
   document.querySelectorAll('.write').forEach(e => { e.disabled = current.access === 'reader'; });
+  $('undo').disabled = current.access === 'reader' || !history.length; $('redo').disabled = current.access === 'reader' || !future.length;
   const editingBeat = board().beats.find(b => b.id === editorID);
   const textLocked = doc.project.beats.find(s => s.id === editingBeat?.sceneID)?.frontstageTextLocked;
   $('snippet-editor').contentEditable = current.access === 'reader' || textLocked ? 'false' : 'true';
@@ -297,31 +330,70 @@ function renderProperties() {
   }
 }
 function renderTimeline() {
-  const end = Math.max(20, ...board().beats.map(b => b.start + b.duration)), scale = 22;
+  const markers = storyMarkers(), end = Math.max(20, ...board().beats.map(b => b.start + b.duration), ...markers.map(m => m.unit + 3)), scale = 22;
   const ruler = element('div', undefined, 'ruler'); ruler.style.width = `${end * scale + 90}px`;
-  for (let i = 0; i <= end; i += 5) { const mark = element('span', String(i)); mark.style.left = `${90 + i * scale}px`; ruler.append(mark); }
+  for (let i = 0; i <= end; i += Math.max(5, Math.ceil(end / 100))) { const mark = element('span', String(i)); mark.style.left = `${90 + i * scale}px`; ruler.append(mark); }
   const track = element('div', undefined, 'track'), snippets = element('div', undefined, 'track'); track.style.width = ruler.style.width; snippets.style.width = ruler.style.width;
   for (const beat of board().beats) {
     for (const [row, isSnippet] of [[track, false], [snippets, true]]) {
       const tile = element('div', isSnippet ? '' : doc.project.beats.find(s => s.id === beat.sceneID)?.title || beat.title, 'time-beat'); tile.style.left = `${90 + beat.start * scale}px`; tile.style.width = `${Math.max(8, beat.duration * scale - 1)}px`; tile.style.backgroundColor = isSnippet ? beat.color : '#3c65a8'; tile.onclick = () => choose(beat.id); row.append(tile);
     }
   }
-  $('timeline').replaceChildren(ruler, track, snippets);
+  const acts = element('div', undefined, 'track'); acts.style.width = ruler.style.width;
+  for (const marker of markers) {
+    const tag = element('button', marker.title || 'Marker', 'act-marker'); tag.style.left = `${90 + marker.unit * scale}px`;
+    tag.onclick = () => editMarker(marker); tag.oncontextmenu = event => { event.preventDefault(); if (current.access !== 'reader' && confirm(`Remove “${marker.title}”?`)) edit(() => { doc.project.sectionBreaks = doc.project.sectionBreaks.filter(m => m.id !== marker.id); }); };
+    acts.append(tag);
+  }
+  $('timeline').style.height = markers.length ? '105px' : '85px';
+  $('timeline').replaceChildren(...(markers.length ? [ruler, acts, track, snippets] : [ruler, track, snippets]));
+}
+function storyMarkers() {
+  const seen = new Set();
+  return (Array.isArray(doc.project.sectionBreaks) ? doc.project.sectionBreaks : []).filter(m => m && typeof m.id === 'string' && Number.isFinite(m.unit) && m.unit >= 0 && m.unit <= 1000000 / 120 && !seen.has(m.id) && seen.add(m.id)).sort((a, b) => a.unit - b.unit || a.id.localeCompare(b.id));
+}
+function editMarker(marker = null) {
+  if (current.access === 'reader') return;
+  const title = prompt('Act / marker name', marker?.title || `Act ${storyMarkers().length + 1}`); if (!title?.trim()) return;
+  const raw = prompt('Estimated story time', String(marker?.unit ?? board().beats.find(b => b.id === selected)?.start ?? 0)); if (raw === null) return;
+  const unit = Number(raw);
+  edit(() => {
+    if (!Number.isFinite(unit) || unit < 0 || unit > 1000000 / 120) throw Error('Choose a valid estimated story time.');
+    if (doc.project.sectionBreaks !== undefined && !Array.isArray(doc.project.sectionBreaks)) throw Error('Existing marker data has an unsupported format.');
+    doc.project.sectionBreaks ||= [];
+    if (marker) { const stored = doc.project.sectionBreaks.find(m => m.id === marker.id); if (stored) { stored.title = title; stored.unit = unit; } }
+    else doc.project.sectionBreaks.push({ id: uuid(), title, unit, type: 'custom' });
+  });
 }
 function openEditor(id) {
   const beat = board().beats.find(b => b.id === id); if (!beat) return; editorID = id; selected = id;
   $('beat-title').value = beat.title; $('beat-synopsis').value = beat.synopsis; $('beat-kind').value = beat.kind; $('must-cause').checked = beat.mustBeCaused;
   $('beat-characters').value = beat.characters.join(', '); $('beat-tags').value = beat.tags.join(', '); $('snippet-editor').innerHTML = cleanHTML(beat.html); $('editor').hidden = false;
   $('snippet-editor').contentEditable = current.access === 'reader' || doc.project.beats.find(s => s.id === beat.sceneID)?.frontstageTextLocked ? 'false' : 'true';
+  const tile = [...$('blocks').querySelectorAll('[data-beat-id]')].find(node => node.dataset.beatId === id);
+  if (tile) { tile.scrollIntoView({ block: 'nearest', inline: 'nearest' }); const rect = tile.getBoundingClientRect(); placeEditor(rect.right + 12, rect.top - 25); }
   $('beat-title').focus();
 }
+function placeEditor(x, y) {
+  const rect = $('editor').getBoundingClientRect();
+  $('editor').style.left = `${Math.max(8, Math.min(x, innerWidth - rect.width - 8))}px`;
+  $('editor').style.top = `${Math.max(8, Math.min(y, innerHeight - rect.height - 8))}px`;
+}
+$('editor').querySelector('.editor-header').onpointerdown = event => {
+  if (event.target.closest('button')) return;
+  event.preventDefault(); const header = event.currentTarget, start = { x: event.clientX, y: event.clientY }, frame = $('editor').getBoundingClientRect();
+  header.setPointerCapture(event.pointerId);
+  header.onpointermove = e => placeEditor(frame.left + e.clientX - start.x, frame.top + e.clientY - start.y);
+  header.onpointerup = header.onpointercancel = () => { header.onpointermove = null; header.onpointerup = null; header.onpointercancel = null; };
+};
 function addBeat() {
   edit(() => {
     const owner = board().beats.find(b => b.id === selected); let blockID = owner?.blockID, sceneID = owner?.sceneID;
     if (!blockID) {
       blockID = uuid(); sceneID = Math.max(0, ...doc.project.beats.map(b => Number(b.id))) + 1;
       doc.project.beats.push({ id: sceneID, title: 'Untitled Scene', content: '', slug: { prefix: 'INT.', location: '', time: 'DAY' }, boardId: 0 }); doc.project.nextId = sceneID + 1;
-      board().blocks.push({ id: blockID, name: 'Untitled Block', layerID: board().layers[0].id, position: { x: Math.max(40, $('canvas').scrollLeft + 60), y: 70 }, width: 224, collapsed: false, locked: false });
+      const right = Math.max(-244, ...board().blocks.map(b => b.position.x + b.width));
+      board().blocks.push({ id: blockID, name: 'Untitled Block', layerID: board().layers[0].id, position: { x: Math.max(40, right + 60), y: 70 }, width: 224, collapsed: false, locked: false });
     }
     const beat = { id: uuid(), sceneID, blockID, title: 'Untitled Beat', synopsis: '', html: '', kind: 'story', color: '#a34eae', characters: [], tags: [], mustBeCaused: false, omitted: false, locked: false, order: Math.max(-1, ...board().beats.map(b => b.order)) + 1, start: Math.max(0, ...board().beats.map(b => b.start + b.duration)), duration: 1.5 };
     board().beats.push(beat); selected = beat.id;
@@ -340,6 +412,19 @@ $('import-project').onchange = async e => { try { const file = e.target.files[0]
 $('logout').onclick = async () => { await saveLocal(); ++documentEpoch; clearTimeout(timer); if (token) { try { await api('/api/logout', 'POST'); } catch {} } token = ''; current = null; doc = null; dirty = false; localMode = false; pendingConflict = null; $('conflict').hidden = true; $('workspace').hidden = true; $('projects').hidden = true; $('account').hidden = false; $('editor').hidden = true; status('Local projects and drafts remain in this browser'); };
 $('back').onclick = async () => { await saveLocal(); $('editor').hidden = true; editorID = null; (localMode ? loadLocalProjects() : loadProjects()).catch(e => status(e.message)); };
 $('save').onclick = sync; $('download').onclick = download; $('export-conflict').onclick = download;
+$('undo').onclick = () => restoreHistory(history, future); $('redo').onclick = () => restoreHistory(future, history);
+$('board-actions').onchange = () => {
+  const action = $('board-actions').value; $('board-actions').value = '';
+  if (action === 'marker') { editMarker(); return; }
+  if (action === 'group') {
+    const name = prompt('Group name', 'New Group'); if (name === null) return;
+    const id = uuid(); edit(() => { doc.project.frontstageWhiteboard = groupBlocks(board(), selectedBlocks, name, id); });
+    if (board().blocks.some(b => b.id === id)) { selectedBlocks = new Set([id]); render(); } return;
+  }
+  if (action === 'ungroup') edit(() => { doc.project.frontstageWhiteboard = ungroupBlocks(board(), selectedBlocks); });
+  if (action === 'compact') edit(() => { doc.project.frontstageWhiteboard = compactCausalTime(board()); });
+  if (action === 'delete') edit(() => { doc = deleteBlocks(doc, selectedBlocks); });
+};
 $('script-toggle').onclick = () => { $('script').hidden = !$('script').hidden; };
 $('add-beat').onclick = addBeat; $('add-block').onclick = () => { selected = null; addBeat(); };
 $('add-layer').onclick = () => { const name = prompt('Layer name', 'New Layer'); if (name) edit(() => board().layers.push({ id: uuid(), name, height: 300, collapsed: false, locked: false, unused: false })); };
@@ -356,7 +441,7 @@ $('element').onchange = () => { const selection = window.getSelection(); let nod
 $('keep-local').onclick = () => { if (!pendingConflict) return; base = clone(pendingConflict.document); current.revision = pendingConflict.revision; pendingConflict = null; $('conflict').hidden = true; dirty = true; sync(); };
 $('take-server').onclick = async () => { if (!pendingConflict) return; download(); doc = initializeBoard(clone(pendingConflict.document)); base = clone(pendingConflict.document); current.revision = pendingConflict.revision; dirty = false; pendingConflict = null; $('conflict').hidden = true; $('editor').hidden = true; editorID = null; await saveLocal(); render(); status('Server copy loaded; previous local copy downloaded'); };
 $('share').onclick = async () => { if (current?.local) { status('Download your local project, sign in, then import it to create a shared copy.'); return; } if (!current || current.access !== 'owner') { status('Only the project owner can change access'); return; } const username = prompt('Existing account username'); if (!username) return; const access = prompt('Access: reader or editor', 'editor'); if (!['reader', 'editor'].includes(access)) return; try { await api(`/api/projects/${current.id}/members`, 'POST', { username, access }); status(`Shared with ${username} (${access})`); } catch (error) { status(error.message); } };
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { $('editor').hidden = true; editorID = null; source = null; } if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); sync(); } if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !['INPUT', 'TEXTAREA'].includes(e.target.tagName) && !e.target.isContentEditable) { const previous = history.pop(); if (previous) { e.preventDefault(); doc = previous; dirty = true; saveLocal(); render(); } } if (e.key === 'Enter' && e.target === $('canvas') && selected) openEditor(selected); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { $('editor').hidden = true; editorID = null; source = null; } if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); sync(); } if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !['INPUT', 'TEXTAREA'].includes(e.target.tagName) && !e.target.isContentEditable) { e.preventDefault(); if (e.shiftKey) restoreHistory(future, history); else restoreHistory(history, future); } if (e.key === 'Enter' && e.target === $('canvas') && selected) openEditor(selected); });
 window.addEventListener('online', () => { if (dirty) sync(); });
 window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
 setInterval(async () => {

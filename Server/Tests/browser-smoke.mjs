@@ -21,7 +21,7 @@ async function wait(check, message) { for (let i = 0; i < 100; i++) { if (await 
 try {
   await wait(async () => (await fetch(address + '/health')).ok, 'Server startup');
   if (staticMode) {
-    const types = { 'index.html': 'text/html', 'style.css': 'text/css', 'app.js': 'application/javascript', 'merge.js': 'application/javascript', 'config.js': 'application/javascript' };
+    const types = { 'index.html': 'text/html', 'style.css': 'text/css', 'app.js': 'application/javascript', 'merge.js': 'application/javascript', 'board-operations.js': 'application/javascript', 'config.js': 'application/javascript' };
     staticServer = createServer(async (request, response) => {
       const file = request.url === '/' ? 'index.html' : request.url.slice(1);
       if (!types[file]) { response.writeHead(404); response.end(); return; }
@@ -141,6 +141,42 @@ try {
   assert.equal(localDocument.project.frontstageWhiteboard.beats[0].title, 'Local story beat');
   assert.ok(localDocument.project.beats[0].content.includes('local edit while offline'));
   await localContext.setOffline(false);
+  await localPage.locator('#add-block').click();
+  await localPage.locator('#beat-title').fill('Second local beat');
+  await localPage.locator('#snippet-editor').fill('A second block.');
+  await localPage.locator('#close-editor').click();
+  await localPage.locator('#blocks > .block .block-title').nth(0).click();
+  await localPage.locator('#blocks > .block .block-title').nth(1).click({ modifiers: ['Shift'] });
+  assert.equal(await localPage.locator('.selected-block').count(), 2);
+  localPage.once('dialog', dialog => dialog.accept('Local group'));
+  await localPage.locator('#board-actions').selectOption('group');
+  assert.equal(await localPage.locator('#blocks > .block').count(), 3);
+  await localPage.locator('#board-actions').selectOption('ungroup');
+  assert.equal(await localPage.locator('#blocks > .block').count(), 2);
+  await localPage.locator('#undo').click();
+  assert.equal(await localPage.locator('#blocks > .block').count(), 3);
+  await localPage.locator('#redo').click();
+  assert.equal(await localPage.locator('#blocks > .block').count(), 2);
+  await localPage.locator('#undo').click();
+  const markerDialog = dialog => dialog.accept(dialog.message().includes('name') ? 'Act I: Local story' : '0');
+  localPage.on('dialog', markerDialog);
+  await localPage.locator('#board-actions').selectOption('marker');
+  await localPage.locator('#timeline .act-marker').getByText('Act I: Local story', { exact: true }).waitFor();
+  localPage.off('dialog', markerDialog);
+  await localPage.locator('#board-actions').selectOption('compact');
+  await localPage.screenshot({ path: path.join(artifact, `browser-${staticMode ? 'static-' : ''}group-markers.png`) });
+  await localPage.locator('#blocks .beat-text').getByText('Second local beat', { exact: true }).dblclick();
+  const oldFrame = await localPage.locator('#editor').boundingBox(), handle = await localPage.locator('#editor .editor-header').boundingBox();
+  await localPage.mouse.move(handle.x + 20, handle.y + 10); await localPage.mouse.down();
+  await localPage.mouse.move(handle.x + 50, handle.y + 35); await localPage.mouse.up();
+  const newFrame = await localPage.locator('#editor').boundingBox();
+  assert.ok(newFrame.x !== oldFrame.x || newFrame.y !== oldFrame.y);
+  await localPage.locator('#close-editor').click();
+  await localPage.locator('#blocks .block-title').getByText('Local group', { exact: true }).click();
+  await localPage.locator('#board-actions').selectOption('delete');
+  assert.equal(await localPage.locator('#blocks > .block').count(), 0);
+  await localPage.locator('#undo').click();
+  assert.equal(await localPage.locator('#blocks > .block').count(), 3);
   await localPage.locator('#back').click();
   const legacy = structuredClone(localDocument.project);
   legacy.geminiApiKey = 'synthetic-unused-fixture'; legacy.vault = [{ r2SecretAccessKey: 'synthetic-unused-fixture', customField: 42 }];
@@ -156,7 +192,7 @@ try {
   assert.deepEqual(localAPIRequests, []);
   await localContext.close();
   assert.deepEqual(errors, []);
-  console.log(`PASS (${staticMode ? 'static cross-origin' : 'same-origin'}): browser account, beats/popup/causes, offline merge, project isolation, script locks, local projects/reload/offline/export without API requests`);
+  console.log(`PASS (${staticMode ? 'static cross-origin' : 'same-origin'}): browser account, popup/causes, offline merge, isolation/locks, local import/export, multi-block group/ungroup/delete/undo/redo, act markers, compaction and popup movement`);
 } catch (error) {
   const details = String(error.stack || error).replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
   console.error(`::error::${details}`);
