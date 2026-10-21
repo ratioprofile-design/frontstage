@@ -8,40 +8,54 @@ final class BeatPopupPresenter: NSObject, NSWindowDelegate {
     private(set) var panel: NSPanel?
     private(set) var beatID: String?
     private(set) var controller: ScreenplayEditorController?
+    private(set) var panels: [String: NSPanel] = [:]
+    private var controllers: [String: ScreenplayEditorController] = [:]
+    func controller(for id: String) -> ScreenplayEditorController? { controllers[id] }
 
     func open(_ id: String, workspace: Workspace, near anchor: NSRect? = nil) {
         guard (try? workspace.project.whiteboard().beats.contains { $0.id == id }) == true else { return }
-        if beatID == id, let panel { panel.makeKeyAndOrderFront(nil); return }
-        close()
+        if let panel = panels[id] { panel.makeKeyAndOrderFront(nil); return }
         let editor = ScreenplayEditorController()
-        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 580, height: 530),
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 660, height: 740),
             styleMask: [.titled, .closable, .resizable, .utilityWindow], backing: .buffered, defer: false)
         panel.title = "Edit Beat"
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
-        panel.minSize = NSSize(width: 450, height: 340)
+        panel.minSize = NSSize(width: 640, height: 440)
         panel.delegate = self
-        panel.contentView = NSHostingView(rootView: BeatPopupView(workspace: workspace, beatID: id, controller: editor, dismiss: { [weak self] in self?.close() }))
+        panel.contentView = NSHostingView(rootView: BeatPopupView(workspace: workspace, beatID: id, controller: editor, dismiss: { [weak self] in self?.close(id) }))
         let screen = NSScreen.screens.first { screen in anchor.map { screen.frame.intersects($0) } ?? false } ?? NSScreen.main
         let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1200, height: 800)
         var point = anchor.map { NSPoint(x: $0.maxX + 12, y: $0.maxY - panel.frame.height) }
-            ?? NSPoint(x: visible.midX - 290, y: visible.midY - 265)
+            ?? NSPoint(x: visible.midX - 330 + CGFloat(panels.count % 6) * 28, y: visible.midY - 370 - CGFloat(panels.count % 6) * 28)
         point.x = min(max(visible.minX + 8, point.x), visible.maxX - panel.frame.width - 8)
         point.y = min(max(visible.minY + 8, point.y), visible.maxY - panel.frame.height - 8)
         panel.setFrameOrigin(point)
         self.panel = panel; beatID = id; controller = editor
+        panels[id] = panel; controllers[id] = editor
         panel.makeKeyAndOrderFront(nil)
     }
 
     func close() {
-        panel?.contentView = nil
-        panel?.close()
+        for id in Array(panels.keys) { close(id) }
         panel = nil; beatID = nil; controller = nil
     }
+    func close(_ id: String) {
+        guard let window = panels[id] else { return }
+        window.close()
+        window.contentView = nil
+        panels.removeValue(forKey: id); controllers.removeValue(forKey: id)
+        if beatID == id { panel = nil; beatID = nil; controller = nil }
+    }
+    func windowDidBecomeKey(_ notification: Notification) {
+        guard let window = notification.object as? NSPanel, let id = panels.first(where: { $0.value === window })?.key else { return }
+        panel = window; beatID = id; controller = controllers[id]
+    }
     func windowWillClose(_ notification: Notification) {
-        panel?.contentView = nil
-        panel = nil; beatID = nil; controller = nil
+        guard let window = notification.object as? NSPanel, let id = panels.first(where: { $0.value === window })?.key else { return }
+        panels.removeValue(forKey: id); controllers.removeValue(forKey: id)
+        if beatID == id { panel = nil; beatID = nil; controller = nil }
     }
 }
 
@@ -90,7 +104,9 @@ struct BeatPopupView: View {
                     ForEach(ScreenplayElement.editable, id: \.self) { Text($0.label).tag($0) }
                 }.frame(width: 200)
                 ScreenplayEditor(html: text(\.html, label: "Snippet Text"), controller: controller, width: 432, typography: workspace.project.scriptLayout,
-                    onError: { workspace.errorMessage = $0 }, editable: workspace.project.scenes.first { $0.id == beat.sceneID }?.isTextLocked != true).id(beatID)
+                    onError: { workspace.errorMessage = $0 }, editable: workspace.project.scenes.first { $0.id == beat.sceneID }?.isTextLocked != true, paper: true).id(beatID)
+                    .environment(\.colorScheme, .light)
+                    .border(Color.black.opacity(0.2)).shadow(color: .black.opacity(0.18), radius: 4, y: 2)
                 HStack {
                     Text("Changes save to your project as you type. Esc closes this editor.")
                     Spacer()
@@ -137,11 +153,17 @@ extension Workspace {
         if let beat = whiteboard.beats.first(where: { $0.id == id }) { selectedSceneID = beat.sceneID }
     }
 
-    func addWhiteboardBeat(blockID: String? = nil, layerID: String = "main", position: BoardPoint? = nil, before: String? = nil) {
+    func addWhiteboardBeat(blockID: String? = nil, layerID: String = "main", position: BoardPoint? = nil, before: String? = nil, standalone: Bool = true) {
         var created: String?
         let location = position ?? BoardPoint(x: min(900000, max(70, (whiteboard.blocks.map { $0.position.x + $0.width }.max() ?? -214) + 60)), y: 70)
         edit("Add Whiteboard Beat") { project in
             created = try project.addBoardBeat(blockID: blockID, layerID: layerID, position: location)
+            if blockID == nil, standalone, let created {
+                try project.editWhiteboard { board in
+                    if let owner = board.beats.first(where: { $0.id == created })?.blockID,
+                       let index = board.blocks.firstIndex(where: { $0.id == owner }) { board.blocks[index].standalone = true }
+                }
+            }
             if let created, let blockID, let before { try project.moveBoardBeat(created, toBlock: blockID, before: before) }
         }
         if let created { selectBoardBeat(created); popup.open(created, workspace: self) }
@@ -151,7 +173,7 @@ extension Workspace {
         guard let beat = whiteboard.beats.first(where: { $0.id == id }) else { return }
         do {
             let source = try ScreenplayTextCodec.decode(beat.html)
-            let caret = (controller ?? popup.controller)?.textView?.selectedRange().location ?? source.length / 2
+            let caret = (controller ?? popup.controller(for: id))?.textView?.selectedRange().location ?? source.length / 2
             guard caret > 0, caret < source.length else { throw ProjectError.invalidProject("place the cursor inside the snippet before splitting") }
             let first = ScreenplayTextCodec.encode(source.attributedSubstring(from: NSRange(location: 0, length: caret)))
             let second = ScreenplayTextCodec.encode(source.attributedSubstring(from: NSRange(location: caret, length: source.length - caret)))

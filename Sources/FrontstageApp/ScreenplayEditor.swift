@@ -80,6 +80,7 @@ struct ScreenplayEditor: NSViewRepresentable {
     var typography = ScriptLayoutSettings()
     var onError: (String) -> Void
     var editable = true
+    var paper = false
 
     func makeCoordinator() -> Coordinator { Coordinator(html: $html, controller: controller, onError: onError) }
 
@@ -91,7 +92,13 @@ struct ScreenplayEditor: NSViewRepresentable {
         text.importsGraphics = false
         text.allowsUndo = true
         text.isAutomaticQuoteSubstitutionEnabled = false
-        text.textContainerInset = NSSize(width: 24, height: 24)
+        text.textContainerInset = NSSize(width: paper ? 90 : 24, height: paper ? 72 : 24)
+        if paper {
+            scroll.appearance = NSAppearance(named: .aqua)
+            text.backgroundColor = .white
+            text.minSize = NSSize(width: 612, height: 792)
+            text.setFrameSize(NSSize(width: 612, height: 792))
+        }
         text.isHorizontallyResizable = true
         text.textContainer?.widthTracksTextView = false
         text.textContainer?.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)

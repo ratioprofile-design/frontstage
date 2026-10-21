@@ -26,6 +26,8 @@ public struct BoardLayer: Codable, Identifiable, Equatable, Sendable {
 }
 
 public struct BoardBlock: Codable, Identifiable, Equatable, Sendable {
+    /// A loose beat retains its container identity for links and movement, without block chrome.
+    public var standalone: Bool?
     public var id: String
     public var name: String
     public var layerID: String

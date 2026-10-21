@@ -2,9 +2,13 @@
 
 Updated 21 October 2026. Automated checks establish the behavior they exercise; they do not establish complete Causality parity or installed-product acceptance.
 
+## Standalone beats and paper editors
+
+Mac and browser now support loose beats through + Beat, with + Block and Add to Block retaining explicit stacking. Multiple editors retain separate beat identities and close independently. Editors use white screenplay paper, Courier text, margins and format controls. Portable tests cover additive standalone persistence and old block compatibility. Browser tests cover simultaneous editing, independent dismissal, paper appearance and local save/reopen; both browser configurations passed. Native multi-editor/paper tests are added for macOS CI; current changes still await that run.
+
 ## Current automated evidence
 
-- Local Swift 6.0.3/Linux: **108 XCTest tests pass**. New coverage includes rigid group moves, nested ungrouping, protected deletion, compaction/locks/markers, snippet-aware and migration merge conflicts, interleaved script ranges, and guards against overwriting unprojected imported text.
+- Local Swift 6.0.3/Linux: **109 XCTest tests pass**. New coverage includes rigid group moves, nested ungrouping, protected deletion, compaction/locks/markers, snippet-aware and migration merge conflicts, interleaved script ranges, and guards against overwriting unprojected imported text.
 - Whiteboard geometry/index test: 10,000 blocks/beats, 50 visible-range queries, approximately 0.06 seconds in this host's debug run. Deeply nested group bounds are tested. No interactive FPS claim.
 - A 10,000-beat causal chain compacts while retaining an inherited locked start in approximately 0.09 seconds in the latest local debug run. Lock inheritance is computed once per solve instead of scanning all blocks for each beat. This is a domain benchmark, not an interactive rendering benchmark.
 - macOS [run 39558537080](https://github.com/ratioprofile-design/frontstage/actions/runs/39558537080) passed native tests, universal release compilation, bundle/plist/signature validation and artifacts. It includes act markers/group undo, popup identity, keyboard/accessibility, actual block-edge dragging, and PDF/DOCX extraction checks proving interleaved scene ranges appear in order exactly once. Sample interleaved PDF/DOCX files are included in validation artifacts.

@@ -127,11 +127,13 @@ final class NativeWhiteboard: NSView {
             let arrow = NSBezierPath(); arrow.move(to: NSPoint(x: end.x - 6, y: end.y - 3)); arrow.line(to: end); arrow.line(to: NSPoint(x: end.x - 6, y: end.y + 3)); arrow.stroke()
         }
         let groups = Set(board.blocks.compactMap(\.parentID))
+        let memberCounts = Dictionary(grouping: board.beats, by: \.blockID).mapValues(\.count)
         let sortedBlocks = board.blocks.sorted { a, b in
             if groups.contains(a.id) != groups.contains(b.id) { return groups.contains(a.id) }
             return a.id < b.id
         }
         for block in sortedBlocks {
+            if block.standalone == true && memberCounts[block.id] == 1 && !groups.contains(block.id) { continue }
             guard var rect = geometry.blockRects[block.id], rect.intersects(viewport) else { continue }
             if resizingBlock == block.id { rect.width = resizeWidth }
             if movingBlocks && expandedDragBlocks.contains(block.id) { rect.x += dragDelta.x; rect.y += dragDelta.y }
@@ -279,7 +281,16 @@ final class NativeWhiteboard: NSView {
             workspace?.edit("Move Blocks") { try $0.moveBoardBlocks(ids, delta: delta, layerID: sourceLayer == target.id ? nil : target.id, ripple: ripple) }
         } else if let beat = movingBeat {
             let point = world(convert(event.locationInWindow, from: nil))
-            if let block = hitBlock(point) {
+            let destination = hitBlock(point)
+            if let owner = board.beats.first(where: { $0.id == beat })?.blockID,
+               let block = board.blocks.first(where: { $0.id == owner }), block.standalone == true,
+               destination == nil || destination == owner {
+                let target = layerAt(point)
+                var delta = dragDelta
+                delta.y += (geometry.layerRects[block.layerID]?.y ?? 0) - (geometry.layerRects[target.id]?.y ?? 0)
+                let ripple = workspace?.whiteboardRipple ?? true
+                workspace?.edit("Move Standalone Beat") { try $0.moveBoardBlocks([owner], delta: delta, layerID: target.id, ripple: ripple) }
+            } else if let block = destination {
                 let before = geometry.hitBeat(point)
                 let moving = selection.contains(beat) ? selection : [beat]
                 if let before, moving.contains(before) { return }

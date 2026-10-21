@@ -3,6 +3,21 @@ import XCTest
 @testable import FrontstageCore
 
 final class WhiteboardTests: XCTestCase {
+    func testStandaloneContainerRoundTripsAndOlderBlocksRemainCompatible() throws {
+        var project = Project()
+        let a = try project.addBoardBeat(title: "Loose beat")
+        let b = try project.addBoardBeat(title: "Block beat")
+        let owner = try XCTUnwrap(project.whiteboard().beats.first { $0.id == a }?.blockID)
+        try project.editWhiteboard { board in
+            board.blocks[board.blocks.firstIndex { $0.id == owner }!].standalone = true
+        }
+        try project.connectBoardBeats(cause: a, effect: b)
+        let loaded = try Project(data: project.encoded()).whiteboard()
+        XCTAssertEqual(loaded.blocks.first { $0.id == owner }?.standalone, true)
+        XCTAssertNil(loaded.blocks.first { $0.id != owner }?.standalone)
+        XCTAssertNotEqual(loaded.beats[0].sceneID, loaded.beats[1].sceneID)
+        XCTAssertEqual(loaded.dependencies.count, 1)
+    }
     func testLegacyProjectionIsReadOnlyAndKeepsUntouchedUnicodeHTML() throws {
         var project = Project()
         let a = project.addScene(), b = project.addScene()

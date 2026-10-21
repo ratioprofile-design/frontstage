@@ -5,6 +5,38 @@ import FrontstageCore
 @testable import FrontstageApp
 
 final class BeatPopupTests: XCTestCase {
+    func testMultiplePaperEditorsKeepIndependentTextAndCloseIndividually() async throws {
+        try await MainActor.run {
+            _ = NSApplication.shared
+            let workspace = Workspace()
+            workspace.addWhiteboardBeat()
+            let a = try XCTUnwrap(workspace.selectedBoardBeatID)
+            let first = try XCTUnwrap(workspace.popup.controller(for: a))
+            workspace.addWhiteboardBeat()
+            let b = try XCTUnwrap(workspace.selectedBoardBeatID)
+            defer { workspace.popup.close() }
+            for panel in workspace.popup.panels.values { panel.contentView?.layoutSubtreeIfNeeded() }
+            RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+            let second = try XCTUnwrap(workspace.popup.controller(for: b))
+            XCTAssertEqual(workspace.popup.panels.count, 2)
+            XCTAssertFalse(first === second)
+            let firstText = try XCTUnwrap(first.textView), secondText = try XCTUnwrap(second.textView)
+            XCTAssertEqual(firstText.backgroundColor, .white)
+            XCTAssertEqual(firstText.textContainerInset.height, 72)
+            firstText.insertText("First paper", replacementRange: NSRange(location: 0, length: 0))
+            secondText.insertText("Second paper", replacementRange: NSRange(location: 0, length: 0))
+            XCTAssertTrue(workspace.whiteboard.beats.first { $0.id == a }!.html.contains("First paper"))
+            XCTAssertFalse(workspace.whiteboard.beats.first { $0.id == a }!.html.contains("Second paper"))
+            XCTAssertTrue(workspace.whiteboard.blocks.allSatisfy { $0.standalone == true })
+            workspace.popup.open(a, workspace: workspace)
+            XCTAssertEqual(workspace.popup.panels.count, 2)
+            workspace.popup.close(a)
+            XCTAssertNil(workspace.popup.controller(for: a))
+            XCTAssertNotNil(workspace.popup.panels[b])
+            workspace.loadCopy(Project())
+            XCTAssertTrue(workspace.popup.panels.isEmpty)
+        }
+    }
     func testPopupKeepsItsBeatIdentityWhileBoardSelectionChangesAndClosesOnImport() async throws {
         try await MainActor.run {
             _ = NSApplication.shared

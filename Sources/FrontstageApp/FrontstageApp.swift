@@ -176,7 +176,7 @@ final class Workspace: ObservableObject {
     private func reconcileSelection() {
         if !project.scenes.contains(where: { $0.id == selectedSceneID }) { selectedSceneID = project.scenes.first?.id }
         editor.textView?.undoManager?.removeAllActions()
-        popup.controller?.textView?.undoManager?.removeAllActions()
+        for id in popup.panels.keys { popup.controller(for: id)?.textView?.undoManager?.removeAllActions() }
         if !whiteboard.beats.contains(where: { $0.id == selectedBoardBeatID }) { selectedBoardBeatID = whiteboard.orderedBeats.first?.id }
     }
 
