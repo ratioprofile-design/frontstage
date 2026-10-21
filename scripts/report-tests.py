@@ -30,6 +30,13 @@ if result.exists():
             annotate(message)
     summary = f"Swift tests: {len(cases)} executed, {len(failures)} failures, {skipped} skipped.\n"
     print(summary)
+    if failures:
+        # Swift's xUnit output can contain only "failed". Preserve the actual assertion location.
+        log = Path("build/test.log")
+        if log.exists():
+            errors = [line for line in log.read_text().splitlines() if "error:" in line]
+            for line in errors[:30]:
+                annotate(line)
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as output:
             output.write(summary)
