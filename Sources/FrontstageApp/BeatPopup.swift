@@ -28,7 +28,7 @@ final class BeatPopupPresenter: NSObject, NSWindowDelegate {
         guard let beat = workspace.whiteboard.beats.first(where: { $0.id == id }) else { return }
         if let panel = panels[id] { panel.makeKeyAndOrderFront(nil); return }
         let editor = ScreenplayEditorController()
-        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 660, height: 740),
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: WorkspaceDesign.popupWidth, height: WorkspaceDesign.popupHeight),
             styleMask: [.titled, .closable, .resizable, .utilityWindow], backing: .buffered, defer: false)
         panel.title = beat.title.isEmpty ? "Edit Beat" : beat.title
         panel.isFloatingPanel = true
@@ -36,7 +36,7 @@ final class BeatPopupPresenter: NSObject, NSWindowDelegate {
         panel.isReleasedWhenClosed = false
         panel.minSize = NSSize(width: 640, height: 440)
         panel.delegate = self
-        panel.contentView = NSHostingView(rootView: BeatPopupView(workspace: workspace, beatID: id, controller: editor, dismiss: { [weak self] in self?.close(id) }))
+        panel.contentView = NSHostingView(rootView: BeatPopupView(workspace: workspace, beatID: id, controller: editor, dismiss: { [weak self] in self?.close(id) }).preferredColorScheme(.dark))
         let screen = NSScreen.screens.first { screen in anchor.map { screen.frame.intersects($0) } ?? false } ?? NSScreen.main
         let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1200, height: 800)
         var point = anchor.map { NSPoint(x: $0.maxX + 12, y: $0.maxY - panel.frame.height) }
@@ -113,11 +113,16 @@ struct BeatPopupView: View {
                     }))
                 }
                 Divider()
+                HStack {
                 Picker("Format", selection: Binding(get: { controller.activeElement }, set: { controller.format($0) })) {
                     ForEach(ScreenplayElement.editable, id: \.self) { Text($0.label).tag($0) }
                 }.frame(width: 200)
+                InlineFormatButtons(controller: controller)
+                Spacer()
+                }
                 ScreenplayEditor(html: text(\.html, label: "Snippet Text"), controller: controller, width: 432, typography: workspace.project.scriptLayout,
                     onError: { workspace.errorMessage = $0 }, editable: workspace.project.scenes.first { $0.id == beat.sceneID }?.isTextLocked != true, paper: true).id(beatID)
+                    .frame(width: WorkspaceDesign.paperWidth).frame(maxWidth: .infinity)
                     .environment(\.colorScheme, .light)
                     .border(Color.black.opacity(0.2)).shadow(color: .black.opacity(0.18), radius: 4, y: 2)
                 HStack {

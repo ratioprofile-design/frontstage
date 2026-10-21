@@ -69,12 +69,16 @@ final class Workspace: ObservableObject {
     }
     func screenplayController(in focusedWindow: NSWindow?) -> ScreenplayEditorController? {
         if let focused = popup.focusedController(in: focusedWindow) { return focused }
+        if let focused = scriptEditors.values.first(where: { controller in
+            guard let text = controller.textView, let window = text.window else { return false }
+            return focusedWindow === window && window.firstResponder === text
+        }) { return focused }
         guard let text = editor.textView, let window = text.window,
               focusedWindow === window, window.firstResponder === text else { return nil }
         return editor
     }
     enum Mode: String, CaseIterable {
-        case edit = "Write", pages = "Pages", revisions = "Revisions", board = "Whiteboard", people = "People", breakdown = "Breakdown", production = "Production", writingTools = "Writing Tools", studio = "Research & Studio", shared = "Shared Projects"
+        case board = "Whiteboard", edit = "Write", pages = "Pages", revisions = "Revisions", people = "People", breakdown = "Breakdown", production = "Production", writingTools = "Writing Tools", studio = "Research & Studio", shared = "Shared Projects"
     }
     @Published private(set) var project = Project()
     @Published var selectedSceneID: Decimal? {
@@ -99,6 +103,11 @@ final class Workspace: ObservableObject {
     private(set) var documentSessionID = UUID()
     @Published private(set) var whiteboardCache: Whiteboard?
     let editor = ScreenplayEditorController()
+    private var scriptEditors: [String: ScreenplayEditorController] = [:]
+    func scriptController(_ id: String) -> ScreenplayEditorController {
+        if let controller = scriptEditors[id] { return controller }
+        let controller = ScreenplayEditorController(); scriptEditors[id] = controller; return controller
+    }
     let popup = BeatPopupPresenter()
     let sharedProjects = SharedProjectClient()
     private var saveURL: URL?
@@ -131,6 +140,7 @@ final class Workspace: ObservableObject {
         documentSessionID = UUID()
         sharedProjects.detach()
         popup.close()
+        scriptEditors.removeAll()
         selectedBoardBeatID = nil
         recoveryTask?.cancel()
         editor.textView?.undoManager?.removeAllActions()
@@ -186,6 +196,7 @@ final class Workspace: ObservableObject {
         if !project.scenes.contains(where: { $0.id == selectedSceneID }) { selectedSceneID = project.scenes.first?.id }
         editor.textView?.undoManager?.removeAllActions()
         for id in popup.panels.keys { popup.controller(for: id)?.textView?.undoManager?.removeAllActions() }
+        for controller in scriptEditors.values { controller.textView?.undoManager?.removeAllActions() }
         if !whiteboard.beats.contains(where: { $0.id == selectedBoardBeatID }) { selectedBoardBeatID = whiteboard.orderedBeats.first?.id }
     }
 
@@ -206,7 +217,7 @@ final class Workspace: ObservableObject {
         guard confirmDiscardOrSave() else { return }
         documentSessionID = UUID()
         sharedProjects.detach()
-        popup.close(); selectedBoardBeatID = nil
+        popup.close(); scriptEditors.removeAll(); selectedBoardBeatID = nil
         recoveryTask?.cancel()
         if !recoveryBlocked {
             do { try recoveryStore?.clear() }
@@ -401,8 +412,9 @@ struct WorkspaceView: View {
                         .help("Add Scene")
                 }.padding()
             }.padding(.top)
-            .navigationSplitViewColumnWidth(min: 220, ideal: 260)
+            .navigationSplitViewColumnWidth(min: 220, ideal: WorkspaceDesign.sidebar)
         } detail: {
+            Group {
             if workspace.mode == .shared {
                 SharedProjectsView(workspace: workspace, client: workspace.sharedProjects)
             } else if workspace.mode == .studio {
@@ -431,8 +443,9 @@ struct WorkspaceView: View {
                         description: Text("Add an active scene to preview the screenplay."))
                 }
             } else {
-                StoryWorkspaceView(workspace: workspace, boardFirst: false)
+                ScriptWritingWorkspace(workspace: workspace)
             }
+            }.background(Color(boardHex: WorkspaceDesign.panelColor))
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             HStack {
@@ -453,6 +466,8 @@ struct WorkspaceView: View {
             Button("Export PDF", systemImage: "doc.richtext", action: workspace.exportPDF)
                 .disabled(!workspace.hasActiveScenes)
         }
+        .preferredColorScheme(.dark)
+        .font(.system(size: 12))
         .onChange(of: workspace.mode) { _, mode in if mode == .pages { workspace.makePreview() } }
         .onChange(of: workspace.paper) { _, _ in if workspace.mode == .pages { workspace.makePreview() } }
         .sheet(isPresented: Binding(get: { workspace.recoveryCandidate != nil }, set: { _ in })) {
@@ -514,7 +529,7 @@ struct SceneWritingView: View {
     }
 }
 
-private struct SceneHeadingFields: View {
+struct SceneHeadingFields: View {
     let scene: FrontstageCore.Scene
     @ObservedObject var workspace: Workspace
 

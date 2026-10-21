@@ -6,9 +6,44 @@ import FrontstageCore
 @MainActor
 final class ScreenplayEditorController: ObservableObject {
     @Published private(set) var activeElement = ScreenplayElement.action
+    @Published private(set) var layoutHeight: CGFloat = 80
     weak var textView: NSTextView?
     var contentWidth: CGFloat = 432
     var typography = ScriptLayoutSettings()
+    func measure() {
+        guard let textView, let container = textView.textContainer, let manager = textView.layoutManager else { return }
+        manager.ensureLayout(for: container)
+        let height = max(48, ceil(manager.usedRect(for: container).height + textView.textContainerInset.height * 2 + 8))
+        if abs(layoutHeight - height) > 1 {
+            DispatchQueue.main.async { [weak self] in self?.layoutHeight = height }
+        }
+    }
+    func toggleInlineStyle(_ style: String) {
+        guard let textView, textView.isEditable, !textView.hasMarkedText() else { return }
+        textView.window?.makeFirstResponder(textView)
+        let range = textView.selectedRange()
+        let attributes = range.length > 0 ? textView.attributedString().attributes(at: range.location, effectiveRange: nil) : textView.typingAttributes
+        let font = attributes[.font] as? NSFont ?? NSFont.monospacedSystemFont(ofSize: typography.fontSize, weight: .regular)
+        let trait: NSFontTraitMask = style == "bold" ? .boldFontMask : .italicFontMask
+        let remove = style == "underline" ? (attributes[.underlineStyle] as? Int ?? 0) != 0 : NSFontManager.shared.traits(of: font).contains(trait)
+        func adjusted(_ source: [NSAttributedString.Key: Any]) -> [NSAttributedString.Key: Any] {
+            var value = source
+            if style == "underline" { value[.underlineStyle] = remove ? 0 : NSUnderlineStyle.single.rawValue }
+            else {
+                let current = value[.font] as? NSFont ?? font
+                value[.font] = remove ? NSFontManager.shared.convert(current, toNotHaveTrait: trait) : NSFontManager.shared.convert(current, toHaveTrait: trait)
+            }
+            return value
+        }
+        if range.length == 0 { textView.typingAttributes = adjusted(attributes); return }
+        let source = textView.attributedString().attributedSubstring(from: range)
+        let replacement = NSMutableAttributedString(attributedString: source)
+        source.enumerateAttributes(in: NSRange(location: 0, length: source.length), options: []) { attributes, range, _ in
+            replacement.setAttributes(adjusted(attributes), range: range)
+        }
+        textView.insertText(replacement, replacementRange: range)
+        textView.setSelectedRange(range)
+    }
 
     func selectionChanged() {
         guard let textView, !textView.hasMarkedText() else { return }
@@ -73,6 +108,15 @@ final class ScreenplayEditorController: ObservableObject {
     }
 }
 
+final class ScreenplayTextView: NSTextView {
+    var leadingAdjustment: CGFloat = 0
+    override var textContainerOrigin: NSPoint {
+        var origin = super.textContainerOrigin
+        origin.x += leadingAdjustment
+        return origin
+    }
+}
+
 struct ScreenplayEditor: NSViewRepresentable {
     @Binding var html: String
     @ObservedObject var controller: ScreenplayEditorController
@@ -81,18 +125,28 @@ struct ScreenplayEditor: NSViewRepresentable {
     var onError: (String) -> Void
     var editable = true
     var paper = false
+    var continuous = false
 
     func makeCoordinator() -> Coordinator { Coordinator(html: $html, controller: controller, onError: onError) }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scroll = NSTextView.scrollableTextView()
-        guard let text = scroll.documentView as? NSTextView else { return scroll }
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = !continuous
+        let text = ScreenplayTextView(frame: NSRect(x: 0, y: 0, width: width + (paper ? 180 : continuous ? 0 : 48), height: 80))
+        text.isVerticallyResizable = true
+        text.autoresizingMask = [.width]
+        scroll.documentView = text
         text.isRichText = true
         text.isEditable = editable
         text.importsGraphics = false
         text.allowsUndo = true
         text.isAutomaticQuoteSubstitutionEnabled = false
-        text.textContainerInset = NSSize(width: paper ? 90 : 24, height: paper ? 72 : 24)
+        text.textContainerInset = NSSize(width: paper ? 90 : continuous ? 0 : 24, height: paper ? 72 : continuous ? 0 : 24)
+        text.leadingAdjustment = paper ? 18 : 0
+        if continuous {
+            scroll.appearance = NSAppearance(named: .aqua)
+            text.backgroundColor = .white
+        }
         if paper {
             scroll.appearance = NSAppearance(named: .aqua)
             text.backgroundColor = .white
@@ -108,6 +162,7 @@ struct ScreenplayEditor: NSViewRepresentable {
         controller.contentWidth = width
         controller.typography = typography
         context.coordinator.load(html, into: text)
+        controller.measure()
         return scroll
     }
 
@@ -123,6 +178,7 @@ struct ScreenplayEditor: NSViewRepresentable {
             text.textContainer?.containerSize.width = width
             context.coordinator.load(html, into: text)
         } else if context.coordinator.lastHTML != html { context.coordinator.load(html, into: text) }
+        controller.measure()
     }
 
     @MainActor
@@ -156,6 +212,7 @@ struct ScreenplayEditor: NSViewRepresentable {
                 text.typingAttributes = ScreenplayTypography.attributes(
                     ScreenplayTextCodec.element(in: attributed, at: 0), width: controller.contentWidth, settings: controller.typography)
                 lastHTML = source
+                controller.measure()
             } catch {
                 // Show the original source as a recoverable fallback; never silently blank an import.
                 text.string = source
@@ -186,6 +243,7 @@ struct ScreenplayEditor: NSViewRepresentable {
             lastHTML = result
             html.wrappedValue = result
             controller.selectionChanged()
+            controller.measure()
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {

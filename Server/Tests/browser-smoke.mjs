@@ -24,7 +24,7 @@ async function wait(check, message) { for (let i = 0; i < 100; i++) { if (server
 try {
   await wait(async () => (await fetch(address + '/health')).ok, 'Server startup');
   if (staticMode) {
-    const types = { 'index.html': 'text/html', 'style.css': 'text/css', 'app.js': 'application/javascript', 'merge.js': 'application/javascript', 'board-operations.js': 'application/javascript', 'config.js': 'application/javascript', 'sw.js': 'application/javascript' };
+    const types = { 'index.html': 'text/html', 'style.css': 'text/css', 'app.js': 'application/javascript', 'merge.js': 'application/javascript', 'board-operations.js': 'application/javascript', 'config.js': 'application/javascript', 'sw.js': 'application/javascript', 'workspace-design.js': 'application/javascript', 'workspace-design.css': 'text/css', 'workspace-model.js': 'application/javascript', 'workspaces.js': 'application/javascript', 'pagination.js': 'application/javascript', 'workspaces.css': 'text/css', 'screenplay-editor.js': 'application/javascript', 'bamini.js': 'application/javascript' };
     staticServer = createServer(async (request, response) => {
       const file = request.url === '/' ? 'index.html' : request.url.slice(1);
       if (!types[file]) { response.writeHead(404); response.end(); return; }
@@ -171,9 +171,9 @@ try {
   await localPage.locator('#board-actions').selectOption('compact');
   await localPage.screenshot({ path: path.join(artifact, `browser-${staticMode ? 'static-' : ''}group-markers.png`) });
   await localPage.locator('#blocks .beat-text').getByText('Second local beat', { exact: true }).dblclick();
-  const oldFrame = await localPage.locator('.beat-popup.active').boundingBox(), handle = await localPage.locator('.beat-popup.active .editor-header').boundingBox();
-  await localPage.mouse.move(handle.x + 20, handle.y + 10); await localPage.mouse.down();
-  await localPage.mouse.move(handle.x + 50, handle.y + 35); await localPage.mouse.up();
+  const oldFrame = await localPage.locator('.beat-popup.active').boundingBox(), handle = await localPage.locator('.beat-popup.active .editor-grip').boundingBox();
+  await localPage.mouse.move(handle.x + 8, handle.y + 8); await localPage.mouse.down();
+  await localPage.mouse.move(handle.x - 22, handle.y - 17); await localPage.mouse.up();
   const newFrame = await localPage.locator('.beat-popup.active').boundingBox();
   assert.ok(newFrame.x !== oldFrame.x || newFrame.y !== oldFrame.y);
   await localPage.locator('.beat-popup.active [data-field="close-editor"]').click();
@@ -267,7 +267,7 @@ try {
   await localPage.locator('#back').click();
   await localPage.getByRole('button', { name: 'Invalid fixture · on this device', exact: true }).click();
   await wait(async () => (await localPage.locator('#status').innerText()).includes('invalid identifiers'), 'Invalid cached project rejected');
-  await localPage.locator('#save').click();
+  await localPage.keyboard.press('Control+s');
   const retainedInvalid = await localPage.evaluate(async () => {
     const db = await new Promise(resolve => { const request = indexedDB.open('frontstage-offline', 1); request.onsuccess = () => resolve(request.result); });
     return await new Promise(resolve => { const request = db.transaction('projects').objectStore('projects').get('invalid-fixture'); request.onsuccess = () => resolve(request.result); });

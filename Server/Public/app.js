@@ -1,3 +1,6 @@
+import { mountWorkspaces } from './workspaces.js';
+import { splitAtCaret, screenplayToolbar } from './screenplay-editor.js';
+import { splitBeat } from './workspace-model.js';
 import { mergeDocuments } from './merge.js';
 import { apiOrigin as configuredOrigin } from './config.js';
 import { causalOrder as orderCauses, compactCausalTime, groupBlocks, ungroupBlocks, moveBlocks, moveStandaloneBeats, descendantBlocks, deleteBlocks, validateBoard } from './board-operations.js';
@@ -83,7 +86,7 @@ async function loadLocalProjects() {
     const button = element('button', `${copy.name || 'Untitled Story'} · on this device`);
     button.onclick = () => openLocalProject(copy.id).catch(e => status(e.message)); $('project-list').append(button);
   }
-  $('account').hidden = true; $('projects').hidden = false; $('workspace').hidden = true;
+  $('account').hidden = true; $('projects').hidden = false; $('workspace').hidden = true; $('project-toolbar').hidden = true;
   $('logout').textContent = 'Sign In'; status('Local projects · saved in this browser');
   if (!copies.length) await createLocalProject('Untitled Story');
 }
@@ -147,7 +150,7 @@ function compileSnippets() {
 function edit(action) {
   if (!doc || current.access === 'reader') return;
   const previous = clone(doc);
-  try { action(); compileSnippets(); if (equal(previous, doc)) return; history.push(previous); future.length = 0; if (history.length > 40) history.shift(); dirty = true; saveLocal().catch(e => status(`Local save failed: ${e.message}`)); render(); clearTimeout(timer); timer = setTimeout(sync, 800); }
+  try { action(); validateBoard(board(), new Set(doc.project.beats.map(s => s.id))); compileSnippets(); if (equal(previous, doc)) return; history.push(previous); future.length = 0; if (history.length > 40) history.shift(); dirty = true; saveLocal().catch(e => status(`Local save failed: ${e.message}`)); render(); clearTimeout(timer); timer = setTimeout(sync, 800); }
   catch (error) { doc = previous; render(); status(error.message); }
 }
 function restoreHistory(from, to) {
@@ -188,7 +191,7 @@ async function loadProjects() {
   localMode = false; $('logout').textContent = 'Sign Out';
   const { data } = await api('/api/projects'); $('project-list').replaceChildren();
   for (const project of data) { const button = element('button', `${project.name} · ${project.access} · revision ${project.revision}`); button.onclick = () => openProject(project.id).catch(e => status(e.message)); $('project-list').append(button); }
-  $('account').hidden = true; $('projects').hidden = false; $('workspace').hidden = true;
+  $('account').hidden = true; $('projects').hidden = false; $('workspace').hidden = true; $('project-toolbar').hidden = true;
 }
 async function openProject(id) {
   const epoch = ++documentEpoch; clearTimeout(timer);
@@ -334,7 +337,9 @@ function render() {
     const beat = board().beats.find(b => b.id === id);
     if (!beat) { closeEditor(id); continue; }
     panel.querySelector('[data-field="snippet-editor"]').contentEditable = current.access === 'reader' || doc.project.beats.find(s => s.id === beat.sceneID)?.frontstageTextLocked ? 'false' : 'true';
-  }
+  }  $('board-project-name').textContent = doc.name || 'Untitled Story';
+  refreshEditors();
+  workspaces.render();
 }
 function renderProperties() {
   const beat = board().beats.find(b => b.id === selected), target = $('beat-properties'); target.replaceChildren(); if (!beat) { target.textContent = 'Select a beat. Double-click to edit its snippet.'; return; }
@@ -398,7 +403,7 @@ function refreshEditors() {
     for (const [name, key] of editorFields) {
       const input = panel.querySelector(`[data-field="${name}"]`);
       if (key === 'mustBeCaused') input.checked = beat[key];
-      else input.value = Array.isArray(beat[key]) ? beat[key].join(', ') : beat[key];
+      else { const value = Array.isArray(beat[key]) ? beat[key].join(', ') : (beat[key] ?? ''); if (input.value !== value) input.value = value; }
     }
     const text = panel.querySelector('[data-field="snippet-editor"]'), html = cleanHTML(beat.html);
     if (cleanHTML(text.innerHTML) !== html) text.innerHTML = html;
@@ -433,36 +438,32 @@ function openEditor(id) {
   field('close-editor').onclick = () => closeEditor(id);
   for (const [name, key] of editorFields) {
     const input = field(name);
-    if (key === 'mustBeCaused') input.checked = beat[key]; else input.value = Array.isArray(beat[key]) ? beat[key].join(', ') : beat[key];
+    if (key === 'mustBeCaused') input.checked = beat[key]; else { const value = Array.isArray(beat[key]) ? beat[key].join(', ') : (beat[key] ?? ''); if (input.value !== value) input.value = value; }
     input.disabled = current.access === 'reader';
     input.oninput = () => edit(() => { const target = board().beats.find(b => b.id === id); if (target) target[key] = key === 'mustBeCaused' ? input.checked : ['characters', 'tags'].includes(key) ? list(input.value) : input.value; });
   }
+  field('editor-label').style.backgroundColor = /^#[a-f0-9]{6}$/i.test(beat.color) ? beat.color : '#a34eae';
   const text = field('snippet-editor'); text.innerHTML = cleanHTML(beat.html);
   text.contentEditable = current.access === 'reader' || doc.project.beats.find(s => s.id === beat.sceneID)?.frontstageTextLocked ? 'false' : 'true';
   text.oninput = () => { const html = cleanHTML(text.innerHTML); edit(() => { const target = board().beats.find(b => b.id === id); if (target) target.html = html; }); };
-  for (const format of ['bold', 'italic']) field(format).onclick = () => { text.focus(); document.execCommand(format); };
-  field('element').onchange = () => {
-    let node = window.getSelection()?.anchorNode?.parentElement;
-    if (!node || !text.contains(node)) return;
-    while (node.parentElement !== text && node !== text) node = node.parentElement;
-    if (node === text) { text.focus(); document.execCommand('formatBlock', false, 'p'); node = window.getSelection()?.anchorNode?.parentElement; }
-    if (node && node !== text && text.contains(node)) { node.className = `sc-line sc-${field('element').value}`; text.dispatchEvent(new Event('input')); }
-  };
+  field('element').parentElement.replaceWith(screenplayToolbar(text, () => text.dispatchEvent(new Event('input')), text.contentEditable === 'true'));
   const place = (x, y) => {
     const rect = panel.getBoundingClientRect();
     panel.style.left = `${Math.max(8, Math.min(x, innerWidth - rect.width - 8))}px`;
-    panel.style.top = `${Math.max(8, Math.min(y, innerHeight - rect.height - 8))}px`;
+    panel.style.top = `${Math.max(60, Math.min(y, innerHeight - rect.height - 36))}px`;
   };
   const tile = [...$('blocks').querySelectorAll('[data-beat-id]')].find(node => node.dataset.beatId === id);
   tile?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   const rect = tile?.getBoundingClientRect(); place((rect?.right || 120) + 12 + editors.size * 24, (rect?.top || 80) - 25 + editors.size * 24);
   panel.querySelector('.editor-header').onpointerdown = event => {
-    if (event.target.closest('button')) return;
+    if (event.target.closest('button, input, select, textarea')) return;
     event.preventDefault(); const header = event.currentTarget, frame = panel.getBoundingClientRect(), x = event.clientX, y = event.clientY;
     header.setPointerCapture(event.pointerId);
     header.onpointermove = e => place(frame.left + e.clientX - x, frame.top + e.clientY - y);
     header.onpointerup = header.onpointercancel = () => { header.onpointermove = null; header.onpointerup = null; header.onpointercancel = null; };
   };
+  field('split-beat').onpointerdown = e => e.preventDefault();
+  field('split-beat').onclick = () => { try { const [first, second] = splitAtCaret(text); let next; edit(() => { next = splitBeat(doc, id, cleanHTML(first), cleanHTML(second)); }); if (next && board().beats.some(b => b.id === next)) { refreshEditors(); openEditor(next); } } catch (e) { status(e.message); } };
   field('beat-title').focus();
 }
 function addBeat(standalone = false) {
@@ -502,7 +503,7 @@ $('login').onsubmit = e => { e.preventDefault(); authenticate(); }; $('signup').
 $('local-mode').onclick = () => loadLocalProjects().catch(e => status(e.message));
 $('new-project').onclick = async () => { const name = prompt('Project name', 'Untitled Story'); if (!name) return; try { const document = emptyDocument(name); if (localMode) { await createLocalProject(name, document); return; } const { data } = await api('/api/projects', 'POST', { document }); await openProject(data.id); } catch (error) { status(error.message); } };
 $('import-project').onchange = async e => { try { const file = e.target.files[0]; if (!file) return; const document = initializeBoard(JSON.parse(await file.text())); if (localMode) { await createLocalProject(document.name, document); return; } const { data } = await api('/api/projects', 'POST', { document }); await openProject(data.id); } catch (error) { status(error.message); } };
-$('logout').onclick = async () => { await saveLocal(); ++documentEpoch; clearTimeout(timer); if (token) { try { await api('/api/logout', 'POST'); } catch {} } token = ''; current = null; doc = null; dirty = false; localMode = false; pendingConflict = null; $('conflict').hidden = true; $('workspace').hidden = true; $('projects').hidden = true; $('account').hidden = false; closeEditors(); status('Local projects and drafts remain in this browser'); };
+$('logout').onclick = async () => { await saveLocal(); ++documentEpoch; clearTimeout(timer); if (token) { try { await api('/api/logout', 'POST'); } catch {} } token = ''; current = null; doc = null; dirty = false; localMode = false; pendingConflict = null; $('conflict').hidden = true; $('workspace').hidden = true; $('project-toolbar').hidden = true; $('projects').hidden = true; $('account').hidden = false; closeEditors(); status('Local projects and drafts remain in this browser'); };
 $('back').onclick = async () => { await saveLocal(); closeEditors(); editorID = null; (localMode ? loadLocalProjects() : loadProjects()).catch(e => status(e.message)); };
 $('save').onclick = sync; $('download').onclick = download; $('export-conflict').onclick = download;
 $('undo').onclick = () => restoreHistory(history, future); $('redo').onclick = () => restoreHistory(future, history);
@@ -518,6 +519,8 @@ $('board-actions').onchange = () => {
   if (action === 'compact') edit(() => { doc.project.frontstageWhiteboard = compactCausalTime(board()); });
   if (action === 'delete') edit(() => { doc = deleteBlocks(doc, selectedBlocks); });
 };
+$('timeline-toggle').onclick = () => { $('timeline').hidden = !$('timeline').hidden; };
+$('properties-toggle').onclick = () => { $('properties').hidden = !$('properties').hidden; };
 $('script-toggle').onclick = () => { $('script').hidden = !$('script').hidden; };
 $('add-beat').onclick = () => addBeat(true); $('add-to-block').onclick = () => addBeat(); $('add-block').onclick = () => { selected = null; addBeat(); };
 $('add-layer').onclick = () => { const name = prompt('Layer name', 'New Layer'); if (name) edit(() => board().layers.push({ id: uuid(), name, height: 300, collapsed: false, locked: false, unused: false })); };
@@ -539,3 +542,14 @@ setInterval(async () => {
     if (data.revision !== current.revision) { const nextDocument = initializeBoard(clone(data.document)); current = data; base = clone(data.document); doc = nextDocument; render(); await saveLocal(); status(`Updated · revision ${current.revision}`); }
   } catch {}
 }, 5000);
+
+const workspaces = mountWorkspaces({
+  document: () => doc, current: () => current, edit, status, cleanHTML, plain,
+  selectedScene: () => board().beats.find(b => b.id === selected)?.sceneID,
+  selectScene: id => { const beat = board().beats.find(b => b.sceneID === id); if (beat) { selected = beat.id; selectedBeats = new Set([selected]); } },
+  selectBeat: id => choose(id), openBeat: openEditor,
+  addScene: () => { selected = null; addBeat(true); if (selected) closeEditor(selected); },
+  projects: () => $('back').click(), sync, download,
+  connect: () => { download(); $('logout').click(); },
+  share: async (username, access) => { if (!username.trim()) throw Error('Enter a registered username.'); await api(`/api/projects/${current.id}/members`, 'POST', {username, access: access === 'remove' ? null : access}); status(`Access updated for ${username}`); }
+});

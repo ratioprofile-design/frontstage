@@ -32,6 +32,8 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p build
+          node scripts/generate-workspace-design.mjs --check
+          node Server/Tests/workspace-model.mjs
           node Server/Tests/merge.mjs
           node Server/Tests/board-operations.mjs
           node Server/Tests/browser-smoke.mjs 2>&1 | tee build/browser.log

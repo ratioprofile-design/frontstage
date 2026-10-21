@@ -7,13 +7,25 @@ permissions:
 jobs:
   macos:
     runs-on: macos-15
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Check toolchain
         run: swift --version
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate shared design and browser workspaces
+        run: |
+          npm install --prefix Server/Tests --no-save --no-package-lock playwright@1.56.1
+          Server/Tests/node_modules/.bin/playwright install chromium
+          node scripts/generate-workspace-design.mjs --check
+          node Server/Tests/workspace-model.mjs
+          node Server/Tests/workspace-parity.mjs
       - name: Test project model and persistence
         env:
+          FRONTSTAGE_PARITY_OUTPUT: ${{ github.workspace }}/build/parity
+          FRONTSTAGE_PARITY_DOCUMENT: ${{ github.workspace }}/build/parity/browser-edited.frontstage
           FRONTSTAGE_TEST_ARTIFACTS: ${{ github.workspace }}/build/test-artifacts
         run: |
           set -o pipefail
@@ -42,3 +54,8 @@ jobs:
             build/test.log
             build/build.log
             build/test-artifacts/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Frontstage-page-parity
+          path: build/parity/
