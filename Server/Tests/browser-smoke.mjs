@@ -14,10 +14,13 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const directory = await mkdtemp(path.join(tmpdir(), 'frontstage-browser-'));
 const port = 17843, address = `http://127.0.0.1:${port}`;
 const staticMode = process.env.FRONTSTAGE_STATIC_BROWSER === '1', webAddress = staticMode ? 'http://127.0.0.1:17844' : address;
-const server = spawn(path.join(root, '.build/debug/FrontstageServer'), ['serve', '--hostname', '127.0.0.1', '--port', String(port)], { cwd: root, env: { ...process.env, FRONTSTAGE_DATA_DIR: directory, FRONTSTAGE_ALLOW_SIGNUP: '1', ...(staticMode ? { FRONTSTAGE_WEB_ORIGIN: webAddress } : {}) }, stdio: 'ignore' });
+const server = spawn(path.join(root, '.build/debug/FrontstageServer'), ['serve', '--hostname', '127.0.0.1', '--port', String(port)], { cwd: root, env: { ...process.env, FRONTSTAGE_DATA_DIR: directory, FRONTSTAGE_ALLOW_SIGNUP: '1', ...(staticMode ? { FRONTSTAGE_WEB_ORIGIN: webAddress } : {}) }, stdio: ['ignore', 'pipe', 'pipe'] });
+let serverOutput = '', serverHead = '';
+for (const stream of [server.stdout, server.stderr]) stream.on('data', data => { serverHead = (serverHead + data.toString()).slice(0, 2048); serverOutput = (serverOutput + data.toString()).slice(-1024); });
+server.on('error', error => { serverOutput = error.message; });
 let staticServer;
 let browser;
-async function wait(check, message) { for (let i = 0; i < 100; i++) { if (await check().catch(() => false)) return; await new Promise(r => setTimeout(r, 200)); } throw Error(message); }
+async function wait(check, message) { for (let i = 0; i < 100; i++) { if (server.exitCode !== null || server.signalCode !== null) throw Error(`Server exited: ${serverHead}\n${serverOutput}`); if (await check().catch(() => false)) return; await new Promise(r => setTimeout(r, 200)); } throw Error(message + (serverHead ? ': ' + serverHead : serverOutput)); }
 try {
   await wait(async () => (await fetch(address + '/health')).ok, 'Server startup');
   if (staticMode) {
@@ -216,7 +219,8 @@ try {
 } finally {
   if (browser) await browser.close();
   if (staticServer) { staticServer.closeAllConnections(); await new Promise(resolve => staticServer.close(resolve)); }
-  server.kill('SIGTERM');
-  await new Promise(resolve => server.once('exit', resolve));
+  if (server.exitCode === null && server.signalCode === null) {
+    const stopped = new Promise(resolve => server.once('exit', resolve)); server.kill('SIGTERM'); await stopped;
+  }
   await rm(directory, { recursive: true, force: true });
 }
