@@ -1,6 +1,6 @@
 import { mergeDocuments } from './merge.js';
 import { apiOrigin as configuredOrigin } from './config.js';
-import { causalOrder as orderCauses, compactCausalTime, groupBlocks, ungroupBlocks, moveBlocks, descendantBlocks, deleteBlocks, validateBoard } from './board-operations.js';
+import { causalOrder as orderCauses, compactCausalTime, groupBlocks, ungroupBlocks, moveBlocks, moveStandaloneBeats, descendantBlocks, deleteBlocks, validateBoard } from './board-operations.js';
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
 
@@ -152,7 +152,8 @@ function edit(action) {
 }
 function restoreHistory(from, to) {
   if (!doc || current.access === 'reader' || !from.length) return;
-  to.push(clone(doc)); doc = from.pop(); dirty = true; editorID = null; closeEditors();
+  to.push(clone(doc)); doc = from.pop(); dirty = true;
+  refreshEditors();
   saveLocal().catch(e => status(`Local save failed: ${e.message}`)); render(); clearTimeout(timer); timer = setTimeout(sync, 800);
 }
 async function sync() {
@@ -293,6 +294,7 @@ function render() {
     };
     node.ondragover = e => e.preventDefault(); node.ondrop = e => {
       e.preventDefault(); e.stopPropagation(); const id = e.dataTransfer.getData('text/frontstage-beat'), moving = board().beats.find(b => b.id === id); if (!moving || locked(moving) || locked({ blockID: block.id })) return;
+      if (moving.blockID === block.id && block.standalone) { dropStandaloneBeats(e); return; }
       edit(() => { moving.blockID = block.id; moving.order = Math.max(-1, ...board().beats.filter(b => b.blockID === block.id && b.id !== id).map(b => b.order)) + 1; });
     };
     if (!block.collapsed) for (const beat of board().beats.filter(b => b.blockID === block.id).sort((a, b) => a.order - b.order)) {
@@ -301,7 +303,11 @@ function render() {
       tile.append(element('span', beat.title, 'beat-text')); tile.draggable = current.access !== 'reader' && !locked(beat);
       if (warning.has(beat.id)) tile.append(element('span', '!', 'badge'));
       tile.onclick = e => { e.stopPropagation(); choose(beat.id, e.shiftKey); }; tile.ondblclick = () => openEditor(beat.id);
-      tile.ondragstart = e => e.dataTransfer.setData('text/frontstage-beat', beat.id);
+      tile.ondragstart = e => {
+        e.dataTransfer.setData('text/frontstage-beat', beat.id);
+        const frame = node.getBoundingClientRect();
+        e.dataTransfer.setData('text/frontstage-grab-offset', `${e.clientX - frame.left},${e.clientY - frame.top}`);
+      };
       node.append(tile);
     }
     $('blocks').append(node);
@@ -384,11 +390,29 @@ function editMarker(marker = null) {
 }
 const editors = new Map();
 let editorStack = 20;
+const editorFields = [['beat-title', 'title'], ['beat-synopsis', 'synopsis'], ['beat-kind', 'kind'], ['must-cause', 'mustBeCaused'], ['beat-characters', 'characters'], ['beat-tags', 'tags']];
+function refreshEditors() {
+  for (const [id, panel] of editors) {
+    const beat = board().beats.find(b => b.id === id);
+    if (!beat) { closeEditor(id); continue; }
+    for (const [name, key] of editorFields) {
+      const input = panel.querySelector(`[data-field="${name}"]`);
+      if (key === 'mustBeCaused') input.checked = beat[key];
+      else input.value = Array.isArray(beat[key]) ? beat[key].join(', ') : beat[key];
+    }
+    const text = panel.querySelector('[data-field="snippet-editor"]'), html = cleanHTML(beat.html);
+    if (cleanHTML(text.innerHTML) !== html) text.innerHTML = html;
+  }
+}
 function closeEditors() { for (const id of [...editors.keys()]) closeEditor(id); }
 function closeEditor(id) {
+  const hadFocus = editors.get(id)?.contains(document.activeElement), wasActive = editorID === id;
   editors.get(id)?.remove(); editors.delete(id);
-  editorID = [...editors.keys()].at(-1) || null;
-  if (editorID) activateEditor(editorID);
+  if (wasActive) {
+    editorID = [...editors.keys()].sort((a, b) => Number(editors.get(a).style.zIndex) - Number(editors.get(b).style.zIndex)).at(-1) || null;
+    if (editorID) { activateEditor(editorID); if (hadFocus) editors.get(editorID).querySelector('[data-field="snippet-editor"]').focus(); }
+    else if (hadFocus) $('canvas').focus();
+  }
 }
 function activateEditor(id) {
   editorID = id;
@@ -397,7 +421,7 @@ function activateEditor(id) {
 }
 function openEditor(id) {
   const beat = board().beats.find(b => b.id === id); if (!beat) return;
-  if (editors.has(id)) { activateEditor(id); return; }
+  if (editors.has(id)) { activateEditor(id); editors.get(id).querySelector('[data-field="snippet-editor"]').focus(); return; }
   const panel = $('editor').cloneNode(true); panel.hidden = false;
   panel.classList.add('beat-popup'); panel.dataset.beatId = id;
   for (const field of [panel, ...panel.querySelectorAll('[id]')]) { field.dataset.field = field.id; field.id = `${id}-${field.id}`; }
@@ -407,7 +431,7 @@ function openEditor(id) {
   panel.addEventListener('pointerdown', () => activateEditor(id));
   panel.addEventListener('focusin', () => activateEditor(id));
   field('close-editor').onclick = () => closeEditor(id);
-  for (const [name, key] of [['beat-title', 'title'], ['beat-synopsis', 'synopsis'], ['beat-kind', 'kind'], ['must-cause', 'mustBeCaused'], ['beat-characters', 'characters'], ['beat-tags', 'tags']]) {
+  for (const [name, key] of editorFields) {
     const input = field(name);
     if (key === 'mustBeCaused') input.checked = beat[key]; else input.value = Array.isArray(beat[key]) ? beat[key].join(', ') : beat[key];
     input.disabled = current.access === 'reader';
@@ -455,15 +479,19 @@ function addBeat(standalone = false) {
   }); openEditor(selected);
 }
 $('canvas').ondragover = e => e.preventDefault();
-$('canvas').ondrop = e => {
+$('canvas').ondrop = dropStandaloneBeats;
+function dropStandaloneBeats(e) {
   e.preventDefault();
   const id = e.dataTransfer.getData('text/frontstage-beat'), beat = board().beats.find(b => b.id === id);
   const block = board().blocks.find(b => b.id === beat?.blockID);
   if (!beat || !block?.standalone || locked(beat)) return;
   const frame = $('canvas').getBoundingClientRect(), rect = geometry().blocks.get(block.id);
   if (!rect) return;
-  edit(() => { doc.project.frontstageWhiteboard = moveBlocks(board(), new Set([block.id]), e.clientX - frame.left + $('canvas').scrollLeft - rect.x, e.clientY - frame.top + $('canvas').scrollTop - rect.y); });
-};
+  const offset = e.dataTransfer.getData('text/frontstage-grab-offset').split(',').map(Number);
+  const [ox, oy] = offset.length === 2 && offset.every(Number.isFinite) ? offset : [0, 0];
+  const ids = selectedBeats.has(id) ? selectedBeats : new Set([id]);
+  edit(() => { doc.project.frontstageWhiteboard = moveStandaloneBeats(board(), ids, e.clientX - frame.left + $('canvas').scrollLeft - rect.x - ox, e.clientY - frame.top + $('canvas').scrollTop - rect.y - oy); });
+}
 function download() { if (!doc) return; const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' }); const link = element('a'); link.href = URL.createObjectURL(blob); link.download = `${doc.name || 'Story'}.frontstage`; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 1000); }
 async function authenticate(signup = false) {
   const form = new FormData($('login')); $('auth-error').textContent = '';

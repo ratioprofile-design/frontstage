@@ -430,6 +430,21 @@ extension Project {
         }
     }
 
+    public mutating func moveStandaloneBeats(_ ids: Set<String>, delta: BoardPoint, layerID: String? = nil, ripple: Bool = false) throws {
+        let board = try whiteboard()
+        let beats = board.beats.filter { ids.contains($0.id) }
+        let owners = Set(beats.map(\.blockID))
+        let blocks = board.blocks.filter { owners.contains($0.id) }
+        let counts = Dictionary(grouping: board.beats, by: \.blockID).mapValues(\.count)
+        guard !ids.isEmpty, beats.count == ids.count, beats.allSatisfy({ !board.isLocked($0) }),
+              blocks.count == ids.count, Set(blocks.map(\.layerID)).count == 1,
+              blocks.allSatisfy({ $0.standalone == true && counts[$0.id] == 1 }),
+              !board.blocks.contains(where: { $0.parentID.map(owners.contains) == true }) else {
+            throw ProjectError.invalidProject("select unlocked standalone beats in one layer to move together")
+        }
+        try moveBoardBlocks(owners, delta: delta, layerID: layerID, ripple: ripple)
+    }
+
     public mutating func resizeBoardBlock(_ id: String, width: Double) throws {
         try editWhiteboard { board in
             guard let index = board.blocks.firstIndex(where: { $0.id == id }), !board.isBlockLocked(id),

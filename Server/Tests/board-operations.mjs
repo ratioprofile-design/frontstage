@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { groupBlocks, ungroupBlocks, moveBlocks, compactCausalTime, deleteBlocks, validateBoard } from '../Public/board-operations.js';
+import { groupBlocks, ungroupBlocks, moveBlocks, moveStandaloneBeats, compactCausalTime, deleteBlocks, validateBoard } from '../Public/board-operations.js';
 const board = { version: 1, layers: [{ id: 'main', unused: false }], blocks: [
   { id: 'a', layerID: 'main', position: { x: 40, y: 50 }, width: 224 }, { id: 'b', layerID: 'main', position: { x: 280, y: 90 }, width: 224 }
 ], beats: [
@@ -7,6 +7,17 @@ const board = { version: 1, layers: [{ id: 'main', unused: false }], blocks: [
   { id: 'second', sceneID: 2, blockID: 'b', title: 'Second', start: 50, duration: 1, order: 1 }
 ], dependencies: [{ id: 'edge', cause: 'first', effect: 'second' }] };
 const grouped = groupBlocks(board, new Set(['a', 'b']), 'Act I', 'group');
+const loose = structuredClone(board); loose.blocks.forEach(b => b.standalone = true);
+const looseMoved = moveStandaloneBeats(loose, new Set(['first', 'second']), -1000, 14);
+assert.deepEqual(looseMoved.blocks.map(b => b.position), [{ x: 0, y: 60 }, { x: 240, y: 100 }]);
+assert.deepEqual(looseMoved.beats, loose.beats);
+assert.equal(moveStandaloneBeats(loose, new Set(['first']), -15, 0).blocks[0].position.x, 20);
+const looseLocked = structuredClone(loose); looseLocked.beats[1].locked = true;
+const beforeLooseLocked = structuredClone(looseLocked);
+assert.throws(() => moveStandaloneBeats(looseLocked, new Set(['first', 'second']), 10, 10));
+assert.deepEqual(looseLocked, beforeLooseLocked);
+const stacked = structuredClone(loose); stacked.beats.push({ ...stacked.beats[0], id: 'third' });
+assert.throws(() => moveStandaloneBeats(stacked, new Set(['first']), 10, 10));
 assert.equal(board.blocks.length, 2);
 const moved = moveBlocks(grouped, new Set(['group']), -1000, -1000);
 assert.equal(moved.blocks[1].position.x - moved.blocks[0].position.x, 240);

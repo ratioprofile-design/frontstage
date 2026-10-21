@@ -80,6 +80,16 @@ export function moveBlocks(source, ids, dx, dy) {
   }
   return board;
 }
+export function moveStandaloneBeats(source, ids, dx, dy) {
+  const beats = source.beats.filter(b => ids.has(b.id)), owners = new Set(beats.map(b => b.blockID));
+  const blocks = source.blocks.filter(b => owners.has(b.id)), counts = new Map();
+  for (const beat of source.beats) counts.set(beat.blockID, (counts.get(beat.blockID) || 0) + 1);
+  if (!ids.size || beats.length !== ids.size || beats.some(b => b.locked) || blocks.length !== ids.size ||
+      new Set(blocks.map(b => b.layerID)).size !== 1 || blocks.some(b => b.standalone !== true || counts.get(b.id) !== 1) ||
+      source.blocks.some(b => owners.has(b.parentID))) throw Error('Select unlocked standalone beats in one layer to move together.');
+  const snap = n => Math.sign(n) * Math.round(Math.abs(n) / 10) * 10;
+  return moveBlocks(source, owners, snap(dx), snap(dy));
+}
 export function groupBlocks(source, ids, name, id) {
   const board = copy(source), items = board.blocks.filter(b => ids.has(b.id));
   if (items.length !== ids.size || items.length < 2 || items.some(b => blockLocked(board, b.id)) || new Set(items.map(b => b.layerID)).size !== 1 || items.some(b => b.parentID !== items[0].parentID)) throw Error('Select at least two unlocked blocks with the same layer and parent.');

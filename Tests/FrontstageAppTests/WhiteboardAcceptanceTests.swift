@@ -7,6 +7,39 @@ import FrontstageCore
 @testable import FrontstageApp
 
 final class WhiteboardAcceptanceTests: XCTestCase {
+    func testDraggingSelectedStandaloneCardsMovesBothAndUndoRestoresThem() async throws {
+        try await MainActor.run {
+            _ = NSApplication.shared
+            let workspace = Workspace()
+            workspace.whiteboardRipple = false
+            workspace.addWhiteboardBeat(position: .init(x: 50, y: 70))
+            let a = try XCTUnwrap(workspace.selectedBoardBeatID)
+            workspace.addWhiteboardBeat(position: .init(x: 400, y: 70))
+            let b = try XCTUnwrap(workspace.selectedBoardBeatID)
+            workspace.popup.close()
+            let original = workspace.whiteboard
+            let canvas = NativeWhiteboard(frame: NSRect(x: 0, y: 0, width: 1000, height: 600))
+            canvas.workspace = workspace; canvas.board = original; canvas.selection = [a, b]
+            let window = NSWindow(contentRect: canvas.frame, styleMask: [.titled], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false; window.contentView = canvas
+            defer { window.close() }
+            let rect = try XCTUnwrap(WhiteboardLayout(original).beatRects[a])
+            @MainActor func mouse(_ type: NSEvent.EventType, dx: Double) throws -> NSEvent {
+                let point = canvas.convert(NSPoint(x: rect.center.x + dx, y: rect.center.y), to: nil)
+                return try XCTUnwrap(NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: 0,
+                    windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+            }
+            canvas.mouseDown(with: try mouse(.leftMouseDown, dx: 0))
+            canvas.mouseDragged(with: try mouse(.leftMouseDragged, dx: 30))
+            canvas.mouseUp(with: try mouse(.leftMouseUp, dx: 30))
+            XCTAssertNil(workspace.errorMessage)
+            for block in original.blocks {
+                XCTAssertEqual(workspace.whiteboard.blocks.first { $0.id == block.id }?.position.x, block.position.x + 30)
+            }
+            workspace.undoProject()
+            XCTAssertEqual(workspace.whiteboard, original)
+        }
+    }
     func testGroupedStoryPopupSplitUndoReopenAndPDF() async throws {
         try await MainActor.run {
             _ = NSApplication.shared

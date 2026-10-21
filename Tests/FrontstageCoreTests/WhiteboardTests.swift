@@ -3,6 +3,36 @@ import XCTest
 @testable import FrontstageCore
 
 final class WhiteboardTests: XCTestCase {
+    func testStandaloneSelectionMovesRigidlyAndRejectsLockedMembersAtomically() throws {
+        var project = Project()
+        let a = try project.addBoardBeat(position: .init(x: 50, y: 70))
+        let b = try project.addBoardBeat(position: .init(x: 350, y: 90))
+        try project.editWhiteboard { board in
+            for i in board.blocks.indices { board.blocks[i].standalone = true }
+        }
+        let original = try project.whiteboard()
+        try project.moveStandaloneBeats([a, b], delta: .init(x: -200, y: 14))
+        let moved = try project.whiteboard()
+        XCTAssertEqual(moved.blocks[0].position.x, 0)
+        XCTAssertEqual(moved.blocks[1].position.x, 300)
+        XCTAssertEqual(moved.blocks[1].position.y - moved.blocks[0].position.y, 20)
+        XCTAssertEqual(moved.beats.map(\.html), original.beats.map(\.html))
+        try project.updateBoardBeat(b) { $0.locked = true }
+        let saved = try project.encoded()
+        XCTAssertThrowsError(try project.moveStandaloneBeats([a, b], delta: .init(x: 100, y: 0)))
+        XCTAssertEqual(try project.encoded(), saved)
+    }
+
+    func testStandaloneMoveRejectsStackedSnippets() throws {
+        var project = Project()
+        let a = try project.addBoardBeat()
+        let owner = try XCTUnwrap(project.whiteboard().beats.first?.blockID)
+        try project.editWhiteboard { $0.blocks[0].standalone = true }
+        _ = try project.addBoardBeat(blockID: owner)
+        let before = try project.encoded()
+        XCTAssertThrowsError(try project.moveStandaloneBeats([a], delta: .init(x: 10, y: 0)))
+        XCTAssertEqual(try project.encoded(), before)
+    }
     func testStandaloneContainerRoundTripsAndOlderBlocksRemainCompatible() throws {
         var project = Project()
         let a = try project.addBoardBeat(title: "Loose beat")

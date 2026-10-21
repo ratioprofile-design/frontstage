@@ -11,6 +11,12 @@ final class BeatPopupPresenter: NSObject, NSWindowDelegate {
     private(set) var panels: [String: NSPanel] = [:]
     private var controllers: [String: ScreenplayEditorController] = [:]
     func controller(for id: String) -> ScreenplayEditorController? { controllers[id] }
+    var focusedController: ScreenplayEditorController? {
+        controllers.values.first { editor in
+            guard let text = editor.textView, let window = text.window else { return false }
+            return NSApp.keyWindow === window && window.firstResponder === text
+        }
+    }
 
     func open(_ id: String, workspace: Workspace, near anchor: NSRect? = nil) {
         guard (try? workspace.project.whiteboard().beats.contains { $0.id == id }) == true else { return }
@@ -55,6 +61,7 @@ final class BeatPopupPresenter: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSPanel, let id = panels.first(where: { $0.value === window })?.key else { return }
         panels.removeValue(forKey: id); controllers.removeValue(forKey: id)
+        window.contentView = nil
         if beatID == id { panel = nil; beatID = nil; controller = nil }
     }
 }

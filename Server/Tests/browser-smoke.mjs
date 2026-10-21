@@ -191,6 +191,16 @@ try {
   await localPage.locator('#blocks .beat-text').getByText('Local story beat', { exact: true }).dblclick({ force: true });
   assert.equal(await localPage.locator('.beat-popup').count(), 2);
   await localPage.locator('.beat-popup.active [data-field="snippet-editor"]').fill('தமிழ் — local edit while offline. Second editor.');
+  const editorBeforeUndo = await localPage.locator('.beat-popup.active').getAttribute('data-beat-id');
+  const popupBeforeUndo = await localPage.locator('.beat-popup.active').boundingBox();
+  await localPage.locator('#undo').click();
+  assert.equal(await localPage.locator('.beat-popup').count(), 2);
+  assert.equal(await localPage.locator('.beat-popup.active').getAttribute('data-beat-id'), editorBeforeUndo);
+  assert.equal(await localPage.locator('.beat-popup.active [data-field="snippet-editor"]').innerText(), 'தமிழ் — local edit while offline.');
+  assert.deepEqual(await localPage.locator('.beat-popup.active').boundingBox(), popupBeforeUndo);
+  await localPage.locator('#redo').click();
+  assert.equal(await localPage.locator('.beat-popup').count(), 2);
+  assert.equal(await localPage.locator('.beat-popup.active [data-field="snippet-editor"]').innerText(), 'தமிழ் — local edit while offline. Second editor.');
   const loosePanel = localPage.locator(`.beat-popup[data-beat-id="${looseID}"]`);
   assert.equal(await loosePanel.locator('[data-field="snippet-editor"]').innerText(), 'Standalone paper text.');
   const paperStyle = await loosePanel.locator('[data-field="snippet-editor"]').evaluate(e => ({ background: getComputedStyle(e).backgroundColor, top: getComputedStyle(e).paddingTop, height: e.getBoundingClientRect().height }));
@@ -206,6 +216,21 @@ try {
   await localPage.locator('#blocks .beat-text').getByText('Standalone beat', { exact: true }).dblclick();
   assert.equal(await localPage.locator('.beat-popup.active [data-field="snippet-editor"]').innerText(), 'Standalone paper text.');
   await localPage.locator('.beat-popup.active [data-field="close-editor"]').click();
+  await localPage.locator('#add-beat').click();
+  await localPage.locator('.beat-popup.active [data-field="beat-title"]').fill('Second standalone');
+  await localPage.locator('.beat-popup.active [data-field="close-editor"]').click();
+  await localPage.locator('#blocks .beat-text').getByText('Standalone beat', { exact: true }).click({ force: true });
+  await localPage.locator('#blocks .beat-text').getByText('Second standalone', { exact: true }).click({ modifiers: ['Shift'], force: true });
+  const dragResult = await localPage.evaluate(id => {
+    const positions = () => [...document.querySelectorAll('#blocks .standalone')].map(e => [parseFloat(e.style.left), parseFloat(e.style.top)]);
+    const before = positions(), tile = document.querySelector(`#blocks [data-beat-id="${id}"]`), rect = tile.getBoundingClientRect(), dataTransfer = new DataTransfer();
+    tile.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer, clientX: rect.left + 30, clientY: rect.top + 10 }));
+    document.getElementById('canvas').dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer, clientX: rect.left + 60, clientY: rect.top + 20 }));
+    return { before, after: positions() };
+  }, looseID);
+  assert.equal(dragResult.before.length, 2);
+  assert.deepEqual(dragResult.after, dragResult.before.map(([x, y]) => [x + 30, y + 10]));
+  await localPage.locator('#undo').click();
   await localPage.locator('#back').click();
   const legacy = structuredClone(localDocument.project);
   legacy.geminiApiKey = 'synthetic-unused-fixture'; legacy.vault = [{ r2SecretAccessKey: 'synthetic-unused-fixture', customField: 42 }];

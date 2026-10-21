@@ -38,7 +38,7 @@ struct FrontstageApp: App {
             }
             CommandMenu("Screenplay") {
                 ForEach(Array(ScreenplayElement.editable.enumerated()), id: \.element.rawValue) { index, element in
-                    Button(element.label) { (workspace.popup.controller ?? workspace.editor).format(element) }
+                    Button(element.label) { workspace.focusedScreenplayController?.format(element) }
                         .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: [.option])
                         .disabled(workspace.selectedScene == nil || (workspace.mode != .edit && workspace.mode != .board))
                 }
@@ -64,6 +64,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 @MainActor
 final class Workspace: ObservableObject {
+    var focusedScreenplayController: ScreenplayEditorController? {
+        if let focused = popup.focusedController { return focused }
+        guard let text = editor.textView, let window = text.window,
+              NSApp.keyWindow === window, window.firstResponder === text else { return nil }
+        return editor
+    }
     enum Mode: String, CaseIterable {
         case edit = "Write", pages = "Pages", revisions = "Revisions", board = "Whiteboard", people = "People", breakdown = "Breakdown", production = "Production", writingTools = "Writing Tools", studio = "Research & Studio", shared = "Shared Projects"
     }

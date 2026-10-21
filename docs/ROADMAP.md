@@ -30,6 +30,8 @@ The supplied second image shows a context menu, not the open popup text editor. 
 
 ## Close-out order
 
+The first milestone is tracked in [Whiteboard and editor acceptance](WHITEBOARD_ACCEPTANCE.md), separating automated regression checks from outstanding hands-on and reference checks.
+
 1. Keep the native whiteboard/popup acceptance workflow and all platform checks passing; retain preview artifacts.
 2. Use an actual open-popup reference and a behavioral Causality sample to close visual/interaction differences. Finish readability/tension tracks and remaining board actions according to that evidence.
 3. Complete dual dialogue and frozen production pagination, then advanced production/drawing workflows with representative fixtures.

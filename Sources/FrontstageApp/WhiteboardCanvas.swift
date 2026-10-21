@@ -151,6 +151,7 @@ final class NativeWhiteboard: NSView {
             guard let beat = byID[id], var rect = geometry.beatRects[id] else { continue }
             if resizingBlock == beat.blockID { rect.width = resizeWidth - 12 }
             if movingBlocks && expandedDragBlocks.contains(beat.blockID) { rect.x += dragDelta.x; rect.y += dragDelta.y }
+            if movingBeat != nil && selection.contains(id) { rect.x += dragDelta.x; rect.y += dragDelta.y }
             let frame = NSRect(x: rect.x, y: rect.y, width: rect.width, height: rect.height)
             let color = NSColor(boardHex: beat.color)
             (beat.omitted || board.isUnused(beat) ? color.withAlphaComponent(0.25) : color).setFill()
@@ -289,7 +290,8 @@ final class NativeWhiteboard: NSView {
                 var delta = dragDelta
                 delta.y += (geometry.layerRects[block.layerID]?.y ?? 0) - (geometry.layerRects[target.id]?.y ?? 0)
                 let ripple = workspace?.whiteboardRipple ?? true
-                workspace?.edit("Move Standalone Beat") { try $0.moveBoardBlocks([owner], delta: delta, layerID: target.id, ripple: ripple) }
+                let ids = selection.contains(beat) ? selection : [beat]
+                workspace?.edit("Move Standalone Beats") { try $0.moveStandaloneBeats(ids, delta: delta, layerID: target.id, ripple: ripple) }
             } else if let block = destination {
                 let before = geometry.hitBeat(point)
                 let moving = selection.contains(beat) ? selection : [beat]
