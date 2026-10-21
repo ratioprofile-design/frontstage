@@ -65,9 +65,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @MainActor
 final class Workspace: ObservableObject {
     var focusedScreenplayController: ScreenplayEditorController? {
-        if let focused = popup.focusedController { return focused }
+        screenplayController(in: NSApp.keyWindow)
+    }
+    func screenplayController(in focusedWindow: NSWindow?) -> ScreenplayEditorController? {
+        if let focused = popup.focusedController(in: focusedWindow) { return focused }
         guard let text = editor.textView, let window = text.window,
-              NSApp.keyWindow === window, window.firstResponder === text else { return nil }
+              focusedWindow === window, window.firstResponder === text else { return nil }
         return editor
     }
     enum Mode: String, CaseIterable {
@@ -248,6 +251,7 @@ final class Workspace: ObservableObject {
 
     private func changed() {
         whiteboardCache = try? project.whiteboard()
+        if let board = whiteboardCache { popup.refreshTitles(board) }
         changeID &+= 1
         hasChanges = project != savedProject
         preview = nil

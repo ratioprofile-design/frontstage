@@ -11,20 +11,26 @@ final class BeatPopupPresenter: NSObject, NSWindowDelegate {
     private(set) var panels: [String: NSPanel] = [:]
     private var controllers: [String: ScreenplayEditorController] = [:]
     func controller(for id: String) -> ScreenplayEditorController? { controllers[id] }
-    var focusedController: ScreenplayEditorController? {
-        controllers.values.first { editor in
+    func focusedController(in focusedWindow: NSWindow?) -> ScreenplayEditorController? {
+        guard let focusedWindow else { return nil }
+        return controllers.values.first { editor in
             guard let text = editor.textView, let window = text.window else { return false }
-            return NSApp.keyWindow === window && window.firstResponder === text
+            return focusedWindow === window && window.firstResponder === text
         }
+    }
+    func refreshTitles(_ board: Whiteboard) {
+        guard !panels.isEmpty else { return }
+        let titles = Dictionary(uniqueKeysWithValues: board.beats.map { ($0.id, $0.title) })
+        for (id, window) in panels { window.title = titles[id].map { $0.isEmpty ? "Edit Beat" : $0 } ?? "Beat removed" }
     }
 
     func open(_ id: String, workspace: Workspace, near anchor: NSRect? = nil) {
-        guard (try? workspace.project.whiteboard().beats.contains { $0.id == id }) == true else { return }
+        guard let beat = workspace.whiteboard.beats.first(where: { $0.id == id }) else { return }
         if let panel = panels[id] { panel.makeKeyAndOrderFront(nil); return }
         let editor = ScreenplayEditorController()
         let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 660, height: 740),
             styleMask: [.titled, .closable, .resizable, .utilityWindow], backing: .buffered, defer: false)
-        panel.title = "Edit Beat"
+        panel.title = beat.title.isEmpty ? "Edit Beat" : beat.title
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
@@ -71,7 +77,7 @@ struct BeatPopupView: View {
     let beatID: String
     @ObservedObject var controller: ScreenplayEditorController
     let dismiss: () -> Void
-    private var beat: BoardBeat? { try? workspace.project.whiteboard().beats.first { $0.id == beatID } }
+    private var beat: BoardBeat? { workspace.whiteboard.beats.first { $0.id == beatID } }
 
     private func text(_ path: WritableKeyPath<BoardBeat, String>, label: String) -> Binding<String> {
         Binding(get: { beat?[keyPath: path] ?? "" }, set: { value in
