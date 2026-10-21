@@ -9,7 +9,7 @@ The whiteboard is the first release milestone; popup editing is second. Automate
 - Browser project undo/redo retains surviving editors, their positions and refreshed content.
 - Route Mac screenplay format commands only to the focused screenplay text view.
 - Drag selected standalone beats together, snap consistently, preserve spacing at board boundaries, and reject locked or stacked selections atomically.
-- Exercise actual native mouse events for a short multi-beat drag and restore positions with project undo.
+- Exercise actual native mouse events for a short multi-beat drag and restore positions with project undo; Escape cancels an in-progress drag without committing it.
 - Exercise browser drag events with the original grab offset and multiple selected beats.
 - Retain existing grouping, cause/effect, import, export, offline and concurrent-edit tests.
 

@@ -6,3 +6,5 @@
 #editor{max-height:calc(100vh - 16px);overflow:auto}.editor-header{touch-action:none}
 
 .beat-popup{width:660px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto}.beat-popup.active{border-color:#a9cdeb}.paper-desk{background:#77797c;padding:18px;max-height:48vh;overflow:auto}.paper-desk [data-field="snippet-editor"]{box-sizing:border-box;width:612px;min-height:792px;max-height:none;overflow:visible;margin:auto;background:white;color:#171717;padding:72px 72px 72px 108px;box-shadow:0 2px 8px #0005;font:12pt/1 Courier,monospace;color-scheme:light}.paper-desk p{margin:0 0 12pt}.paper-desk .sc-character{margin-left:144px!important;font-weight:normal!important}.paper-desk .sc-dialogue{margin-left:72px!important;margin-right:72px!important}.paper-desk .sc-parenthetical{margin-left:108px!important;margin-right:108px!important;font-style:normal!important}.block.standalone{background:transparent;border-color:transparent}.block.standalone .block-title{visibility:hidden}
+/* Conflict choices must remain above every floating editor. */
+#conflict{z-index:2147483647}

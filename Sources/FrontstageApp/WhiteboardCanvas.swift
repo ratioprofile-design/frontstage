@@ -346,7 +346,12 @@ final class NativeWhiteboard: NSView {
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 49 { spaceHeld = true; return }
         if event.keyCode == 36, let id = selection.sorted().first { openPopup(id); return }
-        if event.keyCode == 53 { workspace?.pendingBoardCauseID = nil; selection = []; blockSelection = []; selected?([], []); needsDisplay = true; return }
+        if event.keyCode == 53 {
+            workspace?.pendingBoardCauseID = nil
+            dragStart = nil; panStart = nil; movingBlocks = false; movingBeat = nil; resizingBlock = nil
+            marquee = nil; dragDelta = .init(); stroke = []; spaceHeld = false
+            selection = []; blockSelection = []; selected?([], []); needsDisplay = true; return
+        }
         if event.keyCode == 51 || event.keyCode == 117 {
             let ids = selection
             if !blockSelection.isEmpty {

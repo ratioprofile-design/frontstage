@@ -38,6 +38,14 @@ final class WhiteboardAcceptanceTests: XCTestCase {
             }
             workspace.undoProject()
             XCTAssertEqual(workspace.whiteboard, original)
+            canvas.board = original; canvas.selection = [a, b]
+            canvas.mouseDown(with: try mouse(.leftMouseDown, dx: 0))
+            canvas.mouseDragged(with: try mouse(.leftMouseDragged, dx: 40))
+            let escape = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                windowNumber: window.windowNumber, context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: 53))
+            canvas.keyDown(with: escape)
+            canvas.mouseUp(with: try mouse(.leftMouseUp, dx: 40))
+            XCTAssertEqual(workspace.whiteboard, original)
         }
     }
     func testGroupedStoryPopupSplitUndoReopenAndPDF() async throws {
