@@ -42,4 +42,8 @@ const oddBase = JSON.parse('{"__proto__":{"kept":1},"a/b":0}'), oddLocal = JSON.
 const odd = mergeJSON(oddBase, oddLocal, oddRemote);
 assert.ok(Object.hasOwn(odd.value, '__proto__')); assert.equal(odd.value.__proto__.kept, 2); assert.equal(Object.prototype.kept, undefined);
 assert.deepEqual(odd.conflicts, ['/a~1b']);
+const legacyBase = structuredClone(document); delete legacyBase.project.frontstageWhiteboard;
+const legacyEdit = structuredClone(legacyBase); legacyEdit.project.beats[0].content = '<p>New legacy edit</p>';
+const migrated = mergeDocuments(legacyBase, legacyEdit, document);
+assert.ok(migrated.conflicts.includes('/project/beats/1/content')); assert.deepEqual(migrated.value, legacyEdit);
 console.log('PASS: canonical snippet merge rebuilds scene text/roles, retains genuine text/lock/import conflicts and preserves unusual metadata keys');

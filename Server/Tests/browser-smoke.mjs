@@ -208,6 +208,22 @@ try {
   await localPage.locator('#blocks .beat-text').getByText('Local story beat', { exact: true }).dblclick();
   assert.ok((await localPage.locator('#snippet-editor').innerText()).includes('local edit while offline'));
   await localPage.screenshot({ path: path.join(artifact, `browser-${staticMode ? 'static-' : ''}offline-popup.png`) });
+  await localContext.setOffline(false);
+  await localPage.locator('#close-editor').click();
+  await localPage.evaluate(async document => {
+    const invalid = structuredClone(document); invalid.project.frontstageWhiteboard.blocks[0].parentID = invalid.project.frontstageWhiteboard.blocks[0].id;
+    const db = await new Promise((resolve, reject) => { const request = indexedDB.open('frontstage-offline', 1); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+    await new Promise((resolve, reject) => { const tx = db.transaction('projects', 'readwrite'); tx.objectStore('projects').put({ id: 'invalid-fixture', local: true, name: 'Invalid fixture', doc: invalid, base: invalid, revision: 0, dirty: false }); tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
+  }, imported);
+  await localPage.locator('#back').click();
+  await localPage.getByRole('button', { name: 'Invalid fixture · on this device', exact: true }).click();
+  await wait(async () => (await localPage.locator('#status').innerText()).includes('invalid identifiers'), 'Invalid cached project rejected');
+  await localPage.locator('#save').click();
+  const retainedInvalid = await localPage.evaluate(async () => {
+    const db = await new Promise(resolve => { const request = indexedDB.open('frontstage-offline', 1); request.onsuccess = () => resolve(request.result); });
+    return await new Promise(resolve => { const request = db.transaction('projects').objectStore('projects').get('invalid-fixture'); request.onsuccess = () => resolve(request.result); });
+  });
+  assert.equal(retainedInvalid.doc.project.frontstageWhiteboard.blocks[0].parentID, retainedInvalid.doc.project.frontstageWhiteboard.blocks[0].id);
   assert.deepEqual(localAPIRequests, []);
   await localContext.close();
   assert.deepEqual(errors, []);

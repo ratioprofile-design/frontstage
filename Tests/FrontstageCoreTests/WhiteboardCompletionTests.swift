@@ -88,4 +88,16 @@ final class WhiteboardCompletionTests: XCTestCase {
         XCTAssertEqual(project.storySequencer().milestones, project.storyMilestones)
         project.removeStoryMilestone(marker); XCTAssertTrue(project.storyMilestones.isEmpty)
     }
+    func testTenThousandBeatCausalCompactionRetainsAnInheritedLockedStart() throws {
+        var board = Whiteboard()
+        board.blocks = (0..<10000).map { BoardBlock(id: "block-\($0)", name: "Block", layerID: "main") }
+        board.beats = (0..<10000).map { BoardBeat(id: "beat-\($0)", sceneID: Decimal($0 + 1), blockID: "block-\($0)", title: "Beat", order: Double($0), start: 100 + Double($0) * 2) }
+        board.dependencies = (1..<10000).map { BoardDependency(id: "edge-\($0)", cause: "beat-\($0 - 1)", effect: "beat-\($0)") }
+        var parent = BoardBlock(id: "parent", name: "Locked parent", layerID: "main"); parent.locked = true
+        board.blocks[5000].parentID = parent.id; board.blocks.append(parent)
+        XCTAssertEqual(board.lockedBlockIDs, [parent.id, "block-5000"])
+        try board.compactCauses()
+        XCTAssertEqual(board.beats[0].start, 0); XCTAssertEqual(board.beats[5000].start, 10100)
+        XCTAssertEqual(board.beats[9999].start, 10100 + 4999 * 1.5)
+    }
 }

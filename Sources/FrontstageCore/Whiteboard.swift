@@ -112,6 +112,18 @@ public struct Whiteboard: Codable, Equatable, Sendable {
     public func isLocked(_ beat: BoardBeat) -> Bool {
         beat.locked || isBlockLocked(beat.blockID)
     }
+    public var lockedBlockIDs: Set<String> {
+        let lockedLayers = Set(layers.filter(\.locked).map(\.id)), children = Dictionary(grouping: blocks.compactMap { block -> (String, String)? in
+            guard let parent = block.parentID else { return nil }; return (parent, block.id)
+        }, by: { $0.0 })
+        var locked = Set(blocks.filter { $0.locked || lockedLayers.contains($0.layerID) }.map(\.id))
+        var queue = Array(locked), index = 0
+        while index < queue.count {
+            let parent = queue[index]; index += 1
+            for child in children[parent] ?? [] where locked.insert(child.1).inserted { queue.append(child.1) }
+        }
+        return locked
+    }
     public func isBlockLocked(_ id: String) -> Bool {
         var current: String? = id, visited = Set<String>()
         while let key = current, let block = blocks.first(where: { $0.id == key }), visited.insert(key).inserted {
@@ -187,7 +199,7 @@ public struct Whiteboard: Codable, Equatable, Sendable {
 
     public mutating func resolveCauses() throws {
         let order = try causalOrder(), incoming = Dictionary(grouping: dependencies.filter { !$0.reference }, by: \.effect)
-        let indices = Dictionary(uniqueKeysWithValues: beats.indices.map { (beats[$0].id, $0) })
+        let indices = Dictionary(uniqueKeysWithValues: beats.indices.map { (beats[$0].id, $0) }), locked = lockedBlockIDs
         let unusedLayers = Set(layers.filter(\.unused).map(\.id)), unusedBlocks = Set(blocks.filter { unusedLayers.contains($0.layerID) }.map(\.id))
         var candidate = self
         for id in order {
@@ -197,7 +209,7 @@ public struct Whiteboard: Codable, Equatable, Sendable {
                 return candidate.beats[j].start + candidate.beats[j].duration
             }.max() ?? 0
             if candidate.beats[i].start < required {
-                guard !candidate.isLocked(candidate.beats[i]) else { throw ProjectError.invalidProject("\(candidate.beats[i].title) is locked and blocks the causal ripple") }
+                guard !candidate.beats[i].locked, !locked.contains(candidate.beats[i].blockID) else { throw ProjectError.invalidProject("\(candidate.beats[i].title) is locked and blocks the causal ripple") }
                 candidate.beats[i].start = required
             }
         }
@@ -207,7 +219,7 @@ public struct Whiteboard: Codable, Equatable, Sendable {
     /// Explicitly remove time gaps; free board positions and editorial order remain independent.
     public mutating func compactCauses() throws {
         let order = try causalOrder(), incoming = Dictionary(grouping: dependencies.filter { !$0.reference }, by: \.effect)
-        let indices = Dictionary(uniqueKeysWithValues: beats.indices.map { (beats[$0].id, $0) })
+        let indices = Dictionary(uniqueKeysWithValues: beats.indices.map { (beats[$0].id, $0) }), locked = lockedBlockIDs
         let unusedLayers = Set(layers.filter(\.unused).map(\.id)), unusedBlocks = Set(blocks.filter { unusedLayers.contains($0.layerID) }.map(\.id))
         var candidate = self
         for id in order {
@@ -216,7 +228,7 @@ public struct Whiteboard: Codable, Equatable, Sendable {
                 guard let j = indices[edge.cause], !candidate.beats[j].omitted, !unusedBlocks.contains(candidate.beats[j].blockID) else { return nil }
                 return candidate.beats[j].start + candidate.beats[j].duration
             }.max() ?? 0
-            if candidate.isLocked(candidate.beats[i]) {
+            if candidate.beats[i].locked || locked.contains(candidate.beats[i].blockID) {
                 guard candidate.beats[i].start >= earliest else { throw ProjectError.invalidProject("\(candidate.beats[i].title) is locked and blocks causal compaction") }
             } else { candidate.beats[i].start = earliest }
         }
@@ -260,10 +272,23 @@ extension Project {
     /// The document is committed only after validation; existing unknown entity fields survive.
     public mutating func editWhiteboard(_ operation: (inout Whiteboard) throws -> Void) throws {
         var candidate = self, board = try whiteboard()
+        try validateNativeScriptText(board)
         try operation(&board)
         try board.validate(sceneIDs: Set(candidate.scenes.map(\.id)))
         try candidate.storeWhiteboard(board)
         self = candidate
+    }
+
+    /// Imported whole-scene text must not be overwritten by stale native snippet projections.
+    func validateNativeScriptText(_ board: Whiteboard) throws {
+        guard state["frontstageWhiteboard"] != nil else { return }
+        let unused = Set(board.layers.filter(\.unused).map(\.id)), inactive = Set(board.blocks.filter { unused.contains($0.layerID) }.map(\.id))
+        let grouped = Dictionary(grouping: board.orderedBeats, by: \.sceneID)
+        for scene in scenes {
+            guard let snippets = grouped[scene.id] else { continue }
+            let html = snippets.filter { !$0.omitted && !inactive.contains($0.blockID) }.map(\.html).joined()
+            guard html == scene.html else { throw ProjectError.invalidProject("\(scene.title)'s script differs from its linked snippets; reconcile the imported text before editing or exporting") }
+        }
     }
 
     private mutating func storeWhiteboard(_ board: Whiteboard) throws {
@@ -302,6 +327,7 @@ extension Project {
     public mutating func addBoardBeat(blockID: String? = nil, layerID: String = "main", position: BoardPoint = .init(x: 60, y: 60), title: String = "Untitled Beat") throws -> String {
         var candidate = self
         let existing = try candidate.whiteboard()
+        try candidate.validateNativeScriptText(existing)
         guard existing.layers.contains(where: { $0.id == layerID }), !existing.layers.first(where: { $0.id == layerID })!.locked else { throw ProjectError.invalidProject("unlock the destination layer") }
         if let blockID { guard existing.blocks.contains(where: { $0.id == blockID }), !existing.isBlockLocked(blockID) else { throw ProjectError.invalidProject("unlock the destination block") } }
         let sceneID: Decimal
@@ -377,7 +403,8 @@ extension Project {
                 let children = Set(board.blocks.filter { $0.parentID.map(moving.contains) == true }.map(\.id))
                 let old = moving; moving.formUnion(children); changed = moving != old
             }
-            guard moving.allSatisfy({ !board.isBlockLocked($0) }), layerID.map({ id in board.layers.contains { $0.id == id && !$0.locked } }) ?? true else { throw ProjectError.invalidProject("unlock the block or destination layer") }
+            let locked = board.lockedBlockIDs
+            guard moving.isDisjoint(with: locked), layerID.map({ id in board.layers.contains { $0.id == id && !$0.locked } }) ?? true else { throw ProjectError.invalidProject("unlock the block or destination layer") }
             let members = board.blocks.filter { moving.contains($0.id) }
             let dx = max(snap ? (delta.x / 10).rounded() * 10 : delta.x, -(members.map { $0.position.x }.min() ?? 0))
             let dy = max(snap ? (delta.y / 10).rounded() * 10 : delta.y, 32 - (members.map { $0.position.y }.min() ?? 32))

@@ -39,4 +39,15 @@ final class ScriptSequenceTests: XCTestCase {
         var native = project.state["frontstageWhiteboard"]!.object!; native["version"] = .number(900); project.state["frontstageWhiteboard"] = .object(native)
         XCTAssertThrowsError(try project.orderedScript())
     }
+    func testUnprojectedImportedTextCannotBeOverwrittenByBoardEditsOrIgnoredByExport() throws {
+        var project = Project(); let beat = try project.addBoardBeat()
+        try project.updateBoardBeat(beat) { $0.html = "<p>Native text</p>" }
+        try project.editBeat(project.scenes[0].id) { $0["content"] = .string("<p>Unprojected imported text</p>") }
+        let before = project
+        XCTAssertThrowsError(try project.editWhiteboard { $0.viewport.zoom = 1.5 })
+        XCTAssertThrowsError(try project.addBoardBeat())
+        XCTAssertThrowsError(try project.orderedScript())
+        XCTAssertEqual(project, before)
+        XCTAssertTrue(project.scenes[0].html.contains("Unprojected imported text"))
+    }
 }

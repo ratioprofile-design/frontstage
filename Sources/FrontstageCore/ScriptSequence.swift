@@ -16,6 +16,7 @@ extension Project {
             return active.map { ScriptSegment(scene: $0, beatIDs: [], number: numbers[$0.id]!, isContinuation: false) }
         }
         let board = try whiteboard(), byID = Dictionary(uniqueKeysWithValues: active.map { ($0.id, $0) })
+        try validateNativeScriptText(board)
         let unused = Set(board.layers.filter(\.unused).map(\.id)), inactive = Set(board.blocks.filter { unused.contains($0.layerID) }.map(\.id))
         let represented = Set(board.beats.map(\.sceneID))
         var segments: [ScriptSegment] = [], seen = Set<Decimal>()

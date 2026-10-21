@@ -1,6 +1,6 @@
 import { mergeDocuments } from './merge.js';
 import { apiOrigin as configuredOrigin } from './config.js';
-import { causalOrder as orderCauses, compactCausalTime, groupBlocks, ungroupBlocks, moveBlocks, descendantBlocks, deleteBlocks } from './board-operations.js';
+import { causalOrder as orderCauses, compactCausalTime, groupBlocks, ungroupBlocks, moveBlocks, descendantBlocks, deleteBlocks, validateBoard } from './board-operations.js';
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
 
@@ -96,8 +96,9 @@ async function createLocalProject(name, document = emptyDocument(name)) {
 async function openLocalProject(id) {
   const epoch = ++documentEpoch; clearTimeout(timer);
   const copy = await localCopy(id); if (epoch !== documentEpoch || !copy?.local) return;
+  const nextDocument = initializeBoard(clone(copy.doc)), nextBase = stripLegacyCredentials(clone(copy.base));
   current = { id, name: copy.name, access: 'owner', revision: 0, local: true }; localMode = true;
-  doc = initializeBoard(clone(copy.doc)); base = stripLegacyCredentials(clone(copy.base)); dirty = false;
+  doc = nextDocument; base = nextBase; dirty = false;
   history.length = 0; future.length = 0; selectedBlocks.clear(); selectedBeats.clear(); selected = null; source = null; editorID = null; pendingConflict = null;
   $('editor').hidden = true; $('conflict').hidden = true; $('account').hidden = true; $('projects').hidden = true; $('workspace').hidden = false;
   $('logout').textContent = 'Sign In'; render(); status('Saved on this device');
@@ -108,6 +109,7 @@ function initializeBoard(document) {
   if (document.format !== 'frontstage') document = { format: 'frontstage', version: 1, name: 'Imported Story', project: document };
   if (document.version !== 1 || !Array.isArray(document.project.beats)) throw Error('Unsupported project format');
   if (document.project.beats.some(beat => !Number.isSafeInteger(beat.id) || beat.id < 0)) throw Error('This project uses numeric identifiers outside browser precision. Open it with the native Swift client.');
+  if (new Set(document.project.beats.map(b => b.id)).size !== document.project.beats.length || document.project.beats.some(b => typeof b.title !== 'string' || typeof b.content !== 'string')) throw Error('Each scene needs a unique identifier, title and script text.');
   if (!document.project.frontstageWhiteboard) {
     const beats = document.project.beats;
     document.project.frontstageWhiteboard = {
@@ -119,6 +121,14 @@ function initializeBoard(document) {
     };
   }
   if (document.project.frontstageWhiteboard.version !== 1) throw Error('Unsupported whiteboard version');
+  validateBoard(document.project.frontstageWhiteboard, new Set(document.project.beats.map(b => b.id)));
+  const native = document.project.frontstageWhiteboard, unused = new Set(native.layers.filter(l => l.unused).map(l => l.id)), inactive = new Set(native.blocks.filter(b => unused.has(b.layerID)).map(b => b.id));
+  const projections = new Map();
+  for (const beat of [...native.beats].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))) {
+    if (!projections.has(beat.sceneID)) projections.set(beat.sceneID, '');
+    if (!beat.omitted && !inactive.has(beat.blockID)) projections.set(beat.sceneID, projections.get(beat.sceneID) + beat.html);
+  }
+  for (const scene of document.project.beats) if (projections.has(scene.id) && projections.get(scene.id) !== scene.content) throw Error('The scene script differs from its linked snippets. Reconcile the source text before importing this project.');
   return document;
 }
 function unused(beat) { const block = board().blocks.find(b => b.id === beat.blockID); return board().layers.find(l => l.id === block?.layerID)?.unused; }
@@ -164,7 +174,7 @@ async function sync() {
     if (code === 409) {
       const result = mergeDocuments(base, doc, data.snapshot.document);
       if (result.conflicts.length) { pendingConflict = data.snapshot; $('conflict-fields').textContent = result.conflicts.join('\n'); $('conflict').hidden = false; status('Conflict: local copy retained'); }
-      else { doc = result.value; base = clone(data.snapshot.document); current.revision = data.snapshot.revision; dirty = true; render(); }
+      else { doc = initializeBoard(result.value); base = clone(data.snapshot.document); current.revision = data.snapshot.revision; dirty = true; render(); }
     } else {
       base = clone(data.snapshot.document); current.revision = data.snapshot.revision; current.access = data.snapshot.access;
       dirty = !equal(doc, sent); status(dirty ? 'More changes pending' : `Synced · revision ${current.revision}`);
@@ -183,10 +193,11 @@ async function openProject(id) {
   const epoch = ++documentEpoch; clearTimeout(timer);
   const { data } = await api(`/api/projects/${id}`), offline = await localCopy(id);
   if (epoch !== documentEpoch) return;
+  const nextBase = clone(offline?.dirty ? offline.base : data.document), nextDocument = initializeBoard(clone(offline?.dirty ? offline.doc : data.document));
   current = data; history.length = 0; future.length = 0; selectedBlocks.clear(); selectedBeats.clear(); selected = null; editorID = null; $('editor').hidden = true;
   pendingConflict = null; source = null; $('conflict').hidden = true;
-  base = clone(data.document); doc = initializeBoard(clone(data.document)); dirty = !equal(doc, data.document);
-  if (offline?.dirty) { base = offline.base; doc = initializeBoard(offline.doc); current.revision = offline.revision; dirty = true; }
+  base = nextBase; doc = nextDocument; dirty = !!offline?.dirty || !equal(doc, data.document);
+  if (offline?.dirty) current.revision = offline.revision;
   $('projects').hidden = true; $('workspace').hidden = false; render(); status(dirty ? 'Local changes ready to sync' : `Synced · revision ${current.revision}`);
   if (dirty) sync();
 }
@@ -452,6 +463,6 @@ setInterval(async () => {
   try {
     const { data } = await api(`/api/projects/${projectID}`);
     if (epoch !== documentEpoch || current?.id !== projectID || dirty || syncing || editorID || pendingConflict) return;
-    if (data.revision !== current.revision) { current = data; base = clone(data.document); doc = initializeBoard(clone(data.document)); render(); await saveLocal(); status(`Updated · revision ${current.revision}`); }
+    if (data.revision !== current.revision) { const nextDocument = initializeBoard(clone(data.document)); current = data; base = clone(data.document); doc = nextDocument; render(); await saveLocal(); status(`Updated · revision ${current.revision}`); }
   } catch {}
 }, 5000);

@@ -4,7 +4,19 @@ extension ProjectMerge {
     /// Snippets own native scene text. Merge them first, then rebuild their derived scene fields.
     public static func mergeDocuments(base: JSONValue, local: JSONValue, remote: JSONValue) -> ProjectMergeResult {
         guard let b = SnippetMergeDocument(base), let l = SnippetMergeDocument(local), let r = SnippetMergeDocument(remote), b.enveloped == l.enveloped, b.enveloped == r.enveloped else {
-            return merge(base: base, local: local, remote: remote)
+            var result = merge(base: base, local: local, remote: remote)
+            if let shape = SnippetMergeDocument(result.value) {
+                let prefix = shape.enveloped ? "/project" : ""
+                let inconsistent = shape.projections.keys.filter { !shape.isCanonical($0) }
+                if !inconsistent.isEmpty {
+                    result.value = local; result.conflicts += inconsistent.map { prefix + "/beats/\($0)/content" }
+                    result.conflicts = Array(Set(result.conflicts)).sorted()
+                }
+            } else if let root = result.value.object {
+                let state = root["format"]?.string == "frontstage" ? root["project"]?.object : root
+                if state?["frontstageWhiteboard"] != nil { result.value = local; result.conflicts.append((root["format"]?.string == "frontstage" ? "/project" : "") + "/frontstageWhiteboard") }
+            }
+            return result
         }
         let eligible = Set(b.projections.keys).intersection(l.projections.keys).intersection(r.projections.keys).filter {
             b.isCanonical($0) && l.isCanonical($0) && r.isCanonical($0)

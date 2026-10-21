@@ -1,5 +1,30 @@
 // Portable browser operations mirror the native document rules. Return copies so failures are atomic.
 const copy = value => structuredClone(value);
+export function validateBoard(board, sceneIDs) {
+  const fail = () => { throw Error('The whiteboard contains invalid identifiers, geometry or references.'); };
+  const coordinate = n => Number.isFinite(n) && Math.abs(n) <= 1000000;
+  const unique = rows => Array.isArray(rows) && rows.every(r => r && typeof r.id === 'string' && r.id) && new Set(rows.map(r => r.id)).size === rows.length;
+  const strings = rows => Array.isArray(rows) && rows.every(s => typeof s === 'string');
+  if (board?.version !== 1 || !['layers', 'blocks', 'beats', 'dependencies', 'strokes'].every(k => unique(board[k])) || !board.layers.length || !coordinate(board.viewport?.origin?.x) || !coordinate(board.viewport?.origin?.y) || !Number.isFinite(board.viewport?.zoom) || board.viewport.zoom < .15 || board.viewport.zoom > 3) fail();
+  const layers = new Set(board.layers.map(l => l.id)), blocks = new Map(board.blocks.map(b => [b.id, b])), beats = new Set(board.beats.map(b => b.id));
+  for (const layer of board.layers) if (typeof layer.name !== 'string' || !Number.isFinite(layer.height) || layer.height < 100 || layer.height > 10000 || !['locked', 'collapsed', 'unused'].every(k => typeof layer[k] === 'boolean')) fail();
+  for (const block of board.blocks) {
+    if (!layers.has(block.layerID) || typeof block.name !== 'string' || !coordinate(block.position?.x) || !coordinate(block.position?.y) || !Number.isFinite(block.width) || block.width < 140 || block.width > 2000 || !['locked', 'collapsed'].every(k => typeof block[k] === 'boolean') || (block.parentID != null && !blocks.has(block.parentID))) fail();
+    const seen = new Set([block.id]);
+    for (let parent = block.parentID; parent != null; parent = blocks.get(parent)?.parentID) { if (seen.has(parent)) fail(); seen.add(parent); }
+  }
+  for (const beat of board.beats) if (!sceneIDs.has(beat.sceneID) || !blocks.has(beat.blockID) || !coordinate(beat.order) || !coordinate(beat.start) || beat.start < 0 || !Number.isFinite(beat.duration) || beat.duration < .05 || beat.duration > 1000 || !['title', 'synopsis', 'html', 'color'].every(k => typeof beat[k] === 'string') || !['story', 'subtext'].includes(beat.kind) || !strings(beat.characters) || !strings(beat.tags) || !['mustBeCaused', 'omitted', 'locked'].every(k => typeof beat[k] === 'boolean')) fail();
+  for (const edge of board.dependencies) if (!beats.has(edge.cause) || !beats.has(edge.effect) || edge.cause === edge.effect || typeof edge.reference !== 'boolean' || typeof edge.reason !== 'string') fail();
+  for (const stroke of board.strokes) if (!Array.isArray(stroke.points) || stroke.points.length > 10000 || !stroke.points.every(p => coordinate(p?.x) && coordinate(p?.y)) || !Number.isFinite(stroke.width) || stroke.width < .5 || stroke.width > 30 || typeof stroke.color !== 'string') fail();
+  return board;
+}
+export function lockedBlockIDs(board) {
+  const layers = new Set(board.layers.filter(l => l.locked).map(l => l.id)), children = new Map();
+  for (const block of board.blocks) if (block.parentID) { if (!children.has(block.parentID)) children.set(block.parentID, []); children.get(block.parentID).push(block.id); }
+  const locked = new Set(board.blocks.filter(b => b.locked || layers.has(b.layerID)).map(b => b.id)), queue = [...locked];
+  for (let i = 0; i < queue.length; i++) for (const child of children.get(queue[i]) || []) if (!locked.has(child)) { locked.add(child); queue.push(child); }
+  return locked;
+}
 export function blockLocked(board, id) {
   const blocks = new Map(board.blocks.map(b => [b.id, b])), layers = new Map(board.layers.map(l => [l.id, l]));
   const seen = new Set();
@@ -27,7 +52,7 @@ export function causalOrder(board) {
   return result;
 }
 export function compactCausalTime(source) {
-  const board = copy(source), byID = new Map(board.beats.map(b => [b.id, b]));
+  const board = copy(source), byID = new Map(board.beats.map(b => [b.id, b])), locked = lockedBlockIDs(board);
   const unusedLayers = new Set(board.layers.filter(l => l.unused).map(l => l.id));
   const unused = new Set(board.blocks.filter(b => unusedLayers.has(b.layerID)).map(b => b.id));
   const incoming = new Map();
@@ -35,7 +60,7 @@ export function compactCausalTime(source) {
   for (const id of causalOrder(board)) {
     const beat = byID.get(id); if (beat.omitted || unused.has(beat.blockID)) continue;
     const earliest = Math.max(0, ...(incoming.get(id) || []).map(id => byID.get(id)).filter(b => !b.omitted && !unused.has(b.blockID)).map(b => b.start + b.duration));
-    if (beat.locked || blockLocked(board, beat.blockID)) { if (beat.start < earliest) throw Error(`${beat.title} is locked and blocks compaction.`); }
+    if (beat.locked || locked.has(beat.blockID)) { if (beat.start < earliest) throw Error(`${beat.title} is locked and blocks compaction.`); }
     else beat.start = earliest;
   }
   return board;
@@ -46,8 +71,8 @@ export function descendantBlocks(board, ids) {
   return result;
 }
 export function moveBlocks(source, ids, dx, dy) {
-  const board = copy(source), moving = descendantBlocks(board, ids), items = board.blocks.filter(b => moving.has(b.id));
-  if (!ids.size || !Number.isFinite(dx) || !Number.isFinite(dy) || items.length !== moving.size || items.some(b => blockLocked(board, b.id))) throw Error('Select unlocked blocks to move.');
+  const board = copy(source), moving = descendantBlocks(board, ids), items = board.blocks.filter(b => moving.has(b.id)), locked = lockedBlockIDs(board);
+  if (!ids.size || !Number.isFinite(dx) || !Number.isFinite(dy) || items.length !== moving.size || items.some(b => locked.has(b.id))) throw Error('Select unlocked blocks to move.');
   dx = Math.max(dx, -Math.min(...items.map(b => b.position.x))); dy = Math.max(dy, 32 - Math.min(...items.map(b => b.position.y)));
   for (const block of items) {
     block.position.x += dx; block.position.y += dy;

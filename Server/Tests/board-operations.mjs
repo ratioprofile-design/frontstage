@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { groupBlocks, ungroupBlocks, moveBlocks, compactCausalTime, deleteBlocks } from '../Public/board-operations.js';
+import { groupBlocks, ungroupBlocks, moveBlocks, compactCausalTime, deleteBlocks, validateBoard } from '../Public/board-operations.js';
 const board = { version: 1, layers: [{ id: 'main', unused: false }], blocks: [
   { id: 'a', layerID: 'main', position: { x: 40, y: 50 }, width: 224 }, { id: 'b', layerID: 'main', position: { x: 280, y: 90 }, width: 224 }
 ], beats: [
@@ -29,3 +29,15 @@ assert.throws(() => deleteBlocks(doc, new Set(['group']))); assert.equal(doc.pro
 const blocked = structuredClone(board); blocked.beats[0].locked = true; blocked.beats[1].start = 0; blocked.beats[1].locked = true;
 assert.throws(() => compactCausalTime(blocked)); assert.equal(blocked.beats[0].start, 10);
 console.log('PASS: browser grouping/ungrouping, rigid movement, compaction, protected deletion and failure rollback');
+const valid = { ...structuredClone(board), viewport: { origin: { x: 0, y: 0 }, zoom: 1 }, strokes: [] };
+valid.layers = [{ id: 'main', name: 'Main', height: 300, unused: false, locked: false, collapsed: false }];
+valid.blocks = valid.blocks.map(b => ({ ...b, name: 'Block', locked: false, collapsed: false }));
+valid.beats = valid.beats.map(b => ({ ...b, html: b.html || '', synopsis: '', color: '#39798c', kind: 'story', characters: [], tags: [], mustBeCaused: false, omitted: false, locked: false }));
+valid.dependencies = valid.dependencies.map(e => ({ ...e, reason: '', reference: false }));
+validateBoard(valid, new Set([1, 2]));
+const invalid = structuredClone(valid); invalid.blocks[0].parentID = 'b'; invalid.blocks[1].parentID = 'a';
+assert.throws(() => validateBoard(invalid, new Set([1, 2])));
+assert.throws(() => validateBoard(valid, new Set([1])));
+const causalLoop = structuredClone(valid); causalLoop.dependencies.push({ id: 'reverse', cause: 'second', effect: 'first', reference: false, reason: '' });
+validateBoard(causalLoop, new Set([1, 2])); // Imported causal loops remain diagnosable instead of being silently deleted.
+console.log('PASS: browser import rejects malformed/cyclic containers and missing references while retaining diagnosable causal cycles');

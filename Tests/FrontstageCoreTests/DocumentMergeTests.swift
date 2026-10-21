@@ -51,4 +51,13 @@ final class DocumentMergeTests: XCTestCase {
         XCTAssertTrue(merge.conflicts.contains("/project/frontstageWhiteboard"))
         XCTAssertEqual(merge.value, try json(local))
     }
+    func testLegacyTextEditAgainstConcurrentWhiteboardMigrationDoesNotLoseText() throws {
+        var base = Project(); let id = base.addScene(); try base.updateScene(id: id, html: "<p>Legacy body</p>")
+        var local = base, remote = base
+        try local.updateScene(id: id, html: "<p>New legacy edit</p>")
+        try remote.editWhiteboard { $0.viewport.zoom = 1.25 }
+        let merge = ProjectMerge.mergeDocuments(base: try json(base), local: try json(local), remote: try json(remote))
+        XCTAssertTrue(merge.conflicts.contains("/project/beats/\(id)/content"))
+        XCTAssertEqual(merge.value, try json(local))
+    }
 }

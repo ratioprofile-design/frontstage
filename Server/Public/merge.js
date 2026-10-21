@@ -84,6 +84,11 @@ export function mergeDocuments(base, local, remote) {
   if (shapes.some(s => !s) || shapes.some(s => s.enclosed !== shapes[0].enclosed)) {
     const result = mergeJSON(base, local, remote), state = result.value?.format === 'frontstage' ? result.value.project : result.value;
     if (state?.frontstageWhiteboard && !snippetDocument(result.value)) return { value: local, conflicts: [...new Set([...result.conflicts, prefix + '/frontstageWhiteboard'])].sort() };
+    const shape = snippetDocument(result.value);
+    if (shape) {
+      const inconsistent = [...shape.projections.keys()].filter(id => !canonical(shape, id));
+      if (inconsistent.length) return { value: local, conflicts: [...new Set([...result.conflicts, ...inconsistent.map(id => `${prefix}/beats/${id}/content`)])].sort() };
+    }
     return result;
   }
   const ids = new Set([...shapes[0].projections.keys()].filter(id => shapes.every(s => canonical(s, id))));

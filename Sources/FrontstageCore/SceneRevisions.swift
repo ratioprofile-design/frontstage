@@ -69,7 +69,7 @@ extension Project {
         }
         try candidate.saveRevision(sceneID: sceneID, label: "Before restoring \(version["frontstageLabel"]?.string ?? "revision")")
         try candidate.editBeat(sceneID) { fields in
-            for key in ["title", "summary", "content"] { if let value = version[key] { fields[key] = value } }
+            for key in ["title", "summary", "content"] where key != "content" || !native { if let value = version[key] { fields[key] = value } }
             if let editorial = version["frontstageEditorial"]?.object {
                 for key in ["slug", "sceneNumber"] {
                     if editorial[key] == .null { fields.removeValue(forKey: key) }
