@@ -62,7 +62,7 @@ struct PeopleView: View {
                         }
                     }.tag(character.id)
                 }
-            }.padding(16).frame(minWidth: 210, idealWidth: 240)
+            }.padding(16).frame(minWidth: 210, idealWidth: WorkspaceDesign.sidebar)
             if let role {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
@@ -115,7 +115,7 @@ struct PeopleView: View {
                                 }
                             }
                         }
-                    }.padding(24)
+                    }.padding(WorkspaceDesign.padding)
                 }.frame(minWidth: 300)
             } else {
                 ContentUnavailableView("Add or select a character", systemImage: "person.2",

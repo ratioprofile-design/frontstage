@@ -546,6 +546,7 @@ setInterval(async () => {
 
 const workspaces = mountWorkspaces({
   document: () => doc, current: () => current, edit, status, cleanHTML, plain,
+  selectedBeat: () => selected,
   selectedScene: () => board().beats.find(b => b.id === selected)?.sceneID,
   selectScene: id => { const beat = board().beats.find(b => b.sceneID === id); if (beat) { selected = beat.id; selectedBeats = new Set([selected]); } },
   selectBeat: id => choose(id), openBeat: openEditor,

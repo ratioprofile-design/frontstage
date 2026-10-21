@@ -2,6 +2,12 @@
 
 Updated 21 October 2026. Automated checks establish the behavior they exercise; they do not establish complete Causality parity or installed-product acceptance.
 
+## Mac/browser page alignment
+
+The browser has all ten workspaces and a shared design source. Local checks passed: 113 portable Swift tests (including an actual browser-edited project export), workspace model operations, browser page integration with long-text pagination/offline restart, and both same-origin and separate-static-origin editing regressions. See [Page parity](PAGE_PARITY.md) for commands, artifact contents and remaining platform differences.
+
+The Swift workflow now runs the browser page test before native tests, then publishes paired captures as `Frontstage-page-parity`. Native build/test results for the final source revision must pass before using its Mac development artifact. Browser deployment [run 39656591575](https://github.com/ratioprofile-design/frontstage/actions/runs/39656591575) verified the new workspace modules at the configured Vercel domain.
+
 ## Standalone beats and paper editors
 
 Mac and browser now support loose beats through + Beat, with + Block and Add to Block retaining explicit stacking. Multiple editors retain separate beat identities and close independently. Editors use white screenplay paper, Courier text, margins and format controls. Portable tests cover additive standalone persistence and old block compatibility. Browser tests cover simultaneous editing, independent dismissal, paper appearance and local save/reopen; both browser configurations passed. Native multi-editor/paper tests passed in Mac run 39564861587. Follow-up focus-routing, title refresh and gesture-cancellation checks are tracked separately below.

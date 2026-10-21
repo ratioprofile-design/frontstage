@@ -25,8 +25,12 @@ The supplied second image shows a context menu, not the open popup text editor. 
 | 15 — Interchange/drawing | DOCX screenplay export/import, PDF/RTF/text import, CSV/XLSX first-sheet import/export, portable embedded media, freehand annotation | Full Office/media fidelity, richer drawing, original Causality format support only after format/files are available |
 | 16 — Mac release | Universal development bundle, automated native tests, screenshot/PDF artifacts, 10,000-beat geometry test, Developer ID/notary script | Real Mac accessibility/input/performance/recovery checks; Apple identity/profile, actual notarization and clean-machine install/update |
 | 17 — Sharing | Swift/Vapor backend, accounts/permissions, CAS/retries, three-way merge/conflict backup, Mac Keychain; independent same-scene snippet edits merge before scene text is rebuilt, genuine text/lock conflicts retained | Persistent backend host/HTTPS, backups/account lifecycle/rate limits, background sync and cold offline shared-session restoration |
-| 18 — Browser | Gray board/popup/script, groups/ungroup/undo/redo, causal compaction, act markers, movable popup, local/shared projects and reconnect merge; cached local app startup/reload offline after an initial visit | Complete desktop/production/gesture parity, shared-session offline restoration, broader browser/input/accessibility checks |
+| 18 — Browser | Gray board/popup/script, groups/ungroup/undo/redo, causal compaction, act markers, movable popup, local/shared projects and reconnect merge; cached local app startup/reload offline after an initial visit | Page-by-page visual acceptance, advanced production/gesture parity, shared-session offline restoration, broader browser/input/accessibility checks |
 | 19 — Windows | Native Swift/Win32 board/popup, shared model/solver, protected project import/save, native UI smoke and development artifact | Rich script editor, sync UI, production workspaces, clean-machine runtime/installer/licensing and accessibility |
+
+## Mac/browser workspace alignment
+
+The browser now exposes all ten Mac workspaces, backed by the native project schema. Write is a continuous screenplay on both platforms; Pages remains the paginated output view. Shared design constants, browser-to-native edited-file tests, and paired page capture artifacts are documented in [Page parity](PAGE_PARITY.md). This closes the missing-page implementation gap; it does not close the gesture, typography, Office interchange or installed-app acceptance gates above.
 
 ## Close-out order
 

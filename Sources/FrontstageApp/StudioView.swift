@@ -27,7 +27,7 @@ struct StudioView: View {
                     Spacer()
                     Button("Export CSV") { do { workspace.exportCSV(try workspace.project.studioCSV(kind: kind), name: kind.label) } catch { workspace.errorMessage = error.localizedDescription } }
                 }
-            }.padding(14).frame(minWidth: 220, idealWidth: 260)
+            }.padding(14).frame(minWidth: 220, idealWidth: WorkspaceDesign.sidebar)
             if let record {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
@@ -64,11 +64,11 @@ struct StudioView: View {
                             workspace.edit("Delete Record") { try $0.editStudio { studio in studio.records.removeAll { $0.id == id }; let used = Set(studio.records.flatMap(\.assetIDs)); studio.assets.removeAll { !used.contains($0.id) } } }
                             selected = nil
                         }
-                    }.padding(24).textFieldStyle(.roundedBorder)
+                    }.padding(WorkspaceDesign.padding).textFieldStyle(.roundedBorder)
                 }.frame(minWidth: 350)
             } else { ContentUnavailableView("Select or add a record", systemImage: "books.vertical") }
         }.onChange(of: kind) { _, _ in selected = records.first?.id }
-            .onAppear { if let id = workspace.selectedResearchID { selected = id; kind = studio.records.first { $0.id == id }?.kind ?? .research; workspace.selectedResearchID = nil } }
+            .onAppear { if let id = workspace.selectedResearchID { selected = id; kind = studio.records.first { $0.id == id }?.kind ?? .research; workspace.selectedResearchID = nil } else if selected == nil { selected = records.first?.id } }
     }
     private var detailFields: [String] {
         switch kind {

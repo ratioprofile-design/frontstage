@@ -81,3 +81,8 @@ export function splitBeat(document,id,firstHTML,secondHTML) { const b=board(docu
 export function csv(rows) { return rows.map(row=>row.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(',')).join('\r\n'); }
 
 function beatLocked(board,beat) { if(beat.locked)return true;let block=board.blocks.find(b=>b.id===beat.blockID);const seen=new Set();while(block&&!seen.has(block.id)){if(block.locked||board.layers.find(l=>l.id===block.layerID)?.locked)return true;seen.add(block.id);block=board.blocks.find(b=>b.id===block.parentID);}return false; }
+
+export function breakdownRows(document){return [['Scene ID','Scene','Category','Item','Quantity','Notes'],...document.project.beats.filter(s=>!s.isDisabled).flatMap(s=>breakdownEntries(s).map(item=>[s.id,heading(s),item.category||item.bucket,item.name,item.count||1,item.description||'']))];}
+export function removeStudioAsset(document,recordID,assetID){const s=studio(document),record=s.records.find(r=>r.id===recordID);if(!record)throw Error('Record no longer exists.');record.assetIDs=record.assetIDs.filter(id=>id!==assetID);pruneAssets(s);}
+export function removeStudioRecord(document,id){const s=studio(document);s.records=s.records.filter(r=>r.id!==id);pruneAssets(s);}
+function pruneAssets(s){const used=new Set(s.records.flatMap(r=>r.assetIDs));s.assets=s.assets.filter(a=>used.has(a.id));}
