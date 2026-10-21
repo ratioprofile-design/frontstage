@@ -13,7 +13,13 @@ struct WhiteboardWorkspace: View {
     @State private var drawing = false
     @State private var fitRequest = 0
     @State private var linkReason = ""
+    @State private var showMarkerEditor = false
+    @State private var markerID: String?
+    @State private var markerTitle = "Act I"
+    @State private var markerTime = 0.0
     private var board: Whiteboard { workspace.whiteboard }
+    private var markers: [StoryMilestone] { workspace.project.storyMilestones }
+    private var timelineEnd: Double { max(20, board.beats.map { $0.start + $0.duration }.max() ?? 20, (markers.last?.x ?? 0) / StorySequencer.pointsPerPage + 3) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,7 +36,7 @@ struct WhiteboardWorkspace: View {
                     snippetPanel.frame(minWidth: 230, idealWidth: 280, maxWidth: 420)
                 }
                 VStack(spacing: 0) {
-                    if showTimeline { timeline.frame(height: showCharacters ? 150 : 88) }
+                    if showTimeline { timeline.frame(height: (showCharacters ? 150 : 88) + (markers.isEmpty ? 0 : 20)) }
                     if let cause = workspace.pendingBoardCauseID {
                         HStack {
                             Text("Choose an effect for “\(board.beats.first { $0.id == cause }?.title ?? "Cause")”")
@@ -44,6 +50,7 @@ struct WhiteboardWorkspace: View {
             }
         }
         .environment(\.colorScheme, .dark)
+        .sheet(isPresented: $showMarkerEditor) { markerEditor }
         .onAppear { initializeSelection() }
         .onChange(of: workspace.selectedSceneID) { _, id in
             if workspace.selectedBoardBeat?.sceneID != id, let beat = board.orderedBeats.first(where: { $0.sceneID == id }) { workspace.selectBoardBeat(beat.id); selection = [beat.id] }
@@ -75,7 +82,12 @@ struct WhiteboardWorkspace: View {
             Menu {
                 Button("Group Selected Blocks") { workspace.edit("Group Blocks") { try $0.groupBoardBlocks(blockSelection, name: "New Group") } }
                     .disabled(blockSelection.count < 2)
+                Button("Ungroup Selected Groups") { workspace.edit("Ungroup Blocks") { try $0.ungroupBoardBlocks(blockSelection) } }
+                    .disabled(!board.blocks.contains { $0.parentID.map(blockSelection.contains) == true })
                 Button("Resolve Causal Flow") { workspace.edit("Resolve Causes") { try $0.editWhiteboard { try $0.resolveCauses() } } }
+                Button("Compact Causal Time") { workspace.edit("Compact Causal Time") { try $0.editWhiteboard { try $0.compactCauses() } } }
+                    .help("Remove time gaps while respecting causes and locked starts. Board placement stays independent.")
+                Button("Add Act / Marker…") { editMarker() }
                 Button("Apply Story Order to Script") { workspace.edit("Apply Story Order") { try $0.applyWhiteboardStoryOrder() } }
                 Button("Merge Selected Snippets") { workspace.edit("Merge Snippets") { try $0.mergeBoardBeats(selection) } }.disabled(selection.count < 2)
                 Button("Clear Annotations") { workspace.edit("Clear Drawing") { try $0.editWhiteboard { $0.strokes = [] } } }
@@ -86,16 +98,32 @@ struct WhiteboardWorkspace: View {
 
     private var timeline: some View {
         GeometryReader { proxy in
-            let end = max(20, board.beats.map { $0.start + $0.duration }.max() ?? 20)
+            let end = timelineEnd
             let scale = max(12, (proxy.size.width - 90) / end)
             ScrollView(.horizontal) {
                 VStack(alignment: .leading, spacing: 2) {
                     ZStack(alignment: .topLeading) {
-                        ForEach(0...Int(end / 5), id: \.self) { mark in
-                            Text("\(mark * 5)").font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary)
-                                .offset(x: 90 + Double(mark * 5) * scale, y: 3)
+                        ForEach(Array(stride(from: 0.0, through: end, by: max(5, (end / 100).rounded(.up)))), id: \.self) { mark in
+                            Text("\(Int(mark))").font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary)
+                                .offset(x: 90 + mark * scale, y: 3)
                         }
                     }.frame(height: 20)
+                    if !markers.isEmpty {
+                        HStack(spacing: 0) {
+                            Text("Acts / Markers").font(.system(size: 9)).frame(width: 90, alignment: .leading)
+                            ZStack(alignment: .leading) {
+                                ForEach(markers) { marker in
+                                    Button(marker.title) { editMarker(marker) }.font(.system(size: 9)).buttonStyle(.borderless)
+                                        .padding(.horizontal, 5).frame(height: 17).background(Color.blue.opacity(0.6))
+                                        .offset(x: marker.x / StorySequencer.pointsPerPage * scale)
+                                        .contextMenu {
+                                            Button("Edit Marker…") { editMarker(marker) }
+                                            Button("Remove Marker") { workspace.edit("Remove Marker") { $0.removeStoryMilestone(marker.id) } }
+                                        }
+                                }
+                            }.frame(width: end * scale, height: 18)
+                        }
+                    }
                     timelineRow("Scenes", scale: scale, snippets: false)
                     timelineRow("Snippets", scale: scale, snippets: true)
                     if showCharacters {
@@ -130,8 +158,34 @@ struct WhiteboardWorkspace: View {
                             .overlay(Rectangle().stroke(workspace.selectedBoardBeatID == beat.id ? .white : .black.opacity(0.3), lineWidth: 1))
                     }.buttonStyle(.plain).offset(x: beat.start * scale)
                 }
-            }.frame(width: max(20, board.beats.map { $0.start + $0.duration }.max() ?? 20) * scale, height: 20)
+            }.frame(width: timelineEnd * scale, height: 20)
         }
+    }
+
+    private func editMarker(_ marker: StoryMilestone? = nil) {
+        markerID = marker?.id; markerTitle = marker?.title ?? "Act \(markers.count + 1)"
+        markerTime = marker.map { $0.x / StorySequencer.pointsPerPage } ?? workspace.selectedBoardBeat?.start ?? 0
+        showMarkerEditor = true
+    }
+    private var markerEditor: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(markerID == nil ? "Add Act / Marker" : "Edit Act / Marker").font(.headline)
+            TextField("Name", text: $markerTitle)
+            TextField("Estimated story time", value: $markerTime, format: .number)
+            Text("A visual guide in estimated story time; it does not force beats into an act.").font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Button("Cancel") { showMarkerEditor = false }.keyboardShortcut(.cancelAction)
+                Spacer()
+                Button("Save") {
+                    workspace.edit("Story Marker") { project in
+                        if let markerID { try project.updateStoryMilestone(markerID, title: markerTitle, page: markerTime) }
+                        else { _ = try project.addStoryMilestone(title: markerTitle, page: markerTime) }
+                    }
+                    showMarkerEditor = false
+                }.keyboardShortcut(.defaultAction)
+                    .disabled(markerTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !markerTime.isFinite || markerTime < 0 || markerTime > 1_000_000 / StorySequencer.pointsPerPage)
+            }
+        }.textFieldStyle(.roundedBorder).padding(22).frame(width: 370)
     }
 
     private var snippetPanel: some View {
@@ -217,6 +271,14 @@ struct WhiteboardWorkspace: View {
                                 if let i = board.layers.firstIndex(where: { $0.id == block.layerID }) { board.layers[i].name = value }
                             } }
                         }))
+                        if let layer = board.layers.first(where: { $0.id == block.layerID }) {
+                            Toggle("Lock Layer", isOn: Binding(get: { layer.locked }, set: { value in
+                                workspace.edit("Layer Lock") { try $0.editWhiteboard { board in if let i = board.layers.firstIndex(where: { $0.id == layer.id }) { board.layers[i].locked = value } } }
+                            }))
+                            Toggle("Unused Layer", isOn: Binding(get: { layer.unused }, set: { value in
+                                workspace.edit("Layer Inclusion") { try $0.editWhiteboard { board in if let i = board.layers.firstIndex(where: { $0.id == layer.id }) { board.layers[i].unused = value } } }
+                            }))
+                        }
                         HStack {
                             Text("Width")
                             TextField("Width", value: Binding(get: { block.width }, set: { value in

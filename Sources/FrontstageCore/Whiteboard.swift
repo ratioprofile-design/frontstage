@@ -203,6 +203,25 @@ public struct Whiteboard: Codable, Equatable, Sendable {
         }
         self = candidate
     }
+
+    /// Explicitly remove time gaps; free board positions and editorial order remain independent.
+    public mutating func compactCauses() throws {
+        let order = try causalOrder(), incoming = Dictionary(grouping: dependencies.filter { !$0.reference }, by: \.effect)
+        let indices = Dictionary(uniqueKeysWithValues: beats.indices.map { (beats[$0].id, $0) })
+        let unusedLayers = Set(layers.filter(\.unused).map(\.id)), unusedBlocks = Set(blocks.filter { unusedLayers.contains($0.layerID) }.map(\.id))
+        var candidate = self
+        for id in order {
+            guard let i = indices[id], !candidate.beats[i].omitted, !unusedBlocks.contains(candidate.beats[i].blockID) else { continue }
+            let earliest = (incoming[id] ?? []).compactMap { edge -> Double? in
+                guard let j = indices[edge.cause], !candidate.beats[j].omitted, !unusedBlocks.contains(candidate.beats[j].blockID) else { return nil }
+                return candidate.beats[j].start + candidate.beats[j].duration
+            }.max() ?? 0
+            if candidate.isLocked(candidate.beats[i]) {
+                guard candidate.beats[i].start >= earliest else { throw ProjectError.invalidProject("\(candidate.beats[i].title) is locked and blocks causal compaction") }
+            } else { candidate.beats[i].start = earliest }
+        }
+        self = candidate
+    }
 }
 
 extension Project {
@@ -318,6 +337,10 @@ extension Project {
 
     public mutating func removeBoardBeats(_ ids: Set<String>) throws {
         let old = try whiteboard(), affected = Set(old.beats.filter { ids.contains($0.id) }.map(\.sceneID))
+        guard old.beats.filter({ ids.contains($0.id) }).allSatisfy({ !old.isLocked($0) }),
+              !scenes.contains(where: { affected.contains($0.id) && $0.isTextLocked }) else {
+            throw ProjectError.invalidProject("unlock the selected beats and scene scripts before deleting")
+        }
         var candidate = self
         try candidate.editWhiteboard { board in
             guard ids.isSubset(of: Set(board.beats.map(\.id))) else { throw ProjectError.sceneNotFound }
@@ -355,7 +378,9 @@ extension Project {
                 let old = moving; moving.formUnion(children); changed = moving != old
             }
             guard moving.allSatisfy({ !board.isBlockLocked($0) }), layerID.map({ id in board.layers.contains { $0.id == id && !$0.locked } }) ?? true else { throw ProjectError.invalidProject("unlock the block or destination layer") }
-            let dx = snap ? (delta.x / 10).rounded() * 10 : delta.x, dy = snap ? (delta.y / 10).rounded() * 10 : delta.y
+            let members = board.blocks.filter { moving.contains($0.id) }
+            let dx = max(snap ? (delta.x / 10).rounded() * 10 : delta.x, -(members.map { $0.position.x }.min() ?? 0))
+            let dy = max(snap ? (delta.y / 10).rounded() * 10 : delta.y, 32 - (members.map { $0.position.y }.min() ?? 32))
             for i in board.blocks.indices where moving.contains(board.blocks[i].id) {
                 board.blocks[i].position.x = max(0, board.blocks[i].position.x + dx)
                 board.blocks[i].position.y = max(32, board.blocks[i].position.y + dy)
@@ -437,13 +462,52 @@ extension Project {
         try editWhiteboard { board in
             let items = board.blocks.filter { ids.contains($0.id) }
             guard items.count == ids.count, items.count > 1, Set(items.map(\.layerID)).count == 1, items.allSatisfy({ !board.isBlockLocked($0.id) }) else { throw ProjectError.invalidProject("select unlocked blocks in one layer") }
+            guard items.allSatisfy({ $0.parentID == items[0].parentID }) else { throw ProjectError.invalidProject("group blocks that share the same parent") }
             let selected = Set(items.map(\.id)), id = UUID().uuidString
             var group = BoardBlock(id: id, name: name, layerID: items[0].layerID,
                 position: BoardPoint(x: max(0, (items.map { $0.position.x }.min() ?? 0) - 18), y: max(32, (items.map { $0.position.y }.min() ?? 0) - 28)))
             group.width = min(2000, max(224, (items.map { $0.position.x + $0.width }.max() ?? 224) - group.position.x + 18))
+            group.parentID = items[0].parentID
             for i in board.blocks.indices where selected.contains(board.blocks[i].id) { board.blocks[i].parentID = id }
             board.blocks.append(group)
         }
+    }
+
+    public mutating func ungroupBoardBlocks(_ ids: Set<String>) throws {
+        try editWhiteboard { board in
+            let groups = board.blocks.filter { ids.contains($0.id) }
+            guard !ids.isEmpty, groups.count == ids.count,
+                  groups.allSatisfy({ group in !board.isBlockLocked(group.id) && board.blocks.contains(where: { $0.parentID == group.id }) }) else {
+                throw ProjectError.invalidProject("select unlocked groups to ungroup")
+            }
+            let byID = Dictionary(uniqueKeysWithValues: board.blocks.map { ($0.id, $0) })
+            for i in board.blocks.indices {
+                var parent = board.blocks[i].parentID
+                while let id = parent, ids.contains(id) { parent = byID[id]?.parentID }
+                if parent != board.blocks[i].parentID {
+                    guard !board.isBlockLocked(board.blocks[i].id) else { throw ProjectError.invalidProject("unlock the group members before ungrouping") }
+                    board.blocks[i].parentID = parent
+                }
+            }
+            let occupied = Set(board.beats.map(\.blockID))
+            board.blocks.removeAll { ids.contains($0.id) && !occupied.contains($0.id) }
+        }
+    }
+
+    public mutating func removeBoardBlocks(_ ids: Set<String>) throws {
+        var candidate = self, board = try whiteboard(), deleting = ids, changed = true
+        guard !ids.isEmpty, ids.isSubset(of: Set(board.blocks.map(\.id))) else { throw ProjectError.invalidProject("select existing blocks") }
+        while changed {
+            let old = deleting
+            deleting.formUnion(board.blocks.filter { $0.parentID.map(deleting.contains) == true }.map(\.id))
+            changed = old != deleting
+        }
+        guard deleting.allSatisfy({ !board.isBlockLocked($0) }) else { throw ProjectError.invalidProject("unlock the blocks before deleting") }
+        let beats = Set(board.beats.filter { deleting.contains($0.blockID) }.map(\.id))
+        if !beats.isEmpty { try candidate.removeBoardBeats(beats) }
+        board = try candidate.whiteboard(); board.blocks.removeAll { deleting.contains($0.id) }
+        try candidate.editWhiteboard { $0 = board }
+        self = candidate
     }
 
     public mutating func applyWhiteboardStoryOrder() throws {

@@ -22,6 +22,8 @@ final class WhiteboardAcceptanceTests: XCTestCase {
                 try project.updateBoardBeat(last) { $0.html = "<div class=\"sc-action\">The door closes.</div>"; $0.mustBeCaused = true }
                 try project.connectBoardBeats(cause: second, effect: last)
                 try project.groupBoardBlocks(Set(try project.whiteboard().blocks.map(\.id)), name: "Act I: The accident")
+                _ = try project.addStoryMilestone(title: "Act I: The invitation", page: 0)
+                _ = try project.addStoryMilestone(title: "Act II: The consequence", page: 3)
                 try project.editWhiteboard { board in
                     board.layers.insert(BoardLayer(name: "Taylor's backstory"), at: 1)
                     try board.resolveCauses()
@@ -52,6 +54,10 @@ final class WhiteboardAcceptanceTests: XCTestCase {
             let pdf = try XCTUnwrap(PDFDocument(data: ScreenplayPDF.render(project: restored, paper: .letter).data))
             XCTAssertTrue(pdf.string?.contains("A promise.") == true)
             XCTAssertTrue(pdf.string?.contains("The door closes.") == true)
+            let group = try XCTUnwrap(workspace.whiteboard.blocks.last?.id)
+            workspace.edit("Ungroup") { try $0.ungroupBoardBlocks([group]) }
+            XCTAssertTrue(workspace.whiteboard.blocks.allSatisfy { $0.parentID == nil })
+            workspace.undoProject(); XCTAssertEqual(workspace.project, restored)
             workspace.popup.close()
             let view = NSHostingView(rootView: WhiteboardWorkspace(workspace: workspace))
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1267, height: 720), styleMask: [.titled, .resizable], backing: .buffered, defer: false)

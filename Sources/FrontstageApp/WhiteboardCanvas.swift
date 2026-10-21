@@ -99,6 +99,16 @@ final class NativeWhiteboard: NSView {
             NSRect(x: viewport.x, y: rect.y, width: viewport.width, height: rect.height).fill()
             label("\(layer.collapsed ? "▸" : "▾") \(layer.name)\(layer.locked ? "  🔒" : "")", at: NSRect(x: max(5, viewport.x + 5), y: rect.y + 9, width: 145, height: 18), size: 10, color: .white)
         }
+        for marker in workspace?.project.storyMilestones ?? [] {
+            let x = 110 + marker.x
+            guard x >= viewport.x - 200, x <= viewport.maxX else { continue }
+            NSColor.systemBlue.withAlphaComponent(0.65).setStroke()
+            let line = NSBezierPath(); line.move(to: NSPoint(x: x, y: viewport.y)); line.line(to: NSPoint(x: x, y: viewport.maxY))
+            line.lineWidth = 1 / zoom; line.setLineDash([3, 5], count: 2, phase: 0); line.stroke()
+            let tag = NSRect(x: x, y: viewport.maxY - 19 / zoom, width: 190, height: 18 / zoom)
+            NSColor.systemBlue.withAlphaComponent(0.8).setFill(); tag.fill()
+            label(marker.title, at: tag.insetBy(dx: 4, dy: 2), size: 10 / zoom, color: .white)
+        }
         let byID = Dictionary(uniqueKeysWithValues: board.beats.map { ($0.id, $0) })
         let issueBeats = Set(board.issues.flatMap(\.beatIDs))
         for edge in board.dependencies {
@@ -326,7 +336,11 @@ final class NativeWhiteboard: NSView {
         if event.keyCode == 53 { workspace?.pendingBoardCauseID = nil; selection = []; blockSelection = []; selected?([], []); needsDisplay = true; return }
         if event.keyCode == 51 || event.keyCode == 117 {
             let ids = selection
-            workspace?.edit("Delete Beats") { try $0.removeBoardBeats(ids) }; selected?([], []); return
+            if !blockSelection.isEmpty {
+                let blocks = blockSelection
+                workspace?.edit("Delete Blocks") { try $0.removeBoardBlocks(blocks) }
+            } else { workspace?.edit("Delete Beats") { try $0.removeBoardBeats(ids) } }
+            selected?([], []); return
         }
         if event.modifierFlags.contains(.command), event.charactersIgnoringModifiers == "a" {
             selection = Set(board.beats.map(\.id)); selected?(selection, []); needsDisplay = true; return
@@ -372,6 +386,8 @@ final class NativeWhiteboard: NSView {
         } else if contextBlock != nil {
             item("Add Beat", #selector(insertContext)); item("Collapse / Expand Block", #selector(collapseContext))
             item("Lock / Unlock Block", #selector(lockContext))
+            if board.blocks.contains(where: { $0.parentID == contextBlock }) { item("Ungroup", #selector(ungroupContext)) }
+            item("Delete Block and Contents", #selector(deleteBlockContext))
         } else { item("Add Beat Here", #selector(insertContext)) }
         if blockSelection.count > 1 { item("Group Selected Blocks", #selector(groupContext)) }
         NSMenu.popUpContextMenu(menu, with: event, for: self)
@@ -412,6 +428,8 @@ final class NativeWhiteboard: NSView {
     @objc private func collapseContext() { if let id = contextBlock { workspace?.edit("Block Display") { try $0.editWhiteboard { board in if let i = board.blocks.firstIndex(where: { $0.id == id }) { board.blocks[i].collapsed.toggle() } } } } }
     @objc private func lockContext() { if let id = contextBlock { workspace?.edit("Block Lock") { try $0.editWhiteboard { board in if let i = board.blocks.firstIndex(where: { $0.id == id }) { board.blocks[i].locked.toggle() } } } } }
     @objc private func groupContext() { let ids = blockSelection; workspace?.edit("Group Blocks") { try $0.groupBoardBlocks(ids, name: "New Group") } }
+    @objc private func ungroupContext() { if let id = contextBlock { workspace?.edit("Ungroup Blocks") { try $0.ungroupBoardBlocks([id]) } } }
+    @objc private func deleteBlockContext() { if let id = contextBlock { workspace?.edit("Delete Block") { try $0.removeBoardBlocks([id]) } } }
 }
 
 extension NSColor {

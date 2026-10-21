@@ -90,6 +90,17 @@ public struct StorySequencer: Equatable, Sendable {
 }
 
 extension Project {
+    /// Timeline markers can be read without rebuilding the legacy scene sequencer.
+    public var storyMilestones: [StoryMilestone] {
+        var seen = Set<String>()
+        return (state["sectionBreaks"]?.array ?? []).compactMap { value -> StoryMilestone? in
+            guard let item = value.object, let id = item["id"]?.string, !id.isEmpty,
+                  let unit = item["unit"]?.double, unit.isFinite, unit >= 0,
+                  unit <= 1_000_000 / StorySequencer.pointsPerPage, seen.insert(id).inserted else { return nil }
+            return StoryMilestone(id: id, title: item["title"]?.string ?? "Milestone", x: unit * StorySequencer.pointsPerPage)
+        }.sorted { $0.x == $1.x ? $0.id < $1.id : $0.x < $1.x }
+    }
+
     public func storySequencer(boardID: Int = 0) -> StorySequencer {
         let graph = storyGraph
         let rawBeats = Dictionary(uniqueKeysWithValues: (state["beats"]?.array ?? []).compactMap { value -> (Decimal, [String: JSONValue])? in
@@ -120,11 +131,7 @@ extension Project {
                 groupID: fields["groupId"]?.string, isLocked: fields["frontstageLocked"] == .bool(true))
         }
         let ids = Set(nodes.map(\.id))
-        let milestones = (state["sectionBreaks"]?.array ?? []).compactMap { value -> StoryMilestone? in
-            guard let item = value.object, let id = item["id"]?.string, let unit = item["unit"]?.double,
-                  unit.isFinite, unit >= 0, unit <= 1_000_000 / StorySequencer.pointsPerPage else { return nil }
-            return StoryMilestone(id: id, title: item["title"]?.string ?? "Milestone", x: unit * StorySequencer.pointsPerPage)
-        }
+        let milestones = storyMilestones
         let groups = (state["causalityGroups"]?.array ?? []).compactMap { value -> StorySequenceGroup? in
             guard let item = value.object, let id = item["id"]?.string else { return nil }
             return StorySequenceGroup(id: id, title: item["title"]?.string ?? "Sequence", laneID: item["laneId"]?.string ?? "")
@@ -352,6 +359,16 @@ extension Project {
 
     public mutating func removeStoryMilestone(_ id: String) {
         state["sectionBreaks"] = .array((state["sectionBreaks"]?.array ?? []).filter { $0.object?["id"]?.string != id })
+    }
+
+    public mutating func updateStoryMilestone(_ id: String, title: String, page: Double) throws {
+        guard page.isFinite, page >= 0, page <= 1_000_000 / StorySequencer.pointsPerPage,
+              var items = state["sectionBreaks"]?.array,
+              let index = items.firstIndex(where: { $0.object?["id"]?.string == id }), var fields = items[index].object else {
+            throw ProjectError.invalidProject("choose an existing marker and a valid story time")
+        }
+        fields["title"] = .string(title); fields["unit"] = .number(Decimal(page))
+        items[index] = .object(fields); state["sectionBreaks"] = .array(items)
     }
 
     /// Explicitly updates editorial order; moving beats alone never silently reorders the screenplay.
