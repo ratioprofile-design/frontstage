@@ -19,6 +19,11 @@ const record=m.addRecord(doc,'research',1);doc.project.frontstageStudio.records[
 m.setTypography(doc,{fontName:'Courier',fontSize:12,lineHeight:14,paragraphSpacing:10});doc.project.beats[0].frontstageParallel=[{id:'parallel-1',left:'The invitation',right:'அழைப்பு'}];
 validateBoard(doc.project.frontstageWhiteboard,new Set([1,2]));assert.deepEqual(m.scriptSegments(doc).map(s=>s.scene.id),[1,2]);
 const split=structuredClone(doc);const id=m.splitBeat(split,'beat-1','<p>First</p>','<p>Second</p>');assert.equal(split.project.frontstageWhiteboard.dependencies[0].cause,id);assert.equal(m.scriptSegments(split)[0].html,'<p>First</p><p>Second</p>');
+assert.deepEqual(m.dayOutRows(doc)[1],['MAYA','SWF']);
+assert.equal(m.scheduleRows(doc).length,3);
+const schedule=structuredClone(doc),secondDay=m.addDay(schedule,'2026-10-23');schedule.project.frontstageProduction.days[1].callTime='05:00';schedule.project.frontstageProduction.days[0].wrapTime='22:00';
+assert.ok(m.scheduleWarnings(schedule,schedule.project.frontstageProduction.days[1]).some(w=>w.includes('turnaround')));
+const protectedSplit=structuredClone(doc);protectedSplit.project.frontstageWhiteboard.layers[0].locked=true;assert.throws(()=>m.splitBeat(protectedSplit,'beat-1','one','two'));
 assert.deepEqual(doc.project.customFuture,{preserve:true});
 const fixture=new URL('../../Tests/Fixtures/workspace-parity.frontstage',import.meta.url);
 if(process.argv.includes('--write-fixture'))await writeFile(fixture,JSON.stringify(doc,null,2)+'\n');

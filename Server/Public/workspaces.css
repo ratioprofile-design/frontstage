@@ -7,3 +7,5 @@
 /* Native text fields use their labels as placeholders; retain accessible labels in both editions. */
 .workspace-field{font-size:0;color:transparent}.workspace-field input,.workspace-field select,.workspace-field textarea{font-size:12px}.workspace-field textarea{min-height:32px}.workspace-field:has(input[type=date]),.workspace-field:has(input[type=time]),.workspace-field:has(input[type=number]),.workspace-field:has(select){font-size:12px;color:var(--fs-muted)}#workspace[data-page=studio] .workspace-detail textarea{min-height:180px}.parallel-row textarea{min-height:90px}#workspace[data-page=writingTools] .workspace-section>textarea{min-height:100px}
 .editor-grip{display:inline-flex;align-items:center;justify-content:center;flex:none;width:18px;height:22px;color:var(--fs-muted);cursor:move;user-select:none}
+
+.writing-scene-fields{grid-template-columns:repeat(4,minmax(0,1fr))}.writing-scene-fields>.workspace-field:nth-child(-n+2){grid-column:span 2}

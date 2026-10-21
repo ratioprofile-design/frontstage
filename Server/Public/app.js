@@ -156,7 +156,7 @@ function edit(action) {
 function restoreHistory(from, to) {
   if (!doc || current.access === 'reader' || !from.length) return;
   to.push(clone(doc)); doc = from.pop(); dirty = true;
-  refreshEditors();
+  refreshEditors(true);
   saveLocal().catch(e => status(`Local save failed: ${e.message}`)); render(); clearTimeout(timer); timer = setTimeout(sync, 800);
 }
 async function sync() {
@@ -396,12 +396,13 @@ function editMarker(marker = null) {
 const editors = new Map();
 let editorStack = 20;
 const editorFields = [['beat-title', 'title'], ['beat-synopsis', 'synopsis'], ['beat-kind', 'kind'], ['must-cause', 'mustBeCaused'], ['beat-characters', 'characters'], ['beat-tags', 'tags']];
-function refreshEditors() {
+function refreshEditors(force = false) {
   for (const [id, panel] of editors) {
     const beat = board().beats.find(b => b.id === id);
     if (!beat) { closeEditor(id); continue; }
     for (const [name, key] of editorFields) {
       const input = panel.querySelector(`[data-field="${name}"]`);
+      if (!force && document.activeElement === input) continue;
       if (key === 'mustBeCaused') input.checked = beat[key];
       else { const value = Array.isArray(beat[key]) ? beat[key].join(', ') : (beat[key] ?? ''); if (input.value !== value) input.value = value; }
     }
@@ -550,6 +551,16 @@ const workspaces = mountWorkspaces({
   selectBeat: id => choose(id), openBeat: openEditor,
   addScene: () => { selected = null; addBeat(true); if (selected) closeEditor(selected); },
   projects: () => $('back').click(), sync, download,
+  refresh: async () => {
+    await sync();
+    if (!current || current.local || dirty || syncing || pendingConflict) return;
+    const epoch=documentEpoch,id=current.id;
+    const {data}=await api(`/api/projects/${id}`);
+    if(epoch!==documentEpoch||dirty||syncing||pendingConflict)return;
+    const next=initializeBoard(clone(data.document));
+    current=data;base=clone(data.document);doc=next;render();await saveLocal();status(`Synced · revision ${current.revision}`);
+  },
+  duplicate: async () => { const document=clone(doc);document.name+=' copy';const {data}=await api('/api/projects','POST',{document});await openProject(data.id); },
   connect: () => { download(); $('logout').click(); },
   share: async (username, access) => { if (!username.trim()) throw Error('Enter a registered username.'); await api(`/api/projects/${current.id}/members`, 'POST', {username, access: access === 'remove' ? null : access}); status(`Access updated for ${username}`); }
 });

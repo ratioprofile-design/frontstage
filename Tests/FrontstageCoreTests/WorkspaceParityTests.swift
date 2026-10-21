@@ -18,6 +18,7 @@ final class WorkspaceParityTests: XCTestCase {
         XCTAssertEqual(project.parallelScript(sceneID: 1).last?.right, "வணக்கம்")
         XCTAssertTrue(try project.studio().records.contains { $0.title == "Browser research" })
         XCTAssertTrue(try project.studio().assets.contains { $0.data == Data("Portable attachment".utf8) })
+        XCTAssertEqual(project.productionDays.last?.fields["locationName"], "Old Station")
         XCTAssertEqual(project.productionDays.last?.castCalls["LENA"]?["onSetTime"], "08:00")
         XCTAssertEqual(try Project(data: project.encoded()), project)
     }

@@ -20,7 +20,7 @@ final class WorkspaceParityAcceptanceTests: XCTestCase {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1440, height: 950), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
             defer { workspace.popup.close(); window.contentView = nil; window.close() }
-            func capture(_ view: NSView, name: String) throws {
+            @MainActor func capture(_ view: NSView, name: String) throws {
                 guard let output else { return }
                 let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
                 view.cacheDisplay(in: view.bounds, to: bitmap)
@@ -28,6 +28,7 @@ final class WorkspaceParityAcceptanceTests: XCTestCase {
             }
             for (index, mode) in Workspace.Mode.allCases.enumerated() {
                 workspace.mode = mode
+                if mode == .pages { workspace.makePreview() }
                 let view = NSHostingView(rootView: WorkspaceView(workspace: workspace))
                 view.frame = NSRect(x: 0, y: 0, width: 1440, height: 950)
                 window.contentView = view
