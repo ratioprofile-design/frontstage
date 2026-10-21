@@ -19,6 +19,8 @@ for (let attempt = 1; attempt <= 12; attempt++) {
     }
     const config = await fetch(origin + '/config.js', { signal: AbortSignal.timeout(10000), cache: 'no-store', redirect: 'error' });
     if (!config.ok || !(await config.text()).startsWith('export const apiOrigin = ')) throw Error('Public service configuration is missing');
+    const worker = await fetch(origin + '/sw.js', { signal: AbortSignal.timeout(10000), cache: 'no-store', redirect: 'error' });
+    if (!worker.ok || !(await worker.text()).includes('const FRONTSTAGE_SHELL = ')) throw Error('Offline application shell is missing');
     const message = `PASS: ${origin} serves this browser build. Backend hosting/accounts/sync require a separately configured Swift service.`;
     console.log(message); await writeFile(path.join(root, 'build/web-deployment.txt'), message + '\n');
     process.exit(0);

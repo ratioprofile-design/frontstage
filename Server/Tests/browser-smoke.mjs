@@ -21,7 +21,7 @@ async function wait(check, message) { for (let i = 0; i < 100; i++) { if (await 
 try {
   await wait(async () => (await fetch(address + '/health')).ok, 'Server startup');
   if (staticMode) {
-    const types = { 'index.html': 'text/html', 'style.css': 'text/css', 'app.js': 'application/javascript', 'merge.js': 'application/javascript', 'board-operations.js': 'application/javascript', 'config.js': 'application/javascript' };
+    const types = { 'index.html': 'text/html', 'style.css': 'text/css', 'app.js': 'application/javascript', 'merge.js': 'application/javascript', 'board-operations.js': 'application/javascript', 'config.js': 'application/javascript', 'sw.js': 'application/javascript' };
     staticServer = createServer(async (request, response) => {
       const file = request.url === '/' ? 'index.html' : request.url.slice(1);
       if (!types[file]) { response.writeHead(404); response.end(); return; }
@@ -191,10 +191,24 @@ try {
   assert.equal(imported.project.vault[0].r2SecretAccessKey, undefined);
   assert.equal(imported.project.vault[0].customField, 42);
   assert.ok(imported.project.beats[0].content.includes('local edit while offline'));
+  await localPage.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+    if (!navigator.serviceWorker.controller) await new Promise(resolve => navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true }));
+  });
+  const shellURLs = await localPage.evaluate(async () => (await Promise.all((await caches.keys()).filter(k => k.startsWith('frontstage-shell-')).map(async k => (await (await caches.open(k)).keys()).map(r => r.url)))).flat());
+  assert.ok(shellURLs.some(url => new URL(url).pathname === '/app.js'));
+  assert.ok(shellURLs.every(url => !new URL(url).pathname.startsWith('/api/')));
+  await localContext.setOffline(true);
+  await localPage.reload({ waitUntil: 'domcontentloaded' });
+  await localPage.locator('#local-mode').click();
+  await localPage.getByRole('button', { name: `${imported.name} · on this device`, exact: true }).click();
+  await localPage.locator('#blocks .beat-text').getByText('Local story beat', { exact: true }).dblclick();
+  assert.ok((await localPage.locator('#snippet-editor').innerText()).includes('local edit while offline'));
+  await localPage.screenshot({ path: path.join(artifact, `browser-${staticMode ? 'static-' : ''}offline-popup.png`) });
   assert.deepEqual(localAPIRequests, []);
   await localContext.close();
   assert.deepEqual(errors, []);
-  console.log(`PASS (${staticMode ? 'static cross-origin' : 'same-origin'}): browser account, popup/causes, offline merge, isolation/locks, local import/export, multi-block group/ungroup/delete/undo/redo, act markers, compaction and popup movement`);
+  console.log(`PASS (${staticMode ? 'static cross-origin' : 'same-origin'}): browser account, concurrent snippets/offline merge, isolation/locks, local import/export and cold offline reload, group/ungroup/delete/undo/redo, markers/compaction and popup movement`);
 } catch (error) {
   const details = String(error.stack || error).replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
   console.error(`::error::${details}`);

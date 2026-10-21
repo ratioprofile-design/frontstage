@@ -2,6 +2,8 @@ import { mergeDocuments } from './merge.js';
 import { apiOrigin as configuredOrigin } from './config.js';
 import { causalOrder as orderCauses, compactCausalTime, groupBlocks, ungroupBlocks, moveBlocks, descendantBlocks, deleteBlocks } from './board-operations.js';
 
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
+
 const $ = id => document.getElementById(id);
 const clone = value => structuredClone(value);
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);

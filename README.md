@@ -24,13 +24,14 @@ The bundle contains arm64 and x86_64 executables. Linux runs the portable tests 
 - Native floating rich-text beat editor: double-click a beat or press Return. Title, synopsis, story/subtext type, characters, tags, cause requirement and split at cursor use stable snippet IDs.
 - Multi-selection, block/group movement, snippet reordering between blocks, insert before/after, grouping, collapse, locks, cursor-centered zoom, pan, fit and freehand annotations.
 - Causal/reference links, missing-cause diagnostics, cycle rejection, deterministic forward ripple, atomic rollback at locked blockers and explicit timeline-to-script ordering.
+- Editable act markers, group/ungroup and protected block deletion, rigid boundary movement and explicit causal-time compaction. PDF/DOCX preserve interleaved snippet order and returning scene numbers.
 - Native screenplay elements, headings, scene numbering, rich-text undo, revisions, recovery, typography, Bamini-to-Unicode conversion and two-column writing.
 - Letter/A4 screenplay PDF/print, MORE/CONT'D, explicit scene page starts and script text locks. Dual dialogue and locked production pagination remain pending.
 - People/casting, breakdowns, shooting days, call-sheet PDFs, DOOD and CSV/XLSX reports.
 - Research, crew, continuity, shots/storyboard attachments and auditions with media import/export; these are initial workspaces with remaining advanced parity work.
 - Project copies, atomic `.frontstage` saves and unknown-field preservation; text/PDF/RTF/DOCX import, screenplay DOCX export and first-worksheet CSV/XLSX import.
 - Swift shared-project server, Mac Keychain login, owner/editor/reader permissions, explicit synchronization, three-way merges and retained local conflicts.
-- Browser whiteboard/popup with offline drafts and reconnect merging. Native Swift/Win32 Windows whiteboard/popup preview using the same Swift domain code.
+- Browser grouping/markers, undo/redo, movable popup, snippet-aware reconnect merging and local offline startup after an initial online visit. Native Swift/Win32 Windows whiteboard/popup preview uses the same Swift domain code.
 
 See [feature coverage](docs/FEATURES.md), [whiteboard behavior](docs/CAUSALITY.md) and [validation evidence](docs/VALIDATION.md).
 
@@ -42,7 +43,7 @@ Command+Z is text undo; Command+Option+Z is project undo. Recovery is a separate
 
 ## Shared projects and other platforms
 
-[Server setup](Server/README.md) covers local browser preview, accounts, persistence, Docker and synchronization. Run the service locally, then visit `http://127.0.0.1:8080`. No public deployment has been provisioned.
+[Server setup](Server/README.md) covers local browser preview, accounts, persistence, Docker and synchronization. Run the service locally, then visit `http://127.0.0.1:8080`. The persistent shared service has not been deployed.
 
 The browser is available at [frontstage-five.vercel.app](https://frontstage-five.vercel.app/), with static delivery verified by the Browser deployment workflow. Its Vercel project is connected to this repository. A persistent Swift backend and its HTTPS origin are still required for public accounts/sync. See [Vercel setup](Server/README.md#vercel-browser-deployment).
 
