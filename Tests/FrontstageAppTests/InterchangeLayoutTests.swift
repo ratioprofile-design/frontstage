@@ -50,5 +50,30 @@ final class InterchangeLayoutTests: XCTestCase {
             XCTAssertEqual(try OfficeImport.spreadsheet(xlsx), rows)
         }
     }
+    func testInterleavedSceneRangesPrintInBoardOrderExactlyOnceInPDFAndDOCX() async throws {
+        try await MainActor.run {
+            var project = Project(); let a = try project.addBoardBeat(title: "Returning scene")
+            let block = try project.whiteboard().beats[0].blockID, a2 = try project.addBoardBeat(blockID: block), b = try project.addBoardBeat(title: "Other scene")
+            try project.updateBoardBeat(a) { $0.html = "<div class=\"sc-action\">First range A.</div>"; $0.start = 0 }
+            try project.updateBoardBeat(b) { $0.html = "<div class=\"sc-action\">Middle range B.</div>"; $0.start = 1 }
+            try project.updateBoardBeat(a2) { $0.html = "<div class=\"sc-action\">Last range A.</div>"; $0.start = 2 }
+            try project.applyWhiteboardStoryOrder()
+            let pdf = try ScreenplayPDF.render(project: project, paper: .letter), docx = try ScreenplayDOCX.render(project)
+            let pdfText = try XCTUnwrap(PDFDocument(data: pdf.data)?.string)
+            let word = try NSAttributedString(data: docx, options: [.documentType: NSAttributedString.DocumentType.officeOpenXML], documentAttributes: nil)
+            for text in [pdfText, word.string] {
+                let source = text as NSString
+                let locations = ["First range A.", "Middle range B.", "Last range A."].map { source.range(of: $0).location }
+                XCTAssertFalse(locations.contains(NSNotFound)); XCTAssertEqual(locations, locations.sorted())
+                for marker in ["First range A.", "Middle range B.", "Last range A."] { XCTAssertEqual(text.components(separatedBy: marker).count - 1, 1) }
+                XCTAssertTrue(text.contains("(CONTINUED)"))
+            }
+            if let path = ProcessInfo.processInfo.environment["FRONTSTAGE_TEST_ARTIFACTS"] {
+                let directory = URL(fileURLWithPath: path); try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                try pdf.data.write(to: directory.appendingPathComponent("interleaved-snippets.pdf"))
+                try docx.write(to: directory.appendingPathComponent("interleaved-snippets.docx"))
+            }
+        }
+    }
 }
 #endif

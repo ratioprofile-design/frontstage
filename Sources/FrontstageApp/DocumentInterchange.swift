@@ -9,8 +9,9 @@ enum ScreenplayDOCX {
     static func render(_ project: Project) throws -> Data {
         let xml = OfficeArchive.xml
         var paragraphs = ""
-        for scene in project.scenes where !scene.isDisabled {
-            paragraphs += paragraph(scene.heading.text, element: .sceneHeading)
+        for segment in try project.orderedScript() {
+            let scene = segment.scene
+            paragraphs += paragraph("\(segment.number)  \(scene.heading.text)\(segment.isContinuation ? " (CONTINUED)" : "")", element: .sceneHeading, newPage: scene.startsNewPage)
             let text = try ScreenplayTextCodec.decode(scene.html), source = text.string as NSString
             var offset = 0
             while offset < text.length {
@@ -42,8 +43,8 @@ enum ScreenplayDOCX {
             "word/document.xml": Data(document.utf8), "word/styles.xml": Data(styles.utf8)
         ])
     }
-    private static func paragraph(_ text: String, element: ScreenplayElement) -> String {
-        "<w:p><w:pPr><w:pStyle w:val=\"\(element.rawValue)\"/></w:pPr><w:r><w:t xml:space=\"preserve\">\(OfficeArchive.xml(text))</w:t></w:r></w:p>"
+    private static func paragraph(_ text: String, element: ScreenplayElement, newPage: Bool = false) -> String {
+        "<w:p><w:pPr><w:pStyle w:val=\"\(element.rawValue)\"/>\(newPage ? "<w:pageBreakBefore/>" : "")</w:pPr><w:r><w:t xml:space=\"preserve\">\(OfficeArchive.xml(text))</w:t></w:r></w:p>"
     }
 }
 

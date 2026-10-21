@@ -45,13 +45,13 @@ struct ScreenplayPageLayout {
 enum ScreenplayPDF {
     private static let explicitPageStart = NSAttributedString.Key("design.ratioprofile.frontstage.pageStart")
     static func render(project: Project, paper: ScreenplayPaper) throws -> RenderedScreenplay {
-        let active = project.scenes.filter { !$0.isDisabled }
+        let active = try project.orderedScript()
         guard !active.isEmpty else { throw ScreenplayPDFError.noScenes }
         let text = NSMutableAttributedString(string: "")
-        for (index, scene) in active.enumerated() {
-            let number = scene.sceneNumber.isEmpty ? String(index + 1) : scene.sceneNumber
+        for segment in active {
+            let scene = segment.scene, number = segment.number
             let headingStart = text.length
-            text.append(NSAttributedString(string: "\(number)  \(scene.heading.text)\n",
+            text.append(NSAttributedString(string: "\(number)  \(scene.heading.text)\(segment.isContinuation ? " (CONTINUED)" : "")\n",
                 attributes: ScreenplayTypography.attributes(.sceneHeading, width: paper.contentWidth, printing: true, settings: project.scriptLayout)))
             if scene.startsNewPage { text.addAttribute(explicitPageStart, value: true, range: NSRange(location: headingStart, length: 1)) }
             let body = try ScreenplayTextCodec.decode(scene.html, width: paper.contentWidth, printing: true, settings: project.scriptLayout)

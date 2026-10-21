@@ -34,7 +34,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Continue'
           $PSNativeCommandUseErrorActionPreference = $false
-          swift test -j 2 --filter 'Whiteboard.*Tests|ProjectMergeTests|DocumentMergeTests|OfficeArchiveTests|ScreenplayToolsTests' 2>&1 | Tee-Object windows-tests.log
+          swift test -j 2 --filter 'Whiteboard.*Tests|ProjectMergeTests|DocumentMergeTests|ScriptSequenceTests|OfficeArchiveTests|ScreenplayToolsTests' 2>&1 | Tee-Object windows-tests.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Smoke native popup and project save
         shell: pwsh
