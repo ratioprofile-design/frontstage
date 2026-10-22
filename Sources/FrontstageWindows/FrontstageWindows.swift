@@ -217,7 +217,8 @@ private func procedure(_ hwnd: HWND?, _ message: UINT, _ wParam: WPARAM, _ lPara
         _ = SetWindowLongPtrW(hwnd, GWLP_USERDATA, creation.pointee.lpCreateParams == UnsafeMutableRawPointer(bitPattern: 1) ? 1 : 0)
     }
     let popup = GetWindowLongPtrW(hwnd, GWLP_USERDATA) == 1
-    if popup && message != UINT(WM_CREATE) { state.activatePopup(hwnd) }
+    // Creation can synchronously send focus messages to another popup. Only commands select editor bindings.
+    if popup && message == UINT(WM_COMMAND) && !state.loadingPopup { state.activatePopup(hwnd) }
     switch message {
     case UINT(WM_CREATE):
         if popup {
