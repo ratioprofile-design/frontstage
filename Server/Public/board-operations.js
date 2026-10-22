@@ -102,7 +102,7 @@ export function groupBlocks(source, ids, name, id) {
 export function ungroupBlocks(source, ids) {
   const board = copy(source), groups = board.blocks.filter(b => ids.has(b.id)), byID = new Map(board.blocks.map(b => [b.id, b]));
   if (!ids.size || groups.length !== ids.size || groups.some(g => blockLocked(board, g.id) || (g.containerKind!=='beatGroup' && !board.blocks.some(b => b.parentID === g.id)))) throw Error('Select unlocked groups to ungroup.');
-  for(const group of groups.filter(g=>g.containerKind==='beatGroup')){let top=group.position.y;for(const beat of board.beats.filter(b=>b.blockID===group.id).sort((a,b)=>a.order-b.order)){if(beat.locked)throw Error('Unlock the group members.');const loose={...copy(group),id:crypto.randomUUID(),name:'Beat',standalone:true,position:{x:group.position.x,y:top}};delete loose.containerKind;top+=beatSize(beat.title,group.width-12).height+4;beat.blockID=loose.id;board.blocks.push(loose);}}
+  for(const group of groups.filter(g=>g.containerKind==='beatGroup')){let top=group.position.y;for(const beat of board.beats.filter(b=>b.blockID===group.id).sort((a,b)=>a.order-b.order)){if(beat.locked)throw Error('Unlock the group members.');const loose={...copy(group),id:crypto.randomUUID(),name:'Beat',standalone:true,collapsed:false,position:{x:group.position.x,y:top}};delete loose.containerKind;top+=beatSize(beat.title,group.width-12).height+4;beat.blockID=loose.id;board.blocks.push(loose);}}
   for (const block of board.blocks) {
     let parent = block.parentID; while (ids.has(parent)) parent = byID.get(parent)?.parentID;
     if (parent !== block.parentID) {
