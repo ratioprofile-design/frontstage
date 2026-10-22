@@ -273,6 +273,16 @@ try {
     return await new Promise(resolve => { const request = db.transaction('projects').objectStore('projects').get('invalid-fixture'); request.onsuccess = () => resolve(request.result); });
   });
   assert.equal(retainedInvalid.doc.project.frontstageWhiteboard.blocks[0].parentID, retainedInvalid.doc.project.frontstageWhiteboard.blocks[0].id);
+  // Shared drafts remain recoverable after a cold offline launch, without storing credentials or writing to a server.
+  await localPage.evaluate(async document=>{
+    const db=await new Promise(resolve=>{const r=indexedDB.open('frontstage-offline',1);r.onsuccess=()=>resolve(r.result);});
+    await new Promise(resolve=>{const tx=db.transaction('projects','readwrite');tx.objectStore('projects').put({id:'shared-recovery-fixture',local:false,name:'Shared recovery',doc:document,base:document,revision:7,dirty:true});tx.oncomplete=resolve;});
+  },imported);
+  await localContext.setOffline(true);await localPage.reload({waitUntil:'domcontentloaded'});await localPage.locator('#recover-shared').click();
+  await localPage.getByRole('button',{name:'Shared recovery · recover unsynced draft',exact:true}).click();
+  await localPage.locator('#workspace:not([hidden])').waitFor();
+  const recovery=await localPage.evaluate(async()=>{const db=await new Promise(resolve=>{const r=indexedDB.open('frontstage-offline',1);r.onsuccess=()=>resolve(r.result);});return new Promise(resolve=>{const r=db.transaction('projects').objectStore('projects').get('shared-recovery-fixture');r.onsuccess=()=>resolve(r.result);});});
+  assert.equal(recovery.revision,7);assert.equal(recovery.dirty,true);assert.deepEqual(recovery.doc,imported);
   assert.deepEqual(localAPIRequests, []);
   await localContext.close();
   assert.deepEqual(errors, []);

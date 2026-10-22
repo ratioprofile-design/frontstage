@@ -48,3 +48,7 @@ The optional side script is continuous white screenplay paper with scene heading
 Popup editors, Write and the board-side script expose scene-owned INT./EXT., location and time-of-day controls. Dropdowns suggest standard prefixes/times and existing locations while allowing custom text. Each popup binds to its own scene, including when several popups are open. Locked scripts disable heading changes.
 
 Character, transition, parenthetical and shot choices insert formatted paragraphs without replacing surrounding action/dialogue. Element selection still offers action, character, dialogue, parenthetical, transition, shot and lyrics. Side-paper tools follow the active beat. Browser parity tests cover simultaneous popup heading isolation and formatted insertion; native editor tests cover insertion between existing paragraphs and read-only behavior.
+
+### Close-out audit
+
+The browser now exposes a Ripple toggle. Dragging blocks or loose beats can move into an unlocked destination lane; selected loose beats preserve their relative positions and container IDs across lanes. Forward ripple respects inherited locks and rejects a blocked move atomically. Compaction remains a separate explicit action. The five workstreams and outstanding release/feature gates are tracked in [PHASE_STATUS.md](PHASE_STATUS.md).

@@ -7,3 +7,5 @@ build/
 .env.*
 /Server/var/
 node_modules/
+
+__pycache__/

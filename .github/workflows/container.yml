@@ -1,9 +1,9 @@
 name: Server container
 on:
   push:
-    paths: ['Server/Dockerfile', 'Server/Package*', 'Server/Sources/**', 'Sources/FrontstageCore/**', 'Package.swift', '.github/workflows/container.yml']
+    paths: ['Server/Dockerfile', 'Server/Package*', 'Server/Sources/**', 'Sources/FrontstageCore/**', 'Package.swift', '.github/workflows/container.yml', 'deploy/**']
   pull_request:
-    paths: ['Server/Dockerfile', 'Server/Package*', 'Server/Sources/**', 'Sources/FrontstageCore/**', 'Package.swift', '.github/workflows/container.yml']
+    paths: ['Server/Dockerfile', 'Server/Package*', 'Server/Sources/**', 'Sources/FrontstageCore/**', 'Package.swift', '.github/workflows/container.yml', 'deploy/**']
 permissions:
   contents: read
 jobs:
@@ -12,6 +12,8 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+      - name: Validate persistent HTTPS deployment configuration
+        run: FRONTSTAGE_SERVICE_DOMAIN=sync.example.com docker compose -f deploy/compose.yaml config --quiet
       - name: Build server container
         run: docker build -f Server/Dockerfile -t frontstage-server:validation .
       - name: Verify non-root service health

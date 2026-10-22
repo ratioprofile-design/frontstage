@@ -70,17 +70,28 @@ export function descendantBlocks(board, ids) {
   while (changed) { const count = result.size; for (const block of board.blocks) if (result.has(block.parentID)) result.add(block.id); changed = count !== result.size; }
   return result;
 }
-export function moveBlocks(source, ids, dx, dy) {
+export function moveBlocks(source, ids, dx, dy, {layerID, ripple=false}={}) {
   const board = copy(source), moving = descendantBlocks(board, ids), items = board.blocks.filter(b => moving.has(b.id)), locked = lockedBlockIDs(board);
   if (!ids.size || !Number.isFinite(dx) || !Number.isFinite(dy) || items.length !== moving.size || items.some(b => locked.has(b.id))) throw Error('Select unlocked blocks to move.');
+  if(layerID && !board.layers.some(l=>l.id===layerID&&!l.locked))throw Error('Unlock the destination lane.');
   dx = Math.max(dx, -Math.min(...items.map(b => b.position.x))); dy = Math.max(dy, 32 - Math.min(...items.map(b => b.position.y)));
   for (const block of items) {
     block.position.x += dx; block.position.y += dy;
+    if(layerID){if(block.layerID!==layerID && !moving.has(block.parentID))delete block.parentID;block.layerID=layerID;}
     if (Math.abs(block.position.x) > 1000000 || Math.abs(block.position.y) > 1000000) throw Error('Board position is out of range.');
+  }
+  if(ripple){
+    const before=new Map(board.beats.map(b=>[b.id,b.start]));
+    for(const beat of board.beats)if(moving.has(beat.blockID))beat.start=Math.max(0,beat.start+dx/120);
+    const requested=new Map(board.beats.map(b=>[b.id,b.start]));
+    const resolved=resolveCausalTime(board),pushes=new Map();
+    for(const beat of resolved.beats){const baseline=moving.has(beat.blockID)?requested.get(beat.id):before.get(beat.id);pushes.set(beat.blockID,Math.max(pushes.get(beat.blockID)||0,beat.start-baseline));}
+    for(const block of resolved.blocks)block.position.x+=(pushes.get(block.id)||0)*120;
+    return resolved;
   }
   return board;
 }
-export function moveStandaloneBeats(source, ids, dx, dy) {
+export function moveStandaloneBeats(source, ids, dx, dy, options={}) {
   const beats = source.beats.filter(b => ids.has(b.id)), owners = new Set(beats.map(b => b.blockID));
   const blocks = source.blocks.filter(b => owners.has(b.id)), counts = new Map();
   for (const beat of source.beats) counts.set(beat.blockID, (counts.get(beat.blockID) || 0) + 1);
@@ -88,7 +99,7 @@ export function moveStandaloneBeats(source, ids, dx, dy) {
       new Set(blocks.map(b => b.layerID)).size !== 1 || blocks.some(b => b.standalone !== true || counts.get(b.id) !== 1) ||
       source.blocks.some(b => owners.has(b.parentID))) throw Error('Select unlocked standalone beats in one layer to move together.');
   const snap = n => Math.sign(n) * Math.round(Math.abs(n) / 10) * 10;
-  return moveBlocks(source, owners, snap(dx), snap(dy));
+  return moveBlocks(source, owners, snap(dx), snap(dy), options);
 }
 export function groupBlocks(source, ids, name, id) {
   const board = copy(source), items = board.blocks.filter(b => ids.has(b.id));
@@ -156,5 +167,19 @@ export function moveBeatsToLayer(source, ids, layerID, position) {
 export function spatialOrder(source) {
   const board=copy(source), blocks=new Map(board.blocks.map(b=>[b.id,b])), layers=new Map(board.layers.map((l,i)=>[l.id,i]));
   [...board.beats].sort((a,b)=>{const x=blocks.get(a.blockID),y=blocks.get(b.blockID);return x.position.x-y.position.x || layers.get(x.layerID)-layers.get(y.layerID) || x.position.y-y.position.y || a.order-b.order || a.id.localeCompare(b.id);}).forEach((b,i)=>b.order=i);
+  return board;
+}
+
+// Forward-only ripple keeps intentional time gaps. Compaction is a separate explicit action.
+export function resolveCausalTime(source) {
+  const board=copy(source),beats=new Map(board.beats.map(b=>[b.id,b])),locked=lockedBlockIDs(board);
+  const unusedLayers=new Set(board.layers.filter(l=>l.unused).map(l=>l.id));
+  const unused=new Set(board.blocks.filter(b=>unusedLayers.has(b.layerID)).map(b=>b.id)),incoming=new Map();
+  for(const edge of board.dependencies.filter(e=>!e.reference)){if(!incoming.has(edge.effect))incoming.set(edge.effect,[]);incoming.get(edge.effect).push(edge.cause);}
+  for(const id of causalOrder(board)){
+    const beat=beats.get(id);if(beat.omitted||unused.has(beat.blockID))continue;
+    const required=Math.max(0,...(incoming.get(id)||[]).map(id=>beats.get(id)).filter(b=>!b.omitted&&!unused.has(b.blockID)).map(b=>b.start+b.duration));
+    if(beat.start<required){if(beat.locked||locked.has(beat.blockID))throw Error(`${beat.title} is locked and blocks ripple`);beat.start=required;}
+  }
   return board;
 }

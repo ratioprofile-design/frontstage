@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 globalThis.crypto ||= webcrypto;
-import { moveBeatsToLayer, spatialOrder, groupBlocks, groupBeats, beatSize, ungroupBlocks, moveBlocks, moveStandaloneBeats, compactCausalTime, deleteBlocks, validateBoard } from '../Public/board-operations.js';
+import { resolveCausalTime, moveBeatsToLayer, spatialOrder, groupBlocks, groupBeats, beatSize, ungroupBlocks, moveBlocks, moveStandaloneBeats, compactCausalTime, deleteBlocks, validateBoard } from '../Public/board-operations.js';
 const board = { version: 1, layers: [{ id: 'main', unused: false }], blocks: [
   { id: 'a', layerID: 'main', position: { x: 40, y: 50 }, width: 224 }, { id: 'b', layerID: 'main', position: { x: 280, y: 90 }, width: 224 }
 ], beats: [
@@ -75,3 +75,13 @@ assert.equal(spatialOrder(laneMove).beats.find(b=>b.id==='second').order,0);
 laneSource.layers[1].locked=true;
 assert.throws(()=>moveBeatsToLayer(laneSource,new Set(['first']),'other',{x:0,y:60}));
 assert.deepEqual(laneSource.beats,board.beats);
+
+const rippleSource=structuredClone(board);rippleSource.beats[0].start=0;rippleSource.beats[0].duration=2;rippleSource.beats[1].start=2;
+const rippled=moveBlocks(rippleSource,new Set(['a']),120,0,{ripple:true});
+assert.equal(rippled.beats[1].start,3);assert.equal(rippled.blocks[1].position.x,board.blocks[1].position.x+120);
+rippleSource.beats[1].locked=true;assert.throws(()=>moveBlocks(rippleSource,new Set(['a']),120,0,{ripple:true}));assert.equal(rippleSource.beats[0].start,0);
+const cross=structuredClone(loose);cross.layers.push({id:'second-lane',locked:false});
+const crossed=moveStandaloneBeats(cross,new Set(['first','second']),40,70,{layerID:'second-lane'});
+assert.ok(crossed.blocks.every(b=>b.layerID==='second-lane'));assert.equal(crossed.blocks[1].position.x-crossed.blocks[0].position.x,240);
+const loop=structuredClone(rippleSource);loop.dependencies.push({id:'loop',cause:'second',effect:'first'});assert.throws(()=>resolveCausalTime(loop));
+console.log('PASS: forward ripple, locked rollback, cycle rejection and rigid cross-lane movement');

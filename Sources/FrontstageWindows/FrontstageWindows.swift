@@ -26,7 +26,15 @@ private func htmlText(_ html: String) -> String {
         .trimmingCharacters(in: .newlines)
 }
 
+private struct WindowsBeatEditor {
+    var window: HWND
+    var title: HWND?
+    var body: HWND?
+    var original: String
+}
+
 private final class WindowsWorkspace {
+    var editors: [String: WindowsBeatEditor] = [:]
     var project = Project()
     var checkpoint = Project()
     var history = ProjectHistory()
@@ -69,14 +77,19 @@ private final class WindowsWorkspace {
     }
     func openPopup(_ id: String) {
         guard let beat = board.beats.first(where: { $0.id == id }) else { return }
-        if let popup, popupBeat == id { ShowWindow(popup, SW_SHOW); SetForegroundWindow(popup); return }
-        if let popup { DestroyWindow(popup) }
+        if let editor = editors[id] { activatePopup(editor.window); ShowWindow(editor.window, SW_SHOW); SetForegroundWindow(editor.window); return }
         popupBeat = id; originalPopupText = htmlText(beat.html); loadingPopup = true
         popup = wide("FrontstageWindow") { className in wide("Edit Beat") { title in
             CreateWindowExW(DWORD(WS_EX_TOOLWINDOW), className, title, DWORD(WS_OVERLAPPEDWINDOW) | DWORD(WS_VISIBLE), 180, 160, 610, 530, window, nil, GetModuleHandleW(nil), UnsafeMutableRawPointer(bitPattern: 1))
         } }
+        if let popup { editors[id] = WindowsBeatEditor(window: popup, title: titleField, body: bodyField, original: originalPopupText) }
         loadingPopup = false
     }
+    func activatePopup(_ hwnd: HWND?) {
+        guard let (id, editor) = editors.first(where: { $0.value.window == hwnd }) else { return }
+        popup = editor.window; popupBeat = id; titleField = editor.title; bodyField = editor.body; originalPopupText = editor.original
+    }
+    func closePopups() { for editor in Array(editors.values) { DestroyWindow(editor.window) } }
     func popupChanged() {
         guard !loadingPopup, let id = popupBeat, let titleField, let bodyField else { return }
         let title = text(titleField), body = text(bodyField).replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n"), original = originalPopupText
@@ -114,11 +127,11 @@ private final class WindowsWorkspace {
     func action(_ id: Int) {
         switch id {
         case 1:
-            guard confirmReplace() else { return }; if let popup { DestroyWindow(popup) }
+            guard confirmReplace() else { return }; closePopups()
             project = Project(); checkpoint = project; history = ProjectHistory(); saveURL = nil; selected = nil
         case 2:
             guard confirmReplace(), let url = chooseFile(save: false) else { return }
-            do { let loaded = try Project.load(from: url); _ = try loaded.whiteboard(); if let popup { DestroyWindow(popup) }; project = loaded; checkpoint = Project(); history = ProjectHistory(); saveURL = nil; selected = board.orderedBeats.first?.id; status = "Imported copy; choose a new save destination" }
+            do { let loaded = try Project.load(from: url); _ = try loaded.whiteboard(); closePopups(); project = loaded; checkpoint = Project(); history = ProjectHistory(); saveURL = nil; selected = board.orderedBeats.first?.id; status = "Imported copy; choose a new save destination" }
             catch { message(error.localizedDescription) }
         case 3: _ = save()
         case 4: addBeat(newBlock: true)
@@ -134,7 +147,18 @@ private final class WindowsWorkspace {
         }
         InvalidateRect(window, nil, false)
     }
-    func refreshPopup() { if let id = popupBeat { if let popup { DestroyWindow(popup) }; openPopup(id) } }
+    func refreshPopup() {
+        loadingPopup = true
+        defer { loadingPopup = false }
+        for (id, editor) in Array(editors) {
+            guard let beat = board.beats.first(where: { $0.id == id }) else { DestroyWindow(editor.window); continue }
+            let body = htmlText(beat.html)
+            wide(beat.title) { _ = SetWindowTextW(editor.title, $0) }
+            wide(body.replacingOccurrences(of: "\n", with: "\r\n")) { _ = SetWindowTextW(editor.body, $0) }
+            editors[id]?.original = body
+        }
+        activatePopup(popup)
+    }
 
     func paint(_ dc: HDC?, client: RECT) {
         var background = client
@@ -193,6 +217,7 @@ private func procedure(_ hwnd: HWND?, _ message: UINT, _ wParam: WPARAM, _ lPara
         _ = SetWindowLongPtrW(hwnd, GWLP_USERDATA, creation.pointee.lpCreateParams == UnsafeMutableRawPointer(bitPattern: 1) ? 1 : 0)
     }
     let popup = GetWindowLongPtrW(hwnd, GWLP_USERDATA) == 1
+    if popup && message != UINT(WM_CREATE) { state.activatePopup(hwnd) }
     switch message {
     case UINT(WM_CREATE):
         if popup {
@@ -249,13 +274,16 @@ private func procedure(_ hwnd: HWND?, _ message: UINT, _ wParam: WPARAM, _ lPara
             var point = POINT(); GetCursorPos(&point); TrackPopupMenu(menu, UINT(TPM_RIGHTBUTTON), point.x, point.y, 0, hwnd, nil); DestroyMenu(menu); return 0
         }
     case UINT(WM_KEYDOWN):
-        if !popup && wParam == WPARAM(VK_RETURN), let id = state.selected { state.openPopup(id); return 0 }
+        if !popup && wParam == WPARAM(VK_RETURN) { state.addBeat(newBlock: false); return 0 }
         if !popup && wParam == WPARAM(VK_DELETE) { state.action(11); return 0 }
         if popup && wParam == WPARAM(VK_ESCAPE) { DestroyWindow(hwnd); return 0 }
     case UINT(WM_CLOSE):
         if !popup && !state.confirmReplace() { return 0 }; DestroyWindow(hwnd); return 0
     case UINT(WM_DESTROY):
-        if popup { state.popup = nil; state.popupBeat = nil; state.titleField = nil; state.bodyField = nil }
+        if popup {
+            if let id = state.editors.first(where: { $0.value.window == hwnd })?.key { state.editors.removeValue(forKey: id) }
+            if state.popup == hwnd { state.popup = nil; state.popupBeat = nil; state.titleField = nil; state.bodyField = nil }
+        }
         else { PostQuitMessage(0) }; return 0
     default: break
     }
@@ -289,7 +317,13 @@ struct FrontstageWindows {
                 _ = SendMessageW(state.popup, UINT(WM_COMMAND), WPARAM((UInt(EN_CHANGE) << 16) | 102), 0)
                 guard try state.project.whiteboard().beats.first(where: { $0.id == first })?.html.contains("native Windows popup text") == true else { throw ProjectError.invalidProject("popup edit did not reach its beat") }
                 state.addBeat(newBlock: false)
-                guard let second = state.popupBeat else { throw ProjectError.sceneNotFound }
+                guard let second = state.popupBeat, state.editors.count == 2, let firstEditor = state.editors[first] else { throw ProjectError.invalidProject("independent popup editors were not retained") }
+                state.activatePopup(firstEditor.window)
+                wide("First editor still independent") { _ = SetWindowTextW(firstEditor.title, $0) }
+                _ = SendMessageW(firstEditor.window, UINT(WM_COMMAND), WPARAM((UInt(EN_CHANGE) << 16) | 101), 0)
+                guard state.board.beats.first(where: { $0.id == first })?.title == "First editor still independent", state.board.beats.first(where: { $0.id == second })?.title != "First editor still independent" else { throw ProjectError.invalidProject("popup edit affected another beat") }
+                DestroyWindow(firstEditor.window)
+                guard state.editors[second] != nil else { throw ProjectError.invalidProject("closing one popup closed another") }
                 try state.project.connectBoardBeats(cause: first, effect: second)
                 try state.project.editWhiteboard { try $0.resolveCauses() }
                 let destination = URL(fileURLWithPath: CommandLine.arguments[2])

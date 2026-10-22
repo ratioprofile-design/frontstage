@@ -49,3 +49,9 @@ An unset API origin lets the browser load but cannot supply accounts or sync on 
 The public browser build was verified in [deployment run 39443862570](https://github.com/ratioprofile-design/frontstage/actions/runs/39443862570): root HTML, JavaScript and CSS matched this repository's build. Later deployments have their own Browser deployment workflow results. This verifies static delivery, not a hosted shared service.
 
 For the static/browser split test, run `node scripts/build-web.mjs`, then `FRONTSTAGE_STATIC_BROWSER=1 node Server/Tests/browser-smoke.mjs` with Playwright installed. It serves the actual static build and talks to a separately started Swift service with CORS enabled. Same-origin and cross-origin flows are both covered; public HTTPS deployment is a separate acceptance gate.
+
+## Recover a shared draft without a server
+
+**Recover Shared Drafts** on the sign-in screen lists shared documents previously cached in this browser. Recovery makes a separate local project and keeps the original cached draft, revision and merge base unchanged. This works after a cold offline reload once the shell has been cached. It does not restore an authenticated shared session or silently upload a recovered copy. Sign in again to resume the original shared project and its normal merge flow.
+
+For a concrete persistent-host configuration and backup/restore procedure, see [deploy/README.md](../deploy/README.md). The compose configuration is validated, but it has not been provisioned on an owner's host.

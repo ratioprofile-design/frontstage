@@ -69,7 +69,7 @@ const database = new Promise((resolve, reject) => {
 });
 async function saveLocal() {
   if (!current || !doc) return;
-  const snapshot = { id: current.id, doc: clone(doc), base: clone(base), revision: current.revision, dirty, local: !!current.local, name: doc.name };
+  const snapshot = { id: current.id, doc: clone(doc), base: clone(base), revision: current.revision, dirty, local: !!current.local, name: doc.name, serverOrigin: current.local ? null : apiOrigin || location.origin };
   const db = await database;
   return new Promise((resolve, reject) => { const tx = db.transaction('projects', 'readwrite'); tx.objectStore('projects').put(snapshot); tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
 }
@@ -90,6 +90,16 @@ async function loadLocalProjects() {
   $('logout').textContent = 'Sign In'; status('Local projects · saved in this browser');
   if (!copies.length) await createLocalProject('Untitled Story');
 }
+async function recoverSharedDrafts() {
+  await saveLocal();
+  const db=await database;
+  const copies=await new Promise((resolve,reject)=>{const request=db.transaction('projects').objectStore('projects').getAll();request.onsuccess=()=>resolve(request.result.filter(p=>!p.local));request.onerror=()=>reject(request.error);});
+  localMode=true;closeEditors();$('project-list').replaceChildren();
+  for(const copy of copies){const button=element('button',`${copy.name||'Untitled Story'} · recover ${copy.dirty?'unsynced draft':'cached copy'}`);button.onclick=()=>createLocalProject(copy.name,initializeBoard(clone(copy.doc))).catch(e=>status(e.message));$('project-list').append(button);}
+  $('account').hidden=true;$('projects').hidden=false;$('workspace').hidden=true;$('project-toolbar').hidden=true;$('logout').textContent='Sign In';
+  status(copies.length?'Recovery creates a separate local project. Sign in to resume sharing; the original draft is retained.':'No shared drafts have been saved on this device.');
+}
+$('recover-shared').onclick=()=>recoverSharedDrafts().catch(e=>status(e.message));
 function emptyDocument(name) { return initializeBoard({ format: 'frontstage', version: 1, name, project: { beats: [], nextId: 1 } }); }
 async function createLocalProject(name, document = emptyDocument(name)) {
   const id = 'local-' + uuid(), db = await database;
@@ -293,7 +303,12 @@ function render() {
       const moving = descendantBlocks(board(), selectedBlocks), start = { x: e.clientX, y: e.clientY };
       const nodes = [...$('blocks').children].filter(n => moving.has(n.dataset.blockId));
       title.onpointermove = event => { for (const item of nodes) { const r = g.blocks.get(item.dataset.blockId); item.style.left = `${r.x + event.clientX - start.x}px`; item.style.top = `${r.y + event.clientY - start.y}px`; } };
-      title.onpointerup = event => { title.onpointermove = null; title.onpointerup = null; if (selectedBlocks.size) edit(() => { doc.project.frontstageWhiteboard = moveBlocks(board(), selectedBlocks, event.clientX - start.x, event.clientY - start.y); doc.project.frontstageWhiteboard=spatialOrder(board()); }); render(); };
+      title.onpointerup = event => {
+        title.onpointermove = null; title.onpointerup = null;
+        const frame=$('canvas').getBoundingClientRect(),y=event.clientY-frame.top+$('canvas').scrollTop;
+        const target=board().layers.find(l=>{const r=g.layers.get(l.id);return y>=r.y&&y<r.y+r.height;});
+        if(selectedBlocks.size&&target)edit(()=>{const dy=event.clientY-start.y+g.layers.get(block.layerID).y-g.layers.get(target.id).y;doc.project.frontstageWhiteboard=spatialOrder(moveBlocks(board(),selectedBlocks,event.clientX-start.x,dy,{layerID:target.id,ripple:$('ripple').checked}));});render();
+      };
       title.onpointercancel = () => { title.onpointermove = null; title.onpointerup = null; render(); };
     };
     node.ondragover = e => e.preventDefault(); node.ondrop = e => {
@@ -528,8 +543,8 @@ function dropStandaloneBeats(e) {
   const target=board().layers.find(l=>{const r=g.layers.get(l.id);return y>=r.y&&y<r.y+r.height;});
   if (!target) return;
   edit(() => {
-    if (target.id===block.layerID && [...ids].every(id=>{const b=board().beats.find(b=>b.id===id);return board().blocks.find(x=>x.id===b?.blockID)?.standalone;})) {
-      doc.project.frontstageWhiteboard=moveStandaloneBeats(board(),ids,x-rect.x-ox,y-rect.y-oy);
+    if ([...ids].every(id=>{const b=board().beats.find(b=>b.id===id);return board().blocks.find(x=>x.id===b?.blockID)?.standalone;})) {
+      doc.project.frontstageWhiteboard=moveStandaloneBeats(board(),ids,x-rect.x-ox,y-rect.y-oy+g.layers.get(block.layerID).y-g.layers.get(target.id).y,{layerID:target.id,ripple:$('ripple').checked});
     } else doc.project.frontstageWhiteboard=moveBeatsToLayer(board(),ids,target.id,{x:x-110,y:y-g.layers.get(target.id).y});
     doc.project.frontstageWhiteboard=spatialOrder(board());
   });

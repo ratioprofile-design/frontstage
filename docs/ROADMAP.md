@@ -1,8 +1,10 @@
 # Phase completion and remaining gates
 
-Updated 21 October 2026. The whiteboard remains the highest priority, followed by the popup editor. All changes belong to Frontstage; Backstage remains untouched.
+Updated 22 October 2026. The whiteboard remains the highest priority, followed by the popup editor. All changes belong to Frontstage; Backstage remains untouched.
 
 The implementation now spans every planned phase. The acceptance gates below remain open where reference behavior, real-device review, additional implementation or owner configuration is still required. This is not a declaration that every phase is complete.
+
+Current close-out evidence and remaining gates are recorded in [the completion ledger](PHASE_STATUS.md).
 
 ## Whiteboard phases
 

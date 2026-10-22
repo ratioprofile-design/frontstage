@@ -15,3 +15,9 @@ Native Windows builds run in `windows.yml`, using a pinned Windows Swift setup a
 Mac manual gates remain: popup keyboard focus/IME and undo; drag at different zoom levels; split/reorder/merge and source protection; imported language/format fidelity; PDF and two-column print output; sync conflicts; crash/relaunch recovery; accessibility and performance. Automated screenshots exercise construction and selected interactions; they do not certify the whole product against Causality.
 
 For browser/server setup and limits see [Server README](../Server/README.md). The browser frontend is configured and checked at `frontstage-five.vercel.app`; its local projects require no account/backend. Shared hosting, backend HTTPS, registration policy and operational backups still need a persistent deployment environment. Production accounts and Windows/macOS installers have not been provisioned. The owner will configure Apple signing in the release environment.
+
+## Owner-configured signing workflow
+
+`release-macos.yml` is a manual workflow for a self-hosted Mac labeled `frontstage-release`. Configure the `macos-release` environment variables `FRONTSTAGE_SIGNING_IDENTITY` and `FRONTSTAGE_NOTARY_PROFILE`, with the actual identity and credentials already in that runner's Keychain. It runs native tests, signs/notarizes/assesses the universal app and uploads the notarized ZIP. It does not run on ordinary pushes or publish a GitHub release. Until the runner and Keychain are configured and the job succeeds, signing remains unverified.
+
+Persistent HTTPS service and tested backup/restore tooling are described in [Deployment](../deploy/README.md). A host and domain for that service are still required.

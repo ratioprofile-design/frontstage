@@ -1,0 +1,4 @@
+{$FRONTSTAGE_SERVICE_DOMAIN} {
+    encode zstd gzip
+    reverse_proxy server:8080
+}

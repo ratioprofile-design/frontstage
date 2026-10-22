@@ -1,0 +1,30 @@
+name: Signed Mac release candidate
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  notarize:
+    # Owner-provisioned Mac with Developer ID and notarytool credentials already in Keychain.
+    runs-on: [self-hosted, macOS, frontstage-release]
+    environment: macos-release
+    timeout-minutes: 45
+    env:
+      FRONTSTAGE_SIGNING_IDENTITY: ${{ vars.FRONTSTAGE_SIGNING_IDENTITY }}
+      FRONTSTAGE_NOTARY_PROFILE: ${{ vars.FRONTSTAGE_NOTARY_PROFILE }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify release configuration
+        run: |
+          test -n "$FRONTSTAGE_SIGNING_IDENTITY"
+          test -n "$FRONTSTAGE_NOTARY_PROFILE"
+          test "$(uname -s)" = Darwin
+      - name: Test native application
+        run: swift test
+      - name: Sign, notarize and assess universal application
+        run: ./scripts/notarize-macos-app.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Frontstage-macOS-notarized
+          path: build/Frontstage-macOS-notarized.zip
+          if-no-files-found: error

@@ -1,9 +1,9 @@
 name: Shared project server
 on:
   push:
-    paths: ['Server/**', 'Sources/FrontstageCore/**', '.github/workflows/server.yml', 'Package.swift', 'scripts/build-web.mjs', 'vercel.json']
+    paths: ['Server/**', 'Sources/FrontstageCore/**', '.github/workflows/server.yml', 'Package.swift', 'scripts/build-web.mjs', 'vercel.json', 'scripts/server-backup.py', 'scripts/test-server-backup.py', 'deploy/**']
   pull_request:
-    paths: ['Server/**', 'Sources/FrontstageCore/**', '.github/workflows/server.yml', 'Package.swift', 'scripts/build-web.mjs', 'vercel.json']
+    paths: ['Server/**', 'Sources/FrontstageCore/**', '.github/workflows/server.yml', 'Package.swift', 'scripts/build-web.mjs', 'vercel.json', 'scripts/server-backup.py', 'scripts/test-server-backup.py', 'deploy/**']
 permissions:
   contents: read
 jobs:
@@ -20,6 +20,8 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends python3 nodejs npm
+      - name: Validate server backup and restore
+        run: python3 scripts/test-server-backup.py
       - name: Build pinned server dependencies
         run: swift build --package-path Server -j 3
       - name: Exercise authentication and concurrent document updates
