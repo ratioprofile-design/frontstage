@@ -39,6 +39,18 @@ final class WorkspaceParityAcceptanceTests: XCTestCase {
                 XCTAssertNil(workspace.errorMessage)
                 try capture(view, name: ids[index])
             }
+            workspace.mode = .board; workspace.showBoardScript = true
+            let sideView = NSHostingView(rootView: WorkspaceView(workspace: workspace))
+            sideView.frame = NSRect(x: 0, y: 0, width: 1440, height: 950); window.contentView = sideView
+            sideView.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.25))
+            try capture(sideView, name: "board-script")
+            let sideText = try XCTUnwrap(workspace.scriptController("beat-1").textView)
+            XCTAssertTrue(sideText.string.contains("invitation arrives"))
+            sideText.insertText("Side paper. ", replacementRange: NSRange(location: 0, length: 0))
+            XCTAssertTrue(workspace.whiteboard.beats.first { $0.id == "beat-1" }?.html.contains("Side paper.") == true)
+            workspace.undoProject()
+            XCTAssertEqual(workspace.project, project)
             workspace.popup.open("beat-1", workspace: workspace)
             let popup = try XCTUnwrap(workspace.popup.panel?.contentView)
             popup.layoutSubtreeIfNeeded()

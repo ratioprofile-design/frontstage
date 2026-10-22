@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { groupBlocks, ungroupBlocks, moveBlocks, moveStandaloneBeats, compactCausalTime, deleteBlocks, validateBoard } from '../Public/board-operations.js';
+import { webcrypto } from 'node:crypto';
+globalThis.crypto ||= webcrypto;
+import { groupBlocks, groupBeats, beatSize, ungroupBlocks, moveBlocks, moveStandaloneBeats, compactCausalTime, deleteBlocks, validateBoard } from '../Public/board-operations.js';
 const board = { version: 1, layers: [{ id: 'main', unused: false }], blocks: [
   { id: 'a', layerID: 'main', position: { x: 40, y: 50 }, width: 224 }, { id: 'b', layerID: 'main', position: { x: 280, y: 90 }, width: 224 }
 ], beats: [
@@ -52,3 +54,13 @@ assert.throws(() => validateBoard(valid, new Set([1])));
 const causalLoop = structuredClone(valid); causalLoop.dependencies.push({ id: 'reverse', cause: 'second', effect: 'first', reference: false, reason: '' });
 validateBoard(causalLoop, new Set([1, 2])); // Imported causal loops remain diagnosable instead of being silently deleted.
 console.log('PASS: browser import rejects malformed/cyclic containers and missing references while retaining diagnosable causal cycles');
+
+const beatGroup=groupBeats(loose,new Set(['first','second']),'beat-group');
+assert.equal(beatGroup.blocks.length,1);assert.equal(beatGroup.blocks[0].containerKind,'beatGroup');
+const enclosing=groupBlocks(beatGroup,new Set(['beat-group']),'Act One','outer');
+assert.equal(enclosing.blocks.find(b=>b.id==='beat-group').parentID,'outer');
+const unpacked=ungroupBlocks(enclosing,new Set(['beat-group']));
+assert.equal(unpacked.blocks.filter(b=>b.standalone).length,2);assert.deepEqual(unpacked.dependencies,board.dependencies);
+assert.ok(beatSize('Go',212).width<beatSize('A longer choice',212).width);
+assert.ok(beatSize('A very long choice '.repeat(8),212).height>beatSize('Go',212).height);
+console.log('PASS: beat groups inside blocks, ungrouping without link loss and text-sized cards');
