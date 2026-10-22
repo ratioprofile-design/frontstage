@@ -1,12 +1,12 @@
 # Validation record
 
-Updated 21 October 2026. Automated checks establish the behavior they exercise; they do not establish complete Causality parity or installed-product acceptance.
+Updated 22 October 2026. Automated checks establish the behavior they exercise; they do not establish complete Causality parity or installed-product acceptance.
 
 ## Mac/browser page alignment
 
 The browser has all ten workspaces and a shared design source. Local checks passed: 113 portable Swift tests (including an actual browser-edited project export), workspace model operations, browser page integration with long-text pagination/offline restart, and both same-origin and separate-static-origin editing regressions. See [Page parity](PAGE_PARITY.md) for commands, artifact contents and remaining platform differences.
 
-The Swift workflow now runs the browser page test before native tests, then publishes paired captures as `Frontstage-page-parity`. Native build/test results for the final source revision must pass before using its Mac development artifact. Browser deployment [run 39656591575](https://github.com/ratioprofile-design/frontstage/actions/runs/39656591575) verified the new workspace modules at the configured Vercel domain.
+The Swift workflow now runs the browser page test before native tests, then publishes paired captures as `Frontstage-page-parity`. Mac [run 39657358986](https://github.com/ratioprofile-design/frontstage/actions/runs/39657358986) passed native tests and universal app packaging; shared-server/browser [run 39657359023](https://github.com/ratioprofile-design/frontstage/actions/runs/39657359023) also passed. The subsequent browser-only popup sizing fix passed the page integration test with explicit popup-height and visible Split-control assertions. Native build/test results for the final source revision must pass before using its Mac development artifact. Browser deployment [run 39656591575](https://github.com/ratioprofile-design/frontstage/actions/runs/39656591575) verified the new workspace modules at the configured Vercel domain.
 
 ## Standalone beats and paper editors
 

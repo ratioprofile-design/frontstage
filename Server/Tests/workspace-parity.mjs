@@ -18,6 +18,7 @@ try{
  assert.deepEqual(await page.locator('#view-mode option').allTextContents(),design.pages.map(p=>p.title));
  for(const entry of design.pages){await page.locator('#view-mode').selectOption(entry.id);await page.waitForTimeout(80);assert.equal(await page.locator('#workspace').getAttribute('data-page'),entry.id);assert.equal(await page.getByText('This page could not be opened',{exact:true}).count(),0);await page.screenshot({path:path.join(output,`browser-${entry.id}.png`)});}
  await page.locator('#view-mode').selectOption('board');await page.locator('#blocks [data-beat-id="beat-1"]').dblclick();
+ const popupFrame=await page.locator('.beat-popup.active').boundingBox(),splitFrame=await page.locator('.beat-popup.active [data-field="split-beat"]').boundingBox();assert.equal(Math.round(popupFrame.height),design.metrics.popupHeight);assert.ok(splitFrame.y+splitFrame.height<=popupFrame.y+popupFrame.height);
  await page.locator('.beat-popup.active').screenshot({path:path.join(output,'browser-popup.png')});await page.locator('.beat-popup.active [data-field="close-editor"]').click();
  const view=async id=>page.locator('#view-mode').selectOption(id);
  const fill=async(label,value,scope=page.locator('#workspace-page'))=>{const field=scope.getByLabel(label,{exact:true});await field.fill(value);await field.blur();};

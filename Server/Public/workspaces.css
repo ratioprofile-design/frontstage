@@ -9,3 +9,4 @@
 .editor-grip{display:inline-flex;align-items:center;justify-content:center;flex:none;width:18px;height:22px;color:var(--fs-muted);cursor:move;user-select:none}
 
 .writing-scene-fields{grid-template-columns:repeat(4,minmax(0,1fr))}.writing-scene-fields>.workspace-field:nth-child(-n+2){grid-column:span 2}
+.beat-popup{height:min(var(--fs-popupHeight),calc(100vh - 88px));display:flex;flex-direction:column;overflow:hidden}.beat-popup>*{flex:none}.beat-popup>.paper-desk{flex:1;min-height:80px;max-height:none;overflow:auto}.beat-popup>.popup-bottom{padding-top:10px}
