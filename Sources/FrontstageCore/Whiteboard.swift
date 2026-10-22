@@ -418,7 +418,10 @@ extension Project {
             for i in board.blocks.indices where moving.contains(board.blocks[i].id) {
                 board.blocks[i].position.x = max(0, board.blocks[i].position.x + dx)
                 board.blocks[i].position.y = max(32, board.blocks[i].position.y + dy)
-                if let layerID { board.blocks[i].layerID = layerID }
+                if let layerID {
+                    if board.blocks[i].layerID != layerID, let parent = board.blocks[i].parentID, !moving.contains(parent) { board.blocks[i].parentID = nil }
+                    board.blocks[i].layerID = layerID
+                }
             }
             if ripple {
                 let before = Dictionary(uniqueKeysWithValues: board.beats.map { ($0.id, $0.start) })
@@ -448,6 +451,50 @@ extension Project {
             throw ProjectError.invalidProject("select unlocked standalone beats in one layer to move together")
         }
         try moveBoardBlocks(owners, delta: delta, layerID: layerID, ripple: ripple)
+    }
+
+    /// Detach beats from their groups without changing their scene or dependency identities.
+    public mutating func moveBoardBeatsToLayer(_ ids: Set<String>, layerID: String, position: BoardPoint) throws {
+        try editWhiteboard { board in
+            let beats = board.orderedBeats.filter { ids.contains($0.id) }
+            guard !ids.isEmpty, beats.count == ids.count, beats.allSatisfy({ !board.isLocked($0) }),
+                  position.x.isFinite, position.y.isFinite,
+                  board.layers.contains(where: { $0.id == layerID && !$0.locked }) else {
+                throw ProjectError.invalidProject("unlock the beats and destination lane")
+            }
+            var y = max(32, position.y)
+            let oldOwners = Set(beats.map(\.blockID))
+            for beat in beats {
+                var block = BoardBlock(name: "Beat", layerID: layerID, position: .init(x: max(0, position.x), y: y))
+                block.standalone = true
+                board.blocks.append(block)
+                let index = board.beats.firstIndex { $0.id == beat.id }!
+                board.beats[index].blockID = block.id
+                y += WhiteboardLayout.beatSize(beat.title, maximumWidth: 212).height + 28
+            }
+            let parents = Set(board.blocks.compactMap(\.parentID))
+            board.blocks.removeAll { block in
+                oldOwners.contains(block.id) && block.standalone == true &&
+                !board.beats.contains { $0.blockID == block.id } && !parents.contains(block.id)
+            }
+        }
+    }
+
+    /// Horizontal position sets narrative order; ties read down the lanes and cards.
+    public mutating func applyWhiteboardSpatialOrder() throws {
+        try editWhiteboard { board in
+            let blocks = Dictionary(uniqueKeysWithValues: board.blocks.map { ($0.id, $0) })
+            let layers = Dictionary(uniqueKeysWithValues: board.layers.enumerated().map { ($0.element.id, $0.offset) })
+            let ordered = board.orderedBeats.sorted { a, b in
+                let x = blocks[a.blockID]!, y = blocks[b.blockID]!
+                if x.position.x != y.position.x { return x.position.x < y.position.x }
+                if x.layerID != y.layerID { return layers[x.layerID]! < layers[y.layerID]! }
+                if x.position.y != y.position.y { return x.position.y < y.position.y }
+                return a.order == b.order ? a.id < b.id : a.order < b.order
+            }
+            let ranks = Dictionary(uniqueKeysWithValues: ordered.enumerated().map { ($0.element.id, Double($0.offset)) })
+            for i in board.beats.indices { board.beats[i].order = ranks[board.beats[i].id]! }
+        }
     }
 
     public mutating func resizeBoardBlock(_ id: String, width: Double) throws {

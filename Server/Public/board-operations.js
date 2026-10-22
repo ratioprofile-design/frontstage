@@ -140,3 +140,21 @@ export function beatSize(text,maximumWidth) {
   const segmenter=new Intl.Segmenter(undefined,{granularity:'grapheme'}),limit=Math.max(1,Math.floor((maximumWidth-18)/6.7)),lines=text.split('\n').map(s=>Math.max(1,[...segmenter.segment(s)].length));
   return {width:Math.max(32,Math.min(limit,Math.max(...lines))*6.7+18),height:Math.max(26,lines.reduce((n,l)=>n+Math.ceil(l/limit),0)*14+12)};
 }
+
+export function moveBeatsToLayer(source, ids, layerID, position) {
+  const board = copy(source), beats = board.beats.filter(b => ids.has(b.id)).sort((a,b)=>a.order-b.order);
+  if (!ids.size || beats.length !== ids.size || beats.some(b=>b.locked || blockLocked(board,b.blockID)) ||
+      !board.layers.some(l=>l.id===layerID && !l.locked) || !Number.isFinite(position.x+position.y)) throw Error('Unlock the beats and destination lane.');
+  const owners = new Set(beats.map(b=>b.blockID)); let y = Math.max(32,position.y);
+  for (const beat of beats) {
+    const block = {id:crypto.randomUUID(),name:'Beat',layerID,position:{x:Math.max(0,position.x),y},width:224,standalone:true,collapsed:false,locked:false};
+    board.blocks.push(block); beat.blockID=block.id; y+=beatSize(beat.title,212).height+28;
+  }
+  board.blocks=board.blocks.filter(b=>!owners.has(b.id)||!b.standalone||board.beats.some(x=>x.blockID===b.id)||board.blocks.some(x=>x.parentID===b.id));
+  return board;
+}
+export function spatialOrder(source) {
+  const board=copy(source), blocks=new Map(board.blocks.map(b=>[b.id,b])), layers=new Map(board.layers.map((l,i)=>[l.id,i]));
+  [...board.beats].sort((a,b)=>{const x=blocks.get(a.blockID),y=blocks.get(b.blockID);return x.position.x-y.position.x || layers.get(x.layerID)-layers.get(y.layerID) || x.position.y-y.position.y || a.order-b.order || a.id.localeCompare(b.id);}).forEach((b,i)=>b.order=i);
+  return board;
+}

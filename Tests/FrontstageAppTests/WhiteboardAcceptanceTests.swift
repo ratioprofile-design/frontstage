@@ -7,6 +7,42 @@ import FrontstageCore
 @testable import FrontstageApp
 
 final class WhiteboardAcceptanceTests: XCTestCase {
+    func testDraggingGroupedBeatIntoEmptyLaneUpdatesScriptAndUndoes() async throws {
+        try await MainActor.run {
+            _ = NSApplication.shared
+            let workspace = Workspace()
+            var a = "", b = ""
+            workspace.edit("Fixture") { project in
+                a = try project.addBoardBeat(position: .init(x: 400, y: 60), title: "First")
+                b = try project.addBoardBeat(position: .init(x: 600, y: 60), title: "Second")
+                try project.groupBoardBeats([a, b])
+                try project.editWhiteboard { $0.layers.append(BoardLayer(id: "other", name: "Other")) }
+            }
+            let original = workspace.project, board = workspace.whiteboard, layout = WhiteboardLayout(board)
+            let canvas = NativeWhiteboard(frame: NSRect(x: 0, y: 0, width: 1400, height: 1600))
+            canvas.workspace = workspace; canvas.board = board
+            let window = NSWindow(contentRect: canvas.frame, styleMask: [.titled], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false; window.contentView = canvas
+            defer { window.close() }
+            let start = try XCTUnwrap(layout.beatRects[b]).center
+            let end = BoardPoint(x: 140, y: try XCTUnwrap(layout.layerRects["other"]).y + 80)
+            @MainActor func mouse(_ type: NSEvent.EventType, _ point: BoardPoint) throws -> NSEvent {
+                try XCTUnwrap(NSEvent.mouseEvent(with: type, location: canvas.convert(NSPoint(x: point.x, y: point.y), to: nil),
+                    modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+            }
+            canvas.mouseDown(with: try mouse(.leftMouseDown, start))
+            canvas.mouseDragged(with: try mouse(.leftMouseDragged, end))
+            canvas.mouseUp(with: try mouse(.leftMouseUp, end))
+            XCTAssertNil(workspace.errorMessage)
+            XCTAssertEqual(workspace.selectedBoardBeatID, b)
+            let moved = try XCTUnwrap(workspace.whiteboard.beats.first { $0.id == b })
+            XCTAssertEqual(workspace.whiteboard.blocks.first { $0.id == moved.blockID }?.layerID, "other")
+            XCTAssertEqual(try workspace.project.orderedScript().first?.beatIDs.first, b)
+            workspace.undoProject()
+            XCTAssertEqual(workspace.project, original)
+        }
+    }
+
     func testDraggingSelectedStandaloneCardsMovesBothAndUndoRestoresThem() async throws {
         try await MainActor.run {
             _ = NSApplication.shared

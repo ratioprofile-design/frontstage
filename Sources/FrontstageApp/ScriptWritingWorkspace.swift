@@ -96,6 +96,7 @@ struct ScriptSidePaper: View {
     var body: some View {
         VStack(spacing: 0) {
             Text("SCRIPT").font(.caption).padding(8)
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(Array(((try? workspace.project.orderedScript()) ?? []).enumerated()), id: \.offset) { _, segment in
@@ -108,12 +109,22 @@ struct ScriptSidePaper: View {
                         ForEach(segment.beatIDs, id: \.self) { id in
                             ContinuousSnippet(workspace: workspace, sceneID: segment.scene.id, beatID: id,
                                 controller: workspace.scriptController(id), compact: true)
+                                .id(id)
+                                .overlay(alignment: .leading) {
+                                    if workspace.selectedBoardBeatID == id {
+                                        Rectangle().fill(Color.accentColor).frame(width: 3).padding(.leading, -8).allowsHitTesting(false)
+                                    }
+                                }
                                 .onTapGesture { workspace.selectBoardBeat(id) }
                         }
                     }
                     Spacer(minLength: 72)
                 }.frame(width: 252, alignment: .leading).padding(24).frame(minHeight: 792, alignment: .topLeading)
                     .background(Color.white).environment(\.colorScheme, .light).shadow(radius: 2).padding(10)
+            }
+            .onChange(of: workspace.selectedBoardBeatID) { id in
+                if let id { proxy.scrollTo(id, anchor: .center) }
+            }
             }
         }.background(Color(white: 0.47))
     }

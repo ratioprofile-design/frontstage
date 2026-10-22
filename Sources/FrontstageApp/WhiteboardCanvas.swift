@@ -281,7 +281,7 @@ final class NativeWhiteboard: NSView {
                 delta.y += (geometry.layerRects[sourceLayer]?.y ?? 0) - (geometry.layerRects[target.id]?.y ?? 0)
             }
             let ripple = workspace?.whiteboardRipple ?? true
-            workspace?.edit("Move Blocks") { try $0.moveBoardBlocks(ids, delta: delta, layerID: sourceLayer == target.id ? nil : target.id, ripple: ripple) }
+            workspace?.edit("Move Blocks") { try $0.moveBoardBlocks(ids, delta: delta, layerID: sourceLayer == target.id ? nil : target.id, ripple: ripple); try $0.applyWhiteboardSpatialOrder() }
         } else if let beat = movingBeat {
             let point = world(convert(event.locationInWindow, from: nil))
             let destination = hitBlock(point)
@@ -293,12 +293,19 @@ final class NativeWhiteboard: NSView {
                 delta.y += (geometry.layerRects[block.layerID]?.y ?? 0) - (geometry.layerRects[target.id]?.y ?? 0)
                 let ripple = workspace?.whiteboardRipple ?? true
                 let ids = selection.contains(beat) ? selection : [beat]
-                workspace?.edit("Move Standalone Beats") { try $0.moveStandaloneBeats(ids, delta: delta, layerID: target.id, ripple: ripple) }
+                workspace?.edit("Move Standalone Beats") { try $0.moveStandaloneBeats(ids, delta: delta, layerID: target.id, ripple: ripple); try $0.applyWhiteboardSpatialOrder() }
             } else if let block = destination {
                 let before = geometry.hitBeat(point)
                 let moving = selection.contains(beat) ? selection : [beat]
                 if let before, moving.contains(before) { return }
-                workspace?.edit("Move Beats") { try $0.moveBoardBeats(moving, toBlock: block, before: before) }
+                workspace?.edit("Move Beats") { try $0.moveBoardBeats(moving, toBlock: block, before: before); try $0.applyWhiteboardSpatialOrder() }
+            } else {
+                let target = layerAt(point), moving = selection.contains(beat) ? selection : [beat]
+                let position = BoardPoint(x: point.x - 110, y: point.y - (geometry.layerRects[target.id]?.y ?? 0))
+                workspace?.edit("Move Beats to Lane") {
+                    try $0.moveBoardBeatsToLayer(moving, layerID: target.id, position: position)
+                    try $0.applyWhiteboardSpatialOrder()
+                }
             }
         }
     }

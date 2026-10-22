@@ -35,3 +35,10 @@ The model distinguishes loose beats, explicit beat groups (`containerKind: beatG
 Cards now grow with their title text and wrap long titles to the container width; drawing, links and hit testing use the same dimensions. **Enter with the whiteboard focused** inserts a beat after the selected beat, retaining its scene and group. Enter inside an editor continues to edit screenplay text.
 
 The optional side script is continuous white screenplay paper with scene headings and semantic dialogue/character indentation. Its text remains linked to the board and popup editors. The browser acceptance capture `browser-hierarchy-side-paper.png` shows the three levels and the paper together. Portable tests verify hierarchy save/reopen and preserved links; native tests exercise board Enter and undo.
+
+### Lane movement and script selection — 22 October 2026
+
+- Drag a grouped beat onto an empty unlocked lane to detach it as a loose beat. Its scene, text and causal links survive; undo restores the group.
+- Selecting a beat marks its screenplay passage in the side paper and scrolls it into view.
+- Board moves apply left-to-right narrative order, with top-to-bottom lane/card order for horizontal ties. Automatic script scene numbers follow first appearance, top to bottom; explicit scene numbers and continuation identities remain intact.
+- Portable model tests and Chromium parity coverage exercise lane transfer, locks, order, highlight and undo. Native acceptance coverage also drives an actual canvas drag.

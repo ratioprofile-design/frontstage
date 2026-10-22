@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 globalThis.crypto ||= webcrypto;
-import { groupBlocks, groupBeats, beatSize, ungroupBlocks, moveBlocks, moveStandaloneBeats, compactCausalTime, deleteBlocks, validateBoard } from '../Public/board-operations.js';
+import { moveBeatsToLayer, spatialOrder, groupBlocks, groupBeats, beatSize, ungroupBlocks, moveBlocks, moveStandaloneBeats, compactCausalTime, deleteBlocks, validateBoard } from '../Public/board-operations.js';
 const board = { version: 1, layers: [{ id: 'main', unused: false }], blocks: [
   { id: 'a', layerID: 'main', position: { x: 40, y: 50 }, width: 224 }, { id: 'b', layerID: 'main', position: { x: 280, y: 90 }, width: 224 }
 ], beats: [
@@ -66,3 +66,12 @@ assert.equal(unpacked.blocks.filter(b=>b.standalone).length,2);assert.deepEqual(
 assert.ok(beatSize('Go',212).width<beatSize('A longer choice',212).width);
 assert.ok(beatSize('A very long choice '.repeat(8),212).height>beatSize('Go',212).height);
 console.log('PASS: beat groups inside blocks, ungrouping without link loss and text-sized cards');
+
+const laneSource=structuredClone(board);laneSource.layers.push({id:'other',locked:false});
+const laneMove=moveBeatsToLayer(laneSource,new Set(['second']),'other',{x:0,y:70});
+assert.equal(laneMove.blocks.find(b=>b.id===laneMove.beats[1].blockID).layerID,'other');
+assert.equal(laneMove.beats[1].sceneID,2);assert.deepEqual(laneMove.dependencies,board.dependencies);
+assert.equal(spatialOrder(laneMove).beats.find(b=>b.id==='second').order,0);
+laneSource.layers[1].locked=true;
+assert.throws(()=>moveBeatsToLayer(laneSource,new Set(['first']),'other',{x:0,y:60}));
+assert.deepEqual(laneSource.beats,board.beats);

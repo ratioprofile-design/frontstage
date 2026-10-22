@@ -11,13 +11,18 @@ public struct ScriptSegment: Equatable, Sendable {
 extension Project {
     public func orderedScript() throws -> [ScriptSegment] {
         let active = scenes.filter { !$0.isDisabled }
-        let numbers = Dictionary(uniqueKeysWithValues: active.enumerated().map { ($0.element.id, $0.element.sceneNumber.isEmpty ? String($0.offset + 1) : $0.element.sceneNumber) })
+        var numbers = Dictionary(uniqueKeysWithValues: active.enumerated().map { ($0.element.id, $0.element.sceneNumber.isEmpty ? String($0.offset + 1) : $0.element.sceneNumber) })
         guard state["frontstageWhiteboard"] != nil else {
             return active.map { ScriptSegment(scene: $0, beatIDs: [], number: numbers[$0.id]!, isContinuation: false) }
         }
         let board = try whiteboard(), byID = Dictionary(uniqueKeysWithValues: active.map { ($0.id, $0) })
         try validateNativeScriptText(board)
         let unused = Set(board.layers.filter(\.unused).map(\.id)), inactive = Set(board.blocks.filter { unused.contains($0.layerID) }.map(\.id))
+        var numbered = Set<Decimal>()
+        let narrative = board.orderedBeats.filter { !$0.omitted && !inactive.contains($0.blockID) }.compactMap { byID[$0.sceneID] }
+        for scene in narrative + active where numbered.insert(scene.id).inserted {
+            numbers[scene.id] = scene.sceneNumber.isEmpty ? String(numbered.count) : scene.sceneNumber
+        }
         let represented = Set(board.beats.map(\.sceneID))
         var segments: [ScriptSegment] = [], seen = Set<Decimal>()
         for beat in board.orderedBeats where !beat.omitted && !inactive.contains(beat.blockID) {

@@ -49,6 +49,19 @@ try{
  page.once('dialog',d=>d.accept('Act One'));await page.locator('#board-actions').selectOption('group');
  const hierarchyDownload=page.waitForEvent('download');await page.locator('#download').click();await(await hierarchyDownload).saveAs(path.join(output,'hierarchy-edited.frontstage'));const hierarchy=JSON.parse(await readFile(path.join(output,'hierarchy-edited.frontstage'),'utf8')).project.frontstageWhiteboard,group=hierarchy.blocks.find(b=>b.containerKind==='beatGroup');assert.ok(group.parentID);assert.equal(hierarchy.blocks.find(b=>b.id===group.parentID).name,'Act One');assert.equal(hierarchy.beats.find(b=>b.id===created).sceneID,hierarchy.beats.find(b=>b.id==='beat-2').sceneID);assert.equal(hierarchy.beats.filter(b=>b.blockID===group.id).length,2);
  await page.screenshot({path:path.join(output,'browser-hierarchy-side-paper.png')});
+ // A grouped beat can leave its container for an empty lane; selection follows into the paper.
+ page.once('dialog',d=>d.accept('New story lane'));await page.locator('#add-layer').click();
+ await page.locator('#blocks [data-beat-id="beat-2"]').click();
+ assert.equal(await page.locator('[data-script-beat="beat-2"]').getAttribute('aria-current'),'true');
+ const lane=page.locator('.layer').filter({hasText:'New story lane'});await lane.scrollIntoViewIfNeeded();
+ const laneBox=await lane.boundingBox();
+ await page.evaluate(({x,y})=>{const transfer=new DataTransfer();transfer.setData('text/frontstage-beat','beat-2');document.getElementById('canvas').dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,clientX:x,clientY:y,dataTransfer:transfer}));},{x:laneBox.x+135,y:laneBox.y+75});
+ const laneDownload=page.waitForEvent('download');await page.locator('#download').click();await(await laneDownload).saveAs(path.join(output,'lane-edited.frontstage'));
+ const moved=JSON.parse(await readFile(path.join(output,'lane-edited.frontstage'),'utf8')).project.frontstageWhiteboard, owner=moved.blocks.find(b=>b.id===moved.beats.find(b=>b.id==='beat-2').blockID);
+ assert.equal(moved.layers.find(l=>l.id===owner.layerID).name,'New story lane');assert.equal(owner.standalone,true);assert.equal(owner.parentID,undefined);
+ assert.deepEqual(moved.dependencies,hierarchy.dependencies);
+ assert.equal((await page.locator('#snippet-list .script-heading').first().innerText()).trim().startsWith('1 '),true);
+ await page.locator('#undo').click();assert.equal(await page.locator('#blocks [data-container-kind="beatGroup"] [data-beat-id="beat-2"]').count(),1);
  // Navigation and new workspaces remain available after a cold offline launch.
  await page.evaluate(()=>navigator.serviceWorker.ready.then(()=>new Promise(resolve=>navigator.serviceWorker.controller?resolve():navigator.serviceWorker.addEventListener('controllerchange',resolve,{once:true}))));await context.setOffline(true);await page.reload();await page.locator('#local-mode').click();await page.getByRole('button',{name:'The Invitation · on this device',exact:true}).click();await view('people');await page.getByRole('button',{name:'LENA',exact:true}).click();assert.equal(await page.getByLabel('Backstory',{exact:true}).inputValue(),'Knows the station.');
  assert.deepEqual(errors,[]);await writeFile(path.join(output,'index.html'),'<!doctype html><meta charset="utf-8"><title>Frontstage page parity</title><style>body{font:14px system-ui;background:#303133;color:white}section{margin:24px}article{display:flex;gap:16px}figure{margin:0;width:50%}img{width:100%}h2{margin-bottom:8px}</style><h1>Same project · 1440 × 950 · Mac and browser</h1>'+[...design.pages,{id:'board-script',title:'Whiteboard side screenplay'},{id:'popup',title:'Beat popup'}].map(p=>`<section><h2>${p.title}</h2><article><figure><figcaption>Mac</figcaption><img src="mac-${p.id}.png"></figure><figure><figcaption>Browser</figcaption><img src="browser-${p.id}.png"></figure></article></section>`).join(''));

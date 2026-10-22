@@ -2,6 +2,30 @@ import XCTest
 @testable import FrontstageCore
 
 final class BeatHierarchyTests: XCTestCase {
+    func testGroupedBeatCanMoveToAnotherLaneAndRenumberSpatially() throws {
+        var project = Project()
+        let a = try project.addBoardBeat(position: .init(x: 400, y: 60), title: "First")
+        let b = try project.addBoardBeat(position: .init(x: 600, y: 60), title: "Second")
+        try project.updateBoardBeat(b) { $0.html = "<p>Keep my script.</p>" }
+        try project.connectBoardBeats(cause: a, effect: b)
+        try project.groupBoardBeats([a, b])
+        try project.editWhiteboard { $0.layers.append(BoardLayer(id: "other", name: "Other")) }
+        let original = try project.whiteboard().beats.first { $0.id == b }!
+        try project.moveBoardBeatsToLayer([b], layerID: "other", position: .init(x: 0, y: 70))
+        try project.applyWhiteboardSpatialOrder()
+        let board = try project.whiteboard(), moved = board.beats.first { $0.id == b }!
+        XCTAssertEqual(moved.html, original.html)
+        XCTAssertEqual(moved.sceneID, original.sceneID)
+        XCTAssertEqual(board.blocks.first { $0.id == moved.blockID }?.layerID, "other")
+        XCTAssertEqual(board.dependencies.first?.effect, b)
+        XCTAssertEqual(board.orderedBeats.first?.id, b)
+        XCTAssertEqual(try project.orderedScript().map(\.number), ["1", "2"])
+        try project.editWhiteboard { $0.layers[$0.layers.firstIndex { $0.id == "other" }!].locked = true }
+        let locked = project
+        XCTAssertThrowsError(try project.moveBoardBeatsToLayer([a], layerID: "other", position: .init()))
+        XCTAssertEqual(project, locked)
+    }
+
     func testBeatGroupInsideBlockPreservesScriptAndDependencies() throws {
         var project = Project()
         let a = try project.addBoardBeat(title: "Go")
