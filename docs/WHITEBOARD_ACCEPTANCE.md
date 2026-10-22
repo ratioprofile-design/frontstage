@@ -26,7 +26,7 @@ Record OS version, screen size, processor and build commit with each result.
 
 ## Reference-dependent work
 
-Compare the board against the supplied Causality layouts. An open-editor reference and behavioral examples remain necessary to assess exact popup appearance, snapping/ripple rules and readability/tension tracks. Until then these are functional Frontstage implementations, not verified exact matches.
+Compare the board against the supplied Causality layouts. The supplied open-editor, side-script and hierarchy screenshots now guide the layout. Behavioral examples remain necessary to assess snapping/ripple rules and readability/tension tracks. Until then these are functional Frontstage implementations, not verified exact matches.
 
 ## Beat hierarchy and script paper (22 October 2026)
 
@@ -52,3 +52,11 @@ Character, transition, parenthetical and shot choices insert formatted paragraph
 ### Close-out audit
 
 The browser now exposes a Ripple toggle. Dragging blocks or loose beats can move into an unlocked destination lane; selected loose beats preserve their relative positions and container IDs across lanes. Forward ripple respects inherited locks and rejects a blocked move atomically. Compaction remains a separate explicit action. The five workstreams and outstanding release/feature gates are tracked in [PHASE_STATUS.md](PHASE_STATUS.md).
+
+### Screenshot reference implementation
+
+The Mac and browser popup use a two-column metadata area, visibility selector, character/tag chips, collapsible Script section, scene-version controls, location dropdowns and screenplay paper. Multiple beat editors remain independent. Versions currently restore the entire linked scene, with a safety revision; they are not independent beat-only versions.
+
+The board-side script now separates scene sluglines (number on the right), collapsible tinted beat headers, metadata and white screenplay passages. Heading editing is in the popup and Write workspace. Groups and blocks support freely positioned beats as well as stacked beats; local offsets persist through save/reopen and ungrouping preserves their canvas positions.
+
+Automated checks cover model persistence, hierarchy, scene order, browser editing and locks. Screenshot captures support visual review; exact Causality interaction equivalence and hands-on Mac acceptance remain open.

@@ -4,8 +4,8 @@ public enum WorkspaceDesign {
     public static let sidebar: Double = 260
     public static let properties: Double = 240
     public static let padding: Double = 24
-    public static let popupWidth: Double = 660
-    public static let popupHeight: Double = 740
+    public static let popupWidth: Double = 748
+    public static let popupHeight: Double = 768
     public static let paperWidth: Double = 612
     public static let paperHeight: Double = 792
     public static let paperLeft: Double = 108

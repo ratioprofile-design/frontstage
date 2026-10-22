@@ -21,7 +21,7 @@ final class BeatPopupPresenter: NSObject, NSWindowDelegate {
     func refreshTitles(_ board: Whiteboard) {
         guard !panels.isEmpty else { return }
         let titles = Dictionary(uniqueKeysWithValues: board.beats.map { ($0.id, $0.title) })
-        for (id, window) in panels { window.title = titles[id].map { $0.isEmpty ? "Edit Beat" : $0 } ?? "Beat removed" }
+        for (id, window) in panels { window.title = titles[id] == nil ? "Beat removed" : "Edit Beat" }
     }
 
     func open(_ id: String, workspace: Workspace, near anchor: NSRect? = nil) {
@@ -30,7 +30,7 @@ final class BeatPopupPresenter: NSObject, NSWindowDelegate {
         let editor = ScreenplayEditorController()
         let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: WorkspaceDesign.popupWidth, height: WorkspaceDesign.popupHeight),
             styleMask: [.titled, .closable, .resizable, .utilityWindow], backing: .buffered, defer: false)
-        panel.title = beat.title.isEmpty ? "Edit Beat" : beat.title
+        panel.title = "Edit Beat"
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
@@ -85,62 +85,83 @@ struct BeatPopupView: View {
         })
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if let beat {
-                HStack {
-                    Circle().fill(Color(boardHex: beat.color)).frame(width: 9, height: 9)
-                    TextField("Beat name", text: text(\.title, label: "Beat Title"))
-                        .font(.title3.weight(.semibold)).textFieldStyle(.plain)
-                    Button("Done", action: dismiss).keyboardShortcut(.cancelAction)
-                }
-                TextField("Synopsis", text: text(\.synopsis, label: "Beat Synopsis"))
-                HStack {
-                    Picker("Type", selection: Binding(get: { beat.kind }, set: { kind in
-                        workspace.edit("Beat Type") { try $0.updateBoardBeat(beatID) { $0.kind = kind } }
-                    })) { Text("Story Beat").tag(BoardBeatKind.story); Text("Subtext Beat").tag(BoardBeatKind.subtext) }
-                    .pickerStyle(.segmented)
-                    Toggle("Must Be Caused", isOn: Binding(get: { beat.mustBeCaused }, set: { value in
-                        workspace.edit("Cause Requirement") { try $0.updateBoardBeat(beatID) { $0.mustBeCaused = value } }
-                    }))
-                }
-                HStack {
-                    TextField("Characters, separated by commas", text: Binding(get: { beat.characters.joined(separator: ", ") }, set: { value in
-                        workspace.edit("Beat Characters", key: "characters-\(beatID)") { try $0.updateBoardBeat(beatID) { $0.characters = value.boardList } }
-                    }))
-                    TextField("Tags", text: Binding(get: { beat.tags.joined(separator: ", ") }, set: { value in
-                        workspace.edit("Beat Tags", key: "tags-\(beatID)") { try $0.updateBoardBeat(beatID) { $0.tags = value.boardList } }
-                    }))
-                }
-                if let scene = workspace.project.scenes.first(where: { $0.id == beat.sceneID }) {
-                    SceneHeadingFields(scene: scene, workspace: workspace)
-                    Text(scene.heading.text).font(.custom("Courier", size: 12).bold())
-                }
+    @State private var scriptExpanded = true
+    @State private var showTools = false
+    private var scene: FrontstageCore.Scene? { beat.flatMap { b in workspace.project.scenes.first { $0.id == b.sceneID } } }
+    private func heading(_ key: WritableKeyPath<SceneHeading, String>) -> Binding<String> {
+        Binding(get: { scene?.heading[keyPath: key] ?? "" }, set: { value in
+            guard let scene else { return }; var heading = scene.heading; heading[keyPath: key] = value
+            workspace.updateScene(id: scene.id, heading: heading)
+        })
+    }
+    @ViewBuilder private var metadata: some View {
+        if let beat {
+            HStack(alignment: .top, spacing: 16) {
+                VStack(spacing: 10) {
+                    HStack { Text("Beat Name").frame(width: 80, alignment: .leading); TextField("Beat Name", text: text(\.title, label: "Beat Title")) }
+                    HStack { Text("Synopsis").frame(width: 80, alignment: .leading); TextField("Synopsis", text: text(\.synopsis, label: "Beat Synopsis"), axis: .vertical).lineLimit(2...3) }
+                    HStack { Text("Visibility").frame(width: 80, alignment: .leading)
+                        Picker("Visibility", selection: Binding(get: { beat.omitted }, set: { value in workspace.edit("Beat Visibility") { try $0.updateBoardBeat(beatID) { $0.omitted = value } } })) {
+                            Text("Visible In Script").tag(false); Text("Hidden In Script").tag(true)
+                        }.labelsHidden()
+                        Label(workspace.whiteboard.isUnused(beat) ? "Beat is unused" : "Beat is used", systemImage: workspace.whiteboard.isUnused(beat) ? "circle" : "checkmark.circle.fill").font(.caption).foregroundStyle(workspace.whiteboard.isUnused(beat) ? Color.secondary : Color.green)
+                    }
+                }.frame(maxWidth: .infinity)
                 Divider()
-                HStack {
-                Picker("Format", selection: Binding(get: { controller.activeElement }, set: { controller.format($0) })) {
-                    ForEach(ScreenplayElement.editable, id: \.self) { Text($0.label).tag($0) }
-                }.frame(width: 200)
-                InlineFormatButtons(controller: controller)
-                Spacer()
-                }
-                ScreenplaySuggestions(workspace: workspace, controller: controller)
-                    .disabled(workspace.project.scenes.first { $0.id == beat.sceneID }?.isTextLocked == true)
-                ScreenplayEditor(html: text(\.html, label: "Snippet Text"), controller: controller, width: 432, typography: workspace.project.scriptLayout,
-                    onError: { workspace.errorMessage = $0 }, editable: workspace.project.scenes.first { $0.id == beat.sceneID }?.isTextLocked != true, paper: true).id(beatID)
-                    .frame(width: WorkspaceDesign.paperWidth).frame(maxWidth: .infinity)
-                    .environment(\.colorScheme, .light)
-                    .border(Color.black.opacity(0.2)).shadow(color: .black.opacity(0.18), radius: 4, y: 2)
-                HStack {
-                    Text("Changes save to your project as you type. Esc closes this editor.")
-                    Spacer()
-                    Button("Split at Cursor") { workspace.splitBoardBeat(beatID, controller: controller) }
-                }.font(.caption).foregroundStyle(.secondary)
-            } else {
-                ContentUnavailableView("This beat was removed", systemImage: "rectangle.slash")
-                Button("Close", action: dismiss)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack { Text("Characters"); Menu("⊕") { ForEach(workspace.project.characters, id: \.id) { character in
+                        Button(character.name) { workspace.edit("Beat Characters") { try $0.updateBoardBeat(beatID) { if !$0.characters.contains(character.name) { $0.characters.append(character.name) } } } }
+                    } }.fixedSize() }
+                    BeatReferenceChips(characters: beat.characters, tags: [])
+                    TextField("Add names, separated by commas", text: Binding(get: { beat.characters.joined(separator: ", ") }, set: { value in workspace.edit("Beat Characters", key: "characters-\(beatID)") { try $0.updateBoardBeat(beatID) { $0.characters = value.boardList } } })).font(.caption)
+                    Text("Tags ⊕")
+                    BeatReferenceChips(characters: [], tags: beat.tags)
+                    TextField("Add tags, separated by commas", text: Binding(get: { beat.tags.joined(separator: ", ") }, set: { value in workspace.edit("Beat Tags", key: "tags-\(beatID)") { try $0.updateBoardBeat(beatID) { $0.tags = value.boardList } } })).font(.caption)
+                }.frame(width: 270)
+            }.fixedSize(horizontal: false, vertical: true)
+        }
+    }
+    @ViewBuilder private var scriptControls: some View {
+        if let scene {
+            HStack {
+                Text("Version").frame(width: 80, alignment: .leading)
+                Picker("Version", selection: Binding(get: { "" }, set: { id in if !id.isEmpty { workspace.edit("Restore Scene Version") { try $0.restoreRevision(sceneID: scene.id, revisionID: id) } } })) {
+                    Text("Untitled Version (current)").tag("")
+                    ForEach(workspace.project.revisions(for: scene.id)) { version in Text(version.label).tag(version.id) }
+                }.labelsHidden()
+                Button("Save Version") { let label = "Version \(workspace.project.revisions(for: scene.id).count + 1)"; workspace.edit("Save Scene Version") { _ = try $0.saveRevision(sceneID: scene.id, label: label) } }
+                Picker("Action", selection: Binding(get: { controller.activeElement }, set: { controller.format($0) })) { ForEach(ScreenplayElement.editable, id: \.self) { Text($0.label).tag($0) } }.labelsHidden().frame(width: 120)
+                Button("⋯") { showTools.toggle() }.accessibilityLabel("Formatting options")
             }
-        }.padding(14).textFieldStyle(.roundedBorder)
+            if showTools { HStack { InlineFormatButtons(controller: controller); ScreenplaySuggestions(workspace: workspace, controller: controller) } }
+            HStack {
+                Text("Location").frame(width: 80, alignment: .leading)
+                ScriptSuggestionField(label: "INT. / EXT.", text: heading(\.prefix), options: ["INT.","EXT.","INT./EXT."]).frame(width: 85)
+                ScriptSuggestionField(label: "Location", text: heading(\.location), options: Array(Set(workspace.project.scenes.map { $0.heading.location })).sorted())
+                ScriptSuggestionField(label: "DAY / NIGHT", text: heading(\.time), options: ["DAY","NIGHT","MORNING","EVENING","DAWN","DUSK","CONTINUOUS","LATER"]).frame(width: 180)
+            }
+        }
+    }
+    var body: some View {
+        VStack(spacing: 10) {
+            if let beat {
+                metadata.padding(.bottom, 10)
+                Button { scriptExpanded.toggle() } label: { Text((scriptExpanded ? "▼" : "▶") + " Script").frame(maxWidth: .infinity, alignment: .leading).padding(6) }
+                    .buttonStyle(.plain).background(Color(white: 0.13))
+                if scriptExpanded {
+                    scriptControls.disabled(scene?.isTextLocked == true)
+                    ScreenplayEditor(html: text(\.html, label: "Snippet Text"), controller: controller, width: 532, typography: workspace.project.scriptLayout,
+                        onError: { workspace.errorMessage = $0 }, editable: scene?.isTextLocked != true, paper: true, paperTopInset: 16).id(beatID)
+                        .frame(maxWidth: .infinity, minHeight: 220).environment(\.colorScheme, .light)
+                }
+                HStack {
+                    Picker("Type", selection: Binding(get: { beat.kind }, set: { value in workspace.edit("Beat Type") { try $0.updateBoardBeat(beatID) { $0.kind = value } } })) { Text("Story Beat").tag(BoardBeatKind.story); Text("Subtext Beat").tag(BoardBeatKind.subtext) }.frame(width: 180)
+                    Toggle("Must Be Caused", isOn: Binding(get: { beat.mustBeCaused }, set: { value in workspace.edit("Cause Requirement") { try $0.updateBoardBeat(beatID) { $0.mustBeCaused = value } } }))
+                    Spacer(); Button("Split at Cursor") { workspace.splitBoardBeat(beatID, controller: controller) }
+                }.font(.caption)
+                Button("Close", action: dismiss).frame(width: 100).keyboardShortcut(.cancelAction)
+            } else { Text("This beat was removed"); Button("Close", action: dismiss) }
+        }.padding(18).textFieldStyle(.roundedBorder).background(Color(white: 0.267))
     }
 }
 

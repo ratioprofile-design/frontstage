@@ -298,7 +298,11 @@ final class NativeWhiteboard: NSView {
                 let before = geometry.hitBeat(point)
                 let moving = selection.contains(beat) ? selection : [beat]
                 if let before, moving.contains(before) { return }
-                workspace?.edit("Move Beats") { try $0.moveBoardBeats(moving, toBlock: block, before: before); try $0.applyWhiteboardSpatialOrder() }
+                workspace?.edit("Move Beats") {
+                    if before == nil, let rect = geometry.blockRects[block] { try $0.placeBoardBeats(moving, inBlock: block, position: .init(x: point.x - rect.x, y: point.y - rect.y)) }
+                    else { try $0.moveBoardBeats(moving, toBlock: block, before: before) }
+                    try $0.applyWhiteboardSpatialOrder()
+                }
             } else {
                 let target = layerAt(point), moving = selection.contains(beat) ? selection : [beat]
                 let position = BoardPoint(x: point.x - 110, y: point.y - (geometry.layerRects[target.id]?.y ?? 0))

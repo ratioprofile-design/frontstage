@@ -78,7 +78,7 @@ struct ContinuousSnippet: View {
                     .font(.caption).frame(maxWidth: .infinity, alignment: .leading).buttonStyle(.plain)
                     .padding(4).background(Color(white: 0.93))
             }
-            if !compact || workspace.selectedBoardBeatID == beatID { HStack {
+            if !compact { HStack {
                 Picker("Element", selection: Binding(get: { controller.activeElement }, set: { controller.format($0) })) {
                     ForEach(ScreenplayElement.editable, id: \.self) { Text($0.label).tag($0) }
                 }.frame(width: compact ? 120 : 180)
@@ -87,51 +87,70 @@ struct ContinuousSnippet: View {
             }.font(.caption).disabled(scene?.isTextLocked == true)
             ScreenplaySuggestions(workspace: workspace, controller: controller).disabled(scene?.isTextLocked == true)
             }
-            ScreenplayEditor(html: html, controller: controller, width: compact ? 252 : workspace.paper.contentWidth,
+            ScreenplayEditor(html: html, controller: controller, width: compact ? 520 : workspace.paper.contentWidth,
                 typography: workspace.project.scriptLayout, onError: { workspace.errorMessage = $0 }, editable: scene?.isTextLocked != true, continuous: true)
                 .frame(height: controller.layoutHeight)
         }
     }
 }
+struct BeatReferenceChips: View {
+    let characters: [String]
+    let tags: [String]
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            if !characters.isEmpty { LazyVGrid(columns: [GridItem(.adaptive(minimum: 90), alignment: .leading)], alignment: .leading) {
+                ForEach(characters, id: \.self) { name in
+                    HStack(spacing: 4) {
+                        Circle().fill(Color(boardHex: ["#11106b","#5de5bb","#a30e3f","#d6ae1c","#467e96"][name.unicodeScalars.reduce(0) { $0 + Int($1.value) } % 5])).frame(width: 18, height: 18)
+                        Text(name).font(.system(size: 12))
+                    }
+                }
+            } }
+            if !tags.isEmpty { LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), alignment: .leading)], alignment: .leading) {
+                ForEach(tags, id: \.self) { tag in Text(tag).font(.system(size: 11)).foregroundStyle(.white).padding(4).background(Color(boardHex: "#ca53df")) }
+            } }
+        }
+    }
+}
+
+struct SideScriptBeat: View {
+    @ObservedObject var workspace: Workspace
+    let beat: BoardBeat
+    @State private var expanded = true
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button { expanded.toggle(); workspace.selectBoardBeat(beat.id) } label: {
+                Text((expanded ? "▼ " : "▶ ") + beat.title).font(.system(size: 16)).frame(maxWidth: .infinity, alignment: .leading).padding(9)
+            }.buttonStyle(.plain).background(Color(boardHex: beat.color).opacity(0.2))
+            if !beat.characters.isEmpty || !beat.tags.isEmpty { BeatReferenceChips(characters: beat.characters, tags: beat.tags).padding(8).frame(maxWidth: .infinity, alignment: .leading).background(Color(white: 0.94)) }
+            if expanded { ContinuousSnippet(workspace: workspace, sceneID: beat.sceneID, beatID: beat.id, controller: workspace.scriptController(beat.id), compact: true).padding(10) }
+        }.background(Color.white).foregroundStyle(.black).environment(\.colorScheme, .light)
+            .overlay(Rectangle().stroke(workspace.selectedBoardBeatID == beat.id ? Color.accentColor : .clear, lineWidth: 2))
+            .onTapGesture(count: 2) { workspace.popup.open(beat.id, workspace: workspace) }
+            .onChange(of: workspace.selectedBoardBeatID) { id in if id == beat.id { expanded = true } }
+    }
+}
+
 struct ScriptSidePaper: View {
     @ObservedObject var workspace: Workspace
     var body: some View {
-        VStack(spacing: 0) {
-            Text("SCRIPT").font(.caption).padding(8)
-            if let beat = workspace.selectedBoardBeat, let scene = workspace.project.scenes.first(where: { $0.id == beat.sceneID }) {
-                SceneHeadingFields(scene: scene, workspace: workspace, compact: true).padding(8)
-            }
-            ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
+        ScrollViewReader { proxy in
+            ScrollView([.vertical, .horizontal]) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(workspace.project.name).font(.system(size: 17)).foregroundStyle(.white).frame(maxWidth: .infinity).padding(14).background(Color(boardHex: "#078827"))
                     ForEach(Array(((try? workspace.project.orderedScript()) ?? []).enumerated()), id: \.offset) { _, segment in
-                        Text("\(segment.number)  \(segment.scene.heading.text)\(segment.isContinuation ? " (CONTINUED)" : "")")
-                            .font(.custom("Courier", size: 12).bold()).foregroundStyle(.black).padding(.top, 14)
-                        if segment.beatIDs.isEmpty {
-                            ContinuousSnippet(workspace: workspace, sceneID: segment.scene.id, beatID: nil,
-                                controller: workspace.scriptController("scene-\(segment.scene.id)"), compact: true)
-                        }
+                        HStack {
+                            Text(segment.scene.heading.text + (segment.isContinuation ? " (CONTINUED)" : "")); Spacer(); Text(segment.number)
+                        }.font(.custom("Courier", size: 14).bold()).foregroundStyle(.black).padding(10).background(Color.white)
                         ForEach(segment.beatIDs, id: \.self) { id in
-                            ContinuousSnippet(workspace: workspace, sceneID: segment.scene.id, beatID: id,
-                                controller: workspace.scriptController(id), compact: true)
-                                .id(id)
-                                .overlay(alignment: .leading) {
-                                    if workspace.selectedBoardBeatID == id {
-                                        Rectangle().fill(Color.accentColor).frame(width: 3).padding(.leading, -8).allowsHitTesting(false)
-                                    }
-                                }
-                                .onTapGesture { workspace.selectBoardBeat(id) }
+                            if let beat = workspace.whiteboard.beats.first(where: { $0.id == id }) { SideScriptBeat(workspace: workspace, beat: beat).id(id) }
                         }
+                        if segment.beatIDs.isEmpty { ContinuousSnippet(workspace: workspace, sceneID: segment.scene.id, beatID: nil, controller: workspace.scriptController("scene-\(segment.scene.id)"), compact: true).padding(10).background(Color.white) }
                     }
-                    Spacer(minLength: 72)
-                }.frame(width: 252, alignment: .leading).padding(24).frame(minHeight: 792, alignment: .topLeading)
-                    .background(Color.white).environment(\.colorScheme, .light).shadow(radius: 2).padding(10)
-            }
-            .onChange(of: workspace.selectedBoardBeatID) { id in
-                if let id { proxy.scrollTo(id, anchor: .center) }
-            }
-            }
-        }.background(Color(white: 0.47))
+                }.frame(width: 540, alignment: .leading).padding(8)
+            }.background(Color(white: 0.42))
+            .onChange(of: workspace.selectedBoardBeatID) { id in if let id { proxy.scrollTo(id, anchor: .center) } }
+        }
     }
 }
 

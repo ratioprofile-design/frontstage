@@ -69,7 +69,8 @@ final class BeatPopupTests: XCTestCase {
             XCTAssertFalse(workspace.whiteboard.beats.first { $0.id == a }!.html.contains("Second paper"))
             XCTAssertTrue(workspace.whiteboard.blocks.allSatisfy { $0.standalone == true })
             workspace.edit("Rename first beat") { try $0.updateBoardBeat(a) { $0.title = "First paper title" } }
-            XCTAssertEqual(firstPanel.title, "First paper title")
+            XCTAssertEqual(firstPanel.title, "Edit Beat")
+            XCTAssertEqual(workspace.whiteboard.beats.first { $0.id == a }?.title, "First paper title")
             workspace.popup.open(a, workspace: workspace)
             XCTAssertEqual(workspace.popup.panels.count, 2)
             workspace.popup.close(a)

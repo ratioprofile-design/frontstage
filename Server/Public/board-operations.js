@@ -13,7 +13,7 @@ export function validateBoard(board, sceneIDs) {
     const seen = new Set([block.id]);
     for (let parent = block.parentID; parent != null; parent = blocks.get(parent)?.parentID) { if (seen.has(parent)) fail(); seen.add(parent); }
   }
-  for (const beat of board.beats) if (!sceneIDs.has(beat.sceneID) || !blocks.has(beat.blockID) || !coordinate(beat.order) || !coordinate(beat.start) || beat.start < 0 || !Number.isFinite(beat.duration) || beat.duration < .05 || beat.duration > 1000 || !['title', 'synopsis', 'html', 'color'].every(k => typeof beat[k] === 'string') || !['story', 'subtext'].includes(beat.kind) || !strings(beat.characters) || !strings(beat.tags) || !['mustBeCaused', 'omitted', 'locked'].every(k => typeof beat[k] === 'boolean')) fail();
+  for (const beat of board.beats) if ((beat.position != null && (!coordinate(beat.position.x)||!coordinate(beat.position.y)||beat.position.x<0||beat.position.y<24)) || !sceneIDs.has(beat.sceneID) || !blocks.has(beat.blockID) || !coordinate(beat.order) || !coordinate(beat.start) || beat.start < 0 || !Number.isFinite(beat.duration) || beat.duration < .05 || beat.duration > 1000 || !['title', 'synopsis', 'html', 'color'].every(k => typeof beat[k] === 'string') || !['story', 'subtext'].includes(beat.kind) || !strings(beat.characters) || !strings(beat.tags) || !['mustBeCaused', 'omitted', 'locked'].every(k => typeof beat[k] === 'boolean')) fail();
   for (const edge of board.dependencies) if (!beats.has(edge.cause) || !beats.has(edge.effect) || edge.cause === edge.effect || typeof edge.reference !== 'boolean' || typeof edge.reason !== 'string') fail();
   for (const stroke of board.strokes) if (!Array.isArray(stroke.points) || stroke.points.length > 10000 || !stroke.points.every(p => coordinate(p?.x) && coordinate(p?.y)) || !Number.isFinite(stroke.width) || stroke.width < .5 || stroke.width > 30 || typeof stroke.color !== 'string') fail();
   return board;
@@ -113,7 +113,7 @@ export function groupBlocks(source, ids, name, id) {
 export function ungroupBlocks(source, ids) {
   const board = copy(source), groups = board.blocks.filter(b => ids.has(b.id)), byID = new Map(board.blocks.map(b => [b.id, b]));
   if (!ids.size || groups.length !== ids.size || groups.some(g => blockLocked(board, g.id) || (g.containerKind!=='beatGroup' && !board.blocks.some(b => b.parentID === g.id)))) throw Error('Select unlocked groups to ungroup.');
-  for(const group of groups.filter(g=>g.containerKind==='beatGroup')){let top=group.position.y;for(const beat of board.beats.filter(b=>b.blockID===group.id).sort((a,b)=>a.order-b.order)){if(beat.locked)throw Error('Unlock the group members.');const loose={...copy(group),id:crypto.randomUUID(),name:'Beat',standalone:true,collapsed:false,position:{x:group.position.x,y:top}};delete loose.containerKind;top+=beatSize(beat.title,group.width-12).height+4;beat.blockID=loose.id;board.blocks.push(loose);}}
+  for(const group of groups.filter(g=>g.containerKind==='beatGroup')){let top=group.position.y;for(const beat of board.beats.filter(b=>b.blockID===group.id).sort((a,b)=>a.order-b.order)){if(beat.locked)throw Error('Unlock the group members.');const loose={...copy(group),id:crypto.randomUUID(),name:'Beat',standalone:true,collapsed:false,position:{x:group.position.x+(beat.position?.x??6)-6,y:beat.position?group.position.y+beat.position.y-24:top}};delete beat.position;delete loose.containerKind;top+=beatSize(beat.title,group.width-12).height+4;beat.blockID=loose.id;board.blocks.push(loose);}}
   for (const block of board.blocks) {
     let parent = block.parentID; while (ids.has(parent)) parent = byID.get(parent)?.parentID;
     if (parent !== block.parentID) {
@@ -159,14 +159,14 @@ export function moveBeatsToLayer(source, ids, layerID, position) {
   const owners = new Set(beats.map(b=>b.blockID)); let y = Math.max(32,position.y);
   for (const beat of beats) {
     const block = {id:crypto.randomUUID(),name:'Beat',layerID,position:{x:Math.max(0,position.x),y},width:224,standalone:true,collapsed:false,locked:false};
-    board.blocks.push(block); beat.blockID=block.id; y+=beatSize(beat.title,212).height+28;
+    board.blocks.push(block); beat.blockID=block.id;delete beat.position; y+=beatSize(beat.title,212).height+28;
   }
   board.blocks=board.blocks.filter(b=>!owners.has(b.id)||!b.standalone||board.beats.some(x=>x.blockID===b.id)||board.blocks.some(x=>x.parentID===b.id));
   return board;
 }
 export function spatialOrder(source) {
   const board=copy(source), blocks=new Map(board.blocks.map(b=>[b.id,b])), layers=new Map(board.layers.map((l,i)=>[l.id,i]));
-  [...board.beats].sort((a,b)=>{const x=blocks.get(a.blockID),y=blocks.get(b.blockID);return x.position.x-y.position.x || layers.get(x.layerID)-layers.get(y.layerID) || x.position.y-y.position.y || a.order-b.order || a.id.localeCompare(b.id);}).forEach((b,i)=>b.order=i);
+  [...board.beats].sort((a,b)=>{const x=blocks.get(a.blockID),y=blocks.get(b.blockID);return (x.position.x+(a.position?.x??6))-(y.position.x+(b.position?.x??6)) || layers.get(x.layerID)-layers.get(y.layerID) || x.position.y-y.position.y || a.order-b.order || a.id.localeCompare(b.id);}).forEach((b,i)=>b.order=i);
   return board;
 }
 

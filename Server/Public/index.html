@@ -13,13 +13,24 @@
   <aside id="properties"><h2>Beat Properties</h2><div id="beat-properties">Select a beat. Double-click to edit its snippet.</div><h2>Story Issues</h2><div id="issues"></div></aside>
 </div></section><section id="workspace-page" hidden></section></main><div id="app-status"><span id="status" role="status">Sign in to shared projects</span></div>
 <section id="editor" class="floating" role="dialog" aria-modal="false" aria-labelledby="editor-label" hidden>
-  <div class="editor-header"><span class="editor-grip" role="button" tabindex="0" aria-label="Move editor">⠿</span><span id="editor-label" class="beat-dot" aria-label="Edit Beat"></span><input id="beat-title" class="write" aria-label="Beat name" placeholder="Beat name"><button id="close-editor">Done</button></div>
-  <label>Synopsis<input id="beat-synopsis" class="write"></label>
-  <div class="buttons"><select id="beat-kind" class="write"><option value="story">Story Beat</option><option value="subtext">Subtext Beat</option></select><label><input id="must-cause" type="checkbox" class="write"> Must Be Caused</label></div>
-  <div class="popup-metadata"><label>Characters<input id="beat-characters" class="write" placeholder="Comma-separated names"></label><label>Tags<input id="beat-tags" class="write" placeholder="Comma-separated tags"></label></div>
-  <div class="buttons"><select id="element" class="write"><option value="action">Action</option><option value="character">Character</option><option value="dialogue">Dialogue</option><option value="parenthetical">Parenthetical</option><option value="transition">Transition</option><option value="shot">Shot</option><option value="lyrics">Lyrics</option></select><button id="bold" class="write"><b>B</b></button><button id="italic" class="write"><i>I</i></button></div>
-  <div class="paper-desk"><div id="snippet-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Snippet text"></div></div>
-  <div class="popup-bottom"><p class="muted">Changes save as you type. Esc closes this editor.</p><button id="split-beat" class="write">Split at Cursor</button></div>
+  <div class="editor-header"><strong id="editor-label">Edit Beat</strong><button id="close-editor" aria-label="Close editor">×</button></div>
+  <div class="popup-top">
+    <div class="popup-fields">
+      <label>Beat Name<input id="beat-title" class="write" aria-label="Beat name"></label>
+      <label>Synopsis<textarea id="beat-synopsis" class="write" aria-label="Synopsis" placeholder="Synopsis"></textarea></label>
+      <label>Visibility<span class="visibility-controls"><select id="beat-visibility" class="write"><option value="visible">Visible In Script</option><option value="hidden">Hidden In Script</option></select><span id="beat-used">✓ Beat is used</span></span></label>
+    </div>
+    <div class="popup-people"><label>Characters <button id="add-character" aria-label="Add character">⊕</button></label><div id="character-chips"></div><input id="beat-characters" class="write" aria-label="Characters" placeholder="Add names, separated by commas">
+    <label>Tags <button id="add-tag" aria-label="Add tag">⊕</button></label><div id="tag-chips"></div><input id="beat-tags" class="write" aria-label="Tags" placeholder="Add tags, separated by commas"></div>
+  </div>
+  <button id="script-section-toggle" class="script-section-toggle" aria-expanded="true">▼ Script</button>
+  <div class="popup-script-section">
+    <div class="version-row"><label>Version<select id="beat-version" aria-label="Version"><option value="">Untitled Version (current)</option></select></label><button id="version-save" class="write">Save Version</button></div>
+    <div class="buttons"><select id="element" class="write"><option value="action">Action</option><option value="character">Character</option><option value="dialogue">Dialogue</option><option value="parenthetical">Parenthetical</option><option value="transition">Transition</option><option value="shot">Shot</option><option value="lyrics">Lyrics</option></select><button id="bold" class="write">B</button><button id="italic" class="write">I</button></div>
+    <div class="paper-desk"><div id="snippet-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Snippet text"></div></div>
+  </div>
+  <div class="popup-extra"><select id="beat-kind" class="write"><option value="story">Story Beat</option><option value="subtext">Subtext Beat</option></select><label><input id="must-cause" type="checkbox" class="write"> Must Be Caused</label><button id="split-beat" class="write">Split at Cursor</button></div>
+  <div class="popup-bottom"><button id="close-bottom">Close</button></div>
 </section>
 <section id="conflict" class="floating" role="alertdialog" hidden><h2>Concurrent edits need a choice</h2><p>Both copies changed these fields. Your local copy remains saved on this device.</p><pre id="conflict-fields"></pre><button id="keep-local">Keep Local Copy</button><button id="take-server">Use Server Copy</button><button id="export-conflict">Download Local Backup</button></section>
 </body></html>

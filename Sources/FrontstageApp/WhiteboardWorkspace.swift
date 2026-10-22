@@ -33,7 +33,7 @@ struct WhiteboardWorkspace: View {
                 .background(Color(white: 0.24))
             HSplitView {
                 if workspace.showBoardScript {
-                    snippetPanel.frame(minWidth: 320, idealWidth: 340, maxWidth: 520)
+                    snippetPanel.frame(minWidth: 360, idealWidth: 560, maxWidth: 620)
                 }
                 VStack(spacing: 0) {
                     if showTimeline { timeline.frame(height: (showCharacters ? 150 : 88) + (markers.isEmpty ? 0 : 20)) }

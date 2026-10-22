@@ -39,7 +39,7 @@ The browser now exposes all ten Mac workspaces, backed by the native project sch
 The first milestone is tracked in [Whiteboard and editor acceptance](WHITEBOARD_ACCEPTANCE.md), separating automated regression checks from outstanding hands-on and reference checks.
 
 1. Keep the native whiteboard/popup acceptance workflow and all platform checks passing; retain preview artifacts.
-2. Use an actual open-popup reference and a behavioral Causality sample to close visual/interaction differences. Finish readability/tension tracks and remaining board actions according to that evidence.
+2. Review the implemented popup/side-script layouts against the supplied screenshots and use a behavioral Causality sample to close remaining interaction differences. Finish readability/tension tracks and remaining board actions according to that evidence.
 3. Complete dual dialogue and frozen production pagination, then advanced production/drawing workflows with representative fixtures.
 4. Complete browser and Windows workspace/sync parity, including cold offline restoration, and run cross-platform user acceptance.
 5. Configure the owner's release/deployment environment, execute signing/notarization and installation checks, deploy the shared service behind HTTPS, and verify backups and multi-device operation.

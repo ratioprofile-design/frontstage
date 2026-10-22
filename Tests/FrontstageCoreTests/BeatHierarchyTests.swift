@@ -2,6 +2,25 @@ import XCTest
 @testable import FrontstageCore
 
 final class BeatHierarchyTests: XCTestCase {
+    func testFreeBeatPlacementInsideGroupExpandsBoundsAndSurvivesUngroup() throws {
+        var project = Project()
+        let a = try project.addBoardBeat(title: "First"), b = try project.addBoardBeat(title: "Second")
+        try project.groupBoardBeats([a, b])
+        let group = try XCTUnwrap(project.whiteboard().blocks.first { $0.containerKind == "beatGroup" })
+        try project.placeBoardBeats([b], inBlock: group.id, position: .init(x: 360, y: 190))
+        let board = try project.whiteboard(), layout = WhiteboardLayout(board)
+        let rect = try XCTUnwrap(layout.beatRects[b]), container = try XCTUnwrap(layout.blockRects[group.id])
+        XCTAssertTrue(container.contains(rect.center))
+        XCTAssertGreaterThan(rect.x, try XCTUnwrap(layout.beatRects[a]).x + 200)
+        XCTAssertEqual(try Project(data: project.encoded()), project)
+        try project.ungroupBoardBlocks([group.id])
+        let ungrouped = WhiteboardLayout(try project.whiteboard())
+        XCTAssertEqual(ungrouped.beatRects[b], rect)
+        let old = project
+        XCTAssertThrowsError(try project.placeBoardBeats([b], inBlock: "missing", position: .init()))
+        XCTAssertEqual(project, old)
+    }
+
     func testGroupedBeatCanMoveToAnotherLaneAndRenumberSpatially() throws {
         var project = Project()
         let a = try project.addBoardBeat(position: .init(x: 400, y: 60), title: "First")

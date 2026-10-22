@@ -47,6 +47,8 @@ public struct BoardBlock: Codable, Identifiable, Equatable, Sendable {
 public enum BoardBeatKind: String, Codable, CaseIterable, Sendable { case story, subtext }
 
 public struct BoardBeat: Codable, Identifiable, Equatable, Sendable {
+    /// Optional local position allows staggered beats inside a group or block.
+    public var position: BoardPoint?
     public var id: String
     public var sceneID: Decimal
     public var blockID: String
@@ -194,7 +196,7 @@ public struct Whiteboard: Codable, Equatable, Sendable {
                 parent = blocks.first { $0.id == id }?.parentID
             }
         }
-        guard beats.allSatisfy({ sceneIDs.contains($0.sceneID) && blockIDs.contains($0.blockID) && coordinate($0.order) && coordinate($0.start) && $0.start >= 0 && $0.duration.isFinite && (0.05...1000).contains($0.duration) }),
+        guard beats.allSatisfy({ sceneIDs.contains($0.sceneID) && blockIDs.contains($0.blockID) && ($0.position.map { coordinate($0.x) && coordinate($0.y) && $0.x >= 0 && $0.y >= 24 } ?? true) && coordinate($0.order) && coordinate($0.start) && $0.start >= 0 && $0.duration.isFinite && (0.05...1000).contains($0.duration) }),
               dependencies.allSatisfy({ beatIDs.contains($0.cause) && beatIDs.contains($0.effect) && $0.cause != $0.effect }),
               strokes.allSatisfy({ $0.points.count <= 10000 && $0.points.allSatisfy { coordinate($0.x) && coordinate($0.y) } && $0.width.isFinite && (0.5...30).contains($0.width) }) else {
             throw ProjectError.invalidProject("invalid whiteboard beats, dependencies or drawing")
@@ -308,6 +310,7 @@ extension Project {
                     var merged = old[id] ?? [:]
                     // Optional parent IDs need explicit removal when a block is ungrouped.
                     if key == "blocks" && current["parentID"] == nil { merged.removeValue(forKey: "parentID") }
+                    if key == "beats" && current["position"] == nil { merged.removeValue(forKey: "position") }
                     current.forEach { merged[$0.key] = $0.value }; return .object(merged)
                 })
             } else { fields[key] = value }
@@ -469,7 +472,7 @@ extension Project {
                 block.standalone = true
                 board.blocks.append(block)
                 let index = board.beats.firstIndex { $0.id == beat.id }!
-                board.beats[index].blockID = block.id
+                board.beats[index].blockID = block.id; board.beats[index].position = nil
                 y += WhiteboardLayout.beatSize(beat.title, maximumWidth: 212).height + 28
             }
             let parents = Set(board.blocks.compactMap(\.parentID))
@@ -487,7 +490,8 @@ extension Project {
             let layers = Dictionary(uniqueKeysWithValues: board.layers.enumerated().map { ($0.element.id, $0.offset) })
             let ordered = board.orderedBeats.sorted { a, b in
                 let x = blocks[a.blockID]!, y = blocks[b.blockID]!
-                if x.position.x != y.position.x { return x.position.x < y.position.x }
+                let ax = x.position.x + (a.position?.x ?? 6), bx = y.position.x + (b.position?.x ?? 6)
+                if ax != bx { return ax < bx }
                 if x.layerID != y.layerID { return layers[x.layerID]! < layers[y.layerID]! }
                 if x.position.y != y.position.y { return x.position.y < y.position.y }
                 return a.order == b.order ? a.id < b.id : a.order < b.order
@@ -521,9 +525,24 @@ extension Project {
             let ranks = Dictionary(uniqueKeysWithValues: items.enumerated().map { ($0.element.id, Double($0.offset)) })
             for i in board.beats.indices {
                 board.beats[i].order = ranks[board.beats[i].id]!
-                if ids.contains(board.beats[i].id) { board.beats[i].blockID = toBlock }
+                if ids.contains(board.beats[i].id) { board.beats[i].blockID = toBlock; board.beats[i].position = nil }
             }
         }
+    }
+
+    public mutating func placeBoardBeats(_ ids: Set<String>, inBlock blockID: String, position: BoardPoint) throws {
+        guard position.x.isFinite, position.y.isFinite else { throw ProjectError.invalidProject("invalid beat position") }
+        var candidate = self
+        try candidate.moveBoardBeats(ids, toBlock: blockID)
+        try candidate.editWhiteboard { board in
+            var y = max(24, position.y)
+            for beat in board.orderedBeats where ids.contains(beat.id) {
+                let index = board.beats.firstIndex { $0.id == beat.id }!
+                board.beats[index].position = BoardPoint(x: max(6, position.x), y: y)
+                y += WhiteboardLayout.beatSize(beat.title, maximumWidth: 212).height + 4
+            }
+        }
+        self = candidate
     }
 
     public mutating func mergeBoardBeats(_ ids: Set<String>) throws {
@@ -609,7 +628,7 @@ extension Project {
                     var loose = BoardBlock(name: "Beat", layerID: group.layerID,
                         position: BoardPoint(x: max(0, (rect?.x ?? 116) - 116), y: max(32, (rect?.y ?? 56) - (geometry.layerRects[group.layerID]?.y ?? 0) - 24)))
                     loose.standalone = true; loose.parentID = group.parentID
-                    board.beats[i].blockID = loose.id; board.blocks.append(loose)
+                    board.beats[i].blockID = loose.id; board.beats[i].position = nil; board.blocks.append(loose)
                 }
             }
             let byID = Dictionary(uniqueKeysWithValues: board.blocks.map { ($0.id, $0) })

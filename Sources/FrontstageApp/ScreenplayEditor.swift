@@ -144,6 +144,7 @@ struct ScreenplayEditor: NSViewRepresentable {
     var onError: (String) -> Void
     var editable = true
     var paper = false
+    var paperTopInset: CGFloat = 72
     var continuous = false
 
     func makeCoordinator() -> Coordinator { Coordinator(html: $html, controller: controller, onError: onError) }
@@ -160,7 +161,7 @@ struct ScreenplayEditor: NSViewRepresentable {
         text.importsGraphics = false
         text.allowsUndo = true
         text.isAutomaticQuoteSubstitutionEnabled = false
-        text.textContainerInset = NSSize(width: paper ? 90 : continuous ? 0 : 24, height: paper ? 72 : continuous ? 0 : 24)
+        text.textContainerInset = NSSize(width: paper ? 90 : continuous ? 0 : 24, height: paper ? paperTopInset : continuous ? 0 : 24)
         text.leadingAdjustment = paper ? 18 : 0
         if continuous {
             scroll.appearance = NSAppearance(named: .aqua)

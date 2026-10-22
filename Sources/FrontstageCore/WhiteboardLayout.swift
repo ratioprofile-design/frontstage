@@ -44,20 +44,26 @@ public struct WhiteboardLayout: Sendable {
         }
         for layer in board.layers {
             let items = board.blocks.filter { $0.layerID == layer.id && !hidden($0) }
-            let contentHeight = items.map { $0.position.y + ($0.collapsed ? 32 : (byBlock[$0.id] ?? []).reduce(42.0) { $0 + Self.beatSize($1.title, maximumWidth: blockByID[$1.blockID]!.width - 12).height + 4 }) }.max() ?? 0
+            let contentHeight = items.map { block in
+                let members = byBlock[block.id] ?? []
+                let stacked = members.reduce(42.0) { $0 + Self.beatSize($1.title, maximumWidth: block.width - 12).height + 4 }
+                let placed = members.map { ($0.position?.y ?? 24) + Self.beatSize($0.title, maximumWidth: block.width - 12).height + 12 }.max() ?? 0
+                return block.position.y + (block.collapsed ? 32 : max(stacked, placed))
+            }.max() ?? 0
             let layerHeight = layer.collapsed ? 38 : max(layer.height, contentHeight + 45)
             layers[layer.id] = BoardRect(x: 0, y: offset, width: 1_000_000, height: layerHeight)
             if !layer.collapsed {
                 for block in items {
                     let members = byBlock[block.id] ?? []
                     let rect = BoardRect(x: 110 + block.position.x, y: offset + block.position.y,
-                        width: block.width, height: block.collapsed ? 28 : max(60, members.reduce(32.0) { $0 + Self.beatSize($1.title, maximumWidth: block.width - 12).height + 4 }))
+                        width: max(block.width, members.map { ($0.position?.x ?? 6) + Self.beatSize($0.title, maximumWidth: block.width - 12).width + 12 }.max() ?? 0),
+                        height: block.collapsed ? 28 : max(60, members.reduce(32.0) { $0 + Self.beatSize($1.title, maximumWidth: block.width - 12).height + 4 }, members.map { ($0.position?.y ?? 24) + Self.beatSize($0.title, maximumWidth: block.width - 12).height + 12 }.max() ?? 0))
                     blocks[block.id] = rect; maximumX = max(maximumX, rect.maxX + 120)
                     if !block.collapsed {
                         var top = rect.y + 24
                         for beat in members {
                             let size = Self.beatSize(beat.title, maximumWidth: block.width - 12)
-                            beats[beat.id] = BoardRect(x: rect.x + 6, y: top, width: size.width, height: size.height)
+                            beats[beat.id] = BoardRect(x: rect.x + (beat.position?.x ?? 6), y: beat.position.map { rect.y + $0.y } ?? top, width: size.width, height: size.height)
                             top += size.height + 4
                         }
                     }

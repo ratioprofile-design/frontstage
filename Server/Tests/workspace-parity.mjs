@@ -46,9 +46,9 @@ try{
  assert.equal(await popup1.locator('.popup-slugline').innerText(),'EXT. ROOFTOP - NIGHT');assert.equal(await popup2.getByLabel('Location',{exact:true}).inputValue(),otherLocation);
  assert.ok(await popup1.locator('datalist option[value="CONTINUOUS"]').count());
  const popupText=popup1.locator('[data-field="snippet-editor"]');await popupText.click();await popupText.press('ControlOrMeta+End');
- await popup1.getByLabel('Character',{exact:true}).selectOption('LENA');assert.equal(await popupText.locator('.sc-character').last().innerText(),'LENA');
+ await popup1.getByLabel('Formatting options',{exact:true}).click();await popup1.getByLabel('Character',{exact:true}).selectOption('LENA');assert.equal(await popupText.locator('.sc-character').last().innerText(),'LENA');
  await popup1.getByLabel('Transition',{exact:true}).selectOption('CUT TO:');assert.equal(await popupText.locator('.sc-transition').last().innerText(),'CUT TO:');assert.ok((await popupText.innerText()).includes('Browser screenplay text.'));
- await page.screenshot({path:path.join(output,'browser-popup-slugline.png')});await popup1.locator('[data-field="close-editor"]').click();await popup2.locator('[data-field="close-editor"]').click();
+ await popup1.getByLabel('Formatting options',{exact:true}).click();await page.screenshot({path:path.join(output,'browser-popup-slugline.png')});await popup1.locator('[data-field="close-editor"]').click();await popup2.locator('[data-field="close-editor"]').click();
  await view('edit');assert.ok((await page.locator('.continuous-paper .script-heading').first().innerText()).includes('EXT. ROOFTOP - NIGHT'));
  await view('edit');const long=Array.from({length:1200},(_,i)=>`word${i}`).join(' ');await page.getByRole('textbox',{name:'Script: The Invitation',exact:true}).fill(long);await view('pages');assert.ok(await page.locator('.paper-sheet').count()>1);const printed=await page.locator('.page-content').allTextContents();for(const word of ['word0','word599','word1199'])assert.ok(printed.join('').includes(word));assert.equal((printed.join('').match(/word1199/g)||[]).length,1);
  const overflows=await page.locator('.page-content').evaluateAll(nodes=>nodes.filter(n=>n.scrollHeight>n.clientHeight+2).length);assert.equal(overflows,0);
@@ -74,7 +74,7 @@ try{
  const moved=JSON.parse(await readFile(path.join(output,'lane-edited.frontstage'),'utf8')).project.frontstageWhiteboard, owner=moved.blocks.find(b=>b.id===moved.beats.find(b=>b.id==='beat-2').blockID);
  assert.equal(moved.layers.find(l=>l.id===owner.layerID).name,'New story lane');assert.equal(owner.standalone,true);assert.equal(owner.parentID,undefined);
  assert.deepEqual(moved.dependencies,hierarchy.dependencies);
- assert.equal((await page.locator('#snippet-list .script-heading').first().innerText()).trim().startsWith('1 '),true);
+ assert.equal(await page.locator('#snippet-list .script-heading .scene-number').first().innerText(),'1');
  await page.locator('#undo').click();assert.equal(await page.locator('#blocks [data-container-kind="beatGroup"] [data-beat-id="beat-2"]').count(),1);
  // Navigation and new workspaces remain available after a cold offline launch.
  await page.evaluate(()=>navigator.serviceWorker.ready.then(()=>new Promise(resolve=>navigator.serviceWorker.controller?resolve():navigator.serviceWorker.addEventListener('controllerchange',resolve,{once:true}))));await context.setOffline(true);await page.reload();await page.locator('#local-mode').click();await page.getByRole('button',{name:'The Invitation · on this device',exact:true}).click();await view('people');await page.getByRole('button',{name:'LENA',exact:true}).click();assert.equal(await page.getByLabel('Backstory',{exact:true}).inputValue(),'Knows the station.');

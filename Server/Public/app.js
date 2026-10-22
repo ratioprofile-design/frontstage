@@ -1,6 +1,6 @@
 import { mountWorkspaces } from './workspaces.js';
 import { splitAtCaret, screenplayToolbar, sluglineFields, characterNames } from './screenplay-editor.js';
-import { splitBeat, scriptSegments, heading } from './workspace-model.js';
+import { splitBeat, scriptSegments, heading, captureRevision, restoreRevision } from './workspace-model.js';
 import { mergeDocuments } from './merge.js';
 import { apiOrigin as configuredOrigin } from './config.js';
 import { causalOrder as orderCauses, compactCausalTime, groupBlocks, ungroupBlocks, moveBlocks, moveStandaloneBeats, descendantBlocks, deleteBlocks, validateBoard, groupBeats, beatSize, moveBeatsToLayer, spatialOrder } from './board-operations.js';
@@ -257,9 +257,10 @@ function geometry() {
       const children = board().beats.filter(b => b.blockID === block.id).sort((a, b) => a.order - b.order);
       const rect = { x: block.position.x + 110, y: block.position.y + y, width: block.width, height: block.collapsed ? 28 : Math.max(60, children.reduce((h,b)=>h+beatSize(b.title,block.width-12).height+4,32)) };
       blocks.set(block.id, rect); maxX = Math.max(maxX, rect.x + rect.width + 120);
-      if (!block.collapsed) { let top=rect.y+24;for(const beat of children){const size=beatSize(beat.title,block.width-12);beats.set(beat.id,{x:rect.x+6,y:top,...size});top+=size.height+4;} }
+      if (!block.collapsed) { let top=rect.y+24;for(const beat of children){const size=beatSize(beat.title,block.width-12);beats.set(beat.id,{x:rect.x+(beat.position?.x??6),y:beat.position?rect.y+beat.position.y:top,...size});rect.width=Math.max(rect.width,(beat.position?.x??6)+size.width+12);rect.height=Math.max(rect.height,(beat.position?.y??top-rect.y)+size.height+12);top+=size.height+4;} }
     }
-    y += height;
+    const expanded=Math.max(height,...[...blocks.values()].filter(r=>r.y>=y).map(r=>r.y+r.height-y+45));layers.get(layer.id).height=expanded;
+    y += expanded;
   }
   const byID = new Map(board().blocks.map(b => [b.id, b])), remaining = new Map([...blocks.keys()].map(id => [id, 0]));
   for (const block of board().blocks) if (blocks.has(block.id) && blocks.has(block.parentID)) remaining.set(block.parentID, remaining.get(block.parentID) + 1);
@@ -271,7 +272,7 @@ function geometry() {
     blocks.set(parent, { x: left, y: top, width: Math.max(r.x + r.width, c.x + c.width + 12) - left, height: Math.max(r.y + r.height, c.y + c.height + 12) - top });
     remaining.set(parent, remaining.get(parent) - 1); if (!remaining.get(parent)) ready.push(parent);
   }
-  maxX = Math.max(maxX, ...storyMarkers().map(m => 110 + m.unit * 120 + 200));
+  maxX = Math.max(maxX, ...[...blocks.values()].map(r => r.x + r.width + 120), ...storyMarkers().map(m => 110 + m.unit * 120 + 200));
   return { blocks, beats, layers, width: maxX, height: Math.max(800, y) };
 }
 function position(node, rect) { node.style.left = `${rect.x}px`; node.style.top = `${rect.y}px`; node.style.width = `${rect.width}px`; node.style.height = `${rect.height}px`; }
@@ -314,7 +315,8 @@ function render() {
     node.ondragover = e => e.preventDefault(); node.ondrop = e => {
       e.preventDefault(); e.stopPropagation(); const id = e.dataTransfer.getData('text/frontstage-beat'), moving = board().beats.find(b => b.id === id); if (!moving || locked(moving) || locked({ blockID: block.id })) return;
       if (moving.blockID === block.id && block.standalone) { dropStandaloneBeats(e); return; }
-      edit(() => { moving.blockID = block.id; moving.order = Math.max(-1, ...board().beats.filter(b => b.blockID === block.id && b.id !== id).map(b => b.order)) + 1; doc.project.frontstageWhiteboard=spatialOrder(board()); });
+      edit(() => { moving.blockID = block.id; moving.order = Math.max(-1, ...board().beats.filter(b => b.blockID === block.id && b.id !== id).map(b => b.order)) + 1;
+        const hit=e.target.closest('[data-beat-id]');if(!hit){const frame=node.getBoundingClientRect();moving.position={x:Math.max(6,e.clientX-frame.left),y:Math.max(24,e.clientY-frame.top)};}else delete moving.position; doc.project.frontstageWhiteboard=spatialOrder(board()); });
     };
     if (!block.collapsed) for (const beat of board().beats.filter(b => b.blockID === block.id).sort((a, b) => a.order - b.order)) {
       const tile = element('div', undefined, `beat${selectedBeats.has(beat.id) ? ' selected' : ''}`); tile.style.backgroundColor = /^#[a-f0-9]{6}$/i.test(beat.color) ? beat.color : '#a34eae';
@@ -344,9 +346,19 @@ function render() {
     line.setAttribute('d', `M${x},0 V${g.height}`); line.setAttribute('stroke', '#4d8ed6'); line.setAttribute('stroke-dasharray', '3 5'); $('links').append(line);
   }
   renderSideSlugline();
+  if(!editingSide)$('snippet-list').append(element('div',doc.name||'Untitled Story','script-project-title'));
   if(!editingSide) for (const segment of scriptSegments(doc)) {
-    $('snippet-list').append(element('h3',`${segment.number}  ${heading(segment.scene)}${segment.continuation?' (CONTINUED)':''}`,'script-heading'));
-    for(const id of segment.beatIDs){const beat=board().beats.find(b=>b.id===id),text=element('div',undefined,'side-script-text script-text');text.innerHTML=cleanHTML(beat.html);text.dataset.scriptBeat=id;text.tabIndex=0;text.setAttribute('aria-label',`Edit script: ${beat.title}`);text.contentEditable=current.access!=='reader'&&!segment.scene.frontstageTextLocked;text.setAttribute('role','textbox');text.onfocus=()=>{selected=id;selectedBeats=new Set([id]);highlightScript();document.querySelectorAll('[data-beat-id]').forEach(n=>n.classList.toggle('selected',n.dataset.beatId===id));};text.oninput=()=>edit(()=>{board().beats.find(b=>b.id===id).html=cleanHTML(text.innerHTML);});const toolbar=screenplayToolbar(text,()=>text.dispatchEvent(new Event('input')),text.contentEditable==='true',()=>characterNames(doc));toolbar.classList.add('side-screenplay-toolbar');toolbar.dataset.scriptToolbar=id;toolbar.hidden=selected!==id;$('snippet-list').append(toolbar);text.ondblclick=()=>openEditor(id);$('snippet-list').append(text);}
+    const headingRow=element('h3',undefined,'script-heading');headingRow.append(element('span',heading(segment.scene)+(segment.continuation?' (CONTINUED)':'')),element('span',segment.number,'scene-number'));$('snippet-list').append(headingRow);
+    for(const id of segment.beatIDs){
+      const beat=board().beats.find(b=>b.id===id),section=element('section',undefined,'script-beat-section'),title=element('button','▼ '+beat.title,'script-beat-title');
+      title.style.backgroundColor=beat.color+'22';title.ondblclick=()=>openEditor(id);
+      const body=element('div',undefined,'script-beat-body');title.onclick=()=>{body.hidden=!body.hidden;title.textContent=(body.hidden?'▶ ':'▼ ')+beat.title;selected=id;selectedBeats=new Set([id]);highlightScript();};
+      section.append(title);if(beat.characters.length||beat.tags.length)section.append(metadataChips(beat));
+      const text=element('div',undefined,'side-script-text script-text');text.innerHTML=cleanHTML(beat.html);text.dataset.scriptBeat=id;text.tabIndex=0;text.setAttribute('aria-label',`Edit script: ${beat.title}`);text.contentEditable=current.access!=='reader'&&!segment.scene.frontstageTextLocked;text.setAttribute('role','textbox');
+      text.onfocus=()=>{selected=id;selectedBeats=new Set([id]);highlightScript();document.querySelectorAll('[data-beat-id]').forEach(n=>n.classList.toggle('selected',n.dataset.beatId===id));};
+      text.oninput=()=>edit(()=>{board().beats.find(b=>b.id===id).html=cleanHTML(text.innerHTML);});screenplayToolbar(text,()=>text.dispatchEvent(new Event('input')),text.contentEditable==='true',()=>characterNames(doc));text.ondblclick=()=>openEditor(id);
+      body.append(text);section.append(body);$('snippet-list').append(section);
+    }
     if(!segment.beatIDs.length){const text=element('div',undefined,'script-text');text.innerHTML=cleanHTML(segment.html);$('snippet-list').append(text);}
   }
   for (const issue of issues) { const button = element('button', issue.text, 'issue'); button.onclick = () => { if (issue.id) choose(issue.id); }; $('issues').append(button); }
@@ -362,12 +374,13 @@ function render() {
   refreshEditors();
   workspaces.render();
 }
-function renderSideSlugline() {
-  let controls=$('side-slugline');
-  const beat=board().beats.find(b=>b.id===selected),sceneID=beat?.sceneID;
-  if(controls?.dataset.sceneId===String(sceneID)){controls.refresh();return;}
-  controls?.remove();if(sceneID==null)return;
-  controls=sluglineFields(()=>doc.project.beats.find(s=>s.id===sceneID),()=>doc.project.beats,edit,current.access!=='reader');controls.id='side-slugline';controls.dataset.sceneId=String(sceneID);$('snippet-list').before(controls);
+function renderSideSlugline() { $('side-slugline')?.remove(); }
+function characterColor(name) { const palette=['#11106b','#5de5bb','#a30e3f','#d6ae1c','#467e96'];return palette[[...name].reduce((sum,c)=>sum+c.codePointAt(0),0)%palette.length]; }
+function metadataChips(beat, removable=false, update=null) {
+  const root=element('div',undefined,'beat-chips');
+  for(const name of beat.characters){const chip=element('span',undefined,'character-chip'),dot=element('i');dot.style.backgroundColor=characterColor(name);chip.append(dot,document.createTextNode(name));root.append(chip);}
+  for(const tag of beat.tags){const chip=element(removable?'button':'span',`${removable?'× ':''}${tag}`,'tag-chip');if(removable)chip.onclick=()=>update(tag);root.append(chip);}
+  return root;
 }
 function highlightScript(scroll = false) {
   renderSideSlugline();
@@ -376,7 +389,7 @@ function highlightScript(scroll = false) {
     const active = text.dataset.scriptBeat === selected;
     text.classList.toggle('active-script-beat', active);
     if (active) text.setAttribute('aria-current','true'); else text.removeAttribute('aria-current');
-    if (active && scroll && !$('script').hidden) text.scrollIntoView({block:'nearest'});
+    if (active && scroll && !$('script').hidden) { text.closest('.script-beat-body').hidden=false; text.scrollIntoView({block:'nearest'}); }
   }
 }
 function renderProperties() {
@@ -444,6 +457,12 @@ function refreshEditors(force = false) {
       if (key === 'mustBeCaused') input.checked = beat[key];
       else { const value = Array.isArray(beat[key]) ? beat[key].join(', ') : (beat[key] ?? ''); if (input.value !== value) input.value = value; }
     }
+    panel.querySelector('[data-field="beat-visibility"]').value=beat.omitted?'hidden':'visible';
+    panel.querySelector('[data-field="beat-used"]').textContent=unused(beat)?'Beat is unused':'✓ Beat is used';
+    panel.querySelector('[data-field="character-chips"]').replaceChildren(metadataChips({...beat,tags:[]}));
+    panel.querySelector('[data-field="tag-chips"]').replaceChildren(metadataChips({...beat,characters:[]},current.access!=='reader',tag=>edit(()=>{board().beats.find(b=>b.id===id).tags=beat.tags.filter(t=>t!==tag);})));
+    const version=panel.querySelector('[data-field="beat-version"]'),scene=doc.project.beats.find(s=>s.id===beat.sceneID);
+    if(document.activeElement!==version){version.replaceChildren(new Option('Untitled Version (current)',''));for(const v of scene?.versions||[])version.append(new Option(v.frontstageLabel||v.title||'Version',v.id));}
     panel.querySelector('.slugline-fields')?.refresh();
     const isReadOnly=current.access==='reader'||!!doc.project.beats.find(s=>s.id===beat.sceneID)?.frontstageTextLocked;
     panel.querySelectorAll('.screenplay-toolbar select,.screenplay-toolbar button').forEach(control=>control.disabled=isReadOnly);
@@ -485,14 +504,19 @@ function openEditor(id) {
     input.disabled = current.access === 'reader';
     input.oninput = () => edit(() => { const target = board().beats.find(b => b.id === id); if (target) target[key] = key === 'mustBeCaused' ? input.checked : ['characters', 'tags'].includes(key) ? list(input.value) : input.value; });
   }
-  field('editor-label').style.backgroundColor = /^#[a-f0-9]{6}$/i.test(beat.color) ? beat.color : '#a34eae';
+  field('close-bottom').onclick=()=>closeEditor(id);
+  field('beat-visibility').onchange=()=>edit(()=>{board().beats.find(b=>b.id===id).omitted=field('beat-visibility').value==='hidden';});
+  field('script-section-toggle').onclick=()=>{const section=panel.querySelector('.popup-script-section');section.hidden=!section.hidden;field('script-section-toggle').textContent=(section.hidden?'▶':'▼')+' Script';field('script-section-toggle').setAttribute('aria-expanded',String(!section.hidden));};
+  for(const key of ['character','tag'])field('add-'+key).onclick=()=>field(key==='character'?'beat-characters':'beat-tags').focus();
+  field('version-save').onclick=()=>{const label=prompt('Version name');if(label)edit(()=>captureRevision(doc,beat.sceneID,label));};
+  field('beat-version').onchange=()=>{const version=field('beat-version').value;if(version)edit(()=>restoreRevision(doc,beat.sceneID,version));};
   const sceneID=beat.sceneID;
   const controls=sluglineFields(()=>doc.project.beats.find(s=>s.id===sceneID),()=>doc.project.beats,edit,current.access!=='reader');
-  field('element').parentElement.before(controls);
+  panel.querySelector('.paper-desk').before(controls);
   const text = field('snippet-editor'); text.before(element('h3',heading(doc.project.beats.find(s=>s.id===sceneID)),'popup-slugline script-heading')); text.innerHTML = cleanHTML(beat.html);
   text.contentEditable = current.access === 'reader' || doc.project.beats.find(s => s.id === beat.sceneID)?.frontstageTextLocked ? 'false' : 'true';
   text.oninput = () => { const html = cleanHTML(text.innerHTML); edit(() => { const target = board().beats.find(b => b.id === id); if (target) target.html = html; }); };
-  field('element').parentElement.replaceWith(screenplayToolbar(text, () => text.dispatchEvent(new Event('input')), text.contentEditable === 'true',()=>characterNames(doc)));
+  const toolbar=screenplayToolbar(text, () => text.dispatchEvent(new Event('input')), text.contentEditable === 'true',()=>characterNames(doc));field('element').parentElement.replaceWith(toolbar);panel.querySelector('.version-row').append(toolbar);const options=element('button','⋯');options.setAttribute('aria-label','Formatting options');options.onclick=()=>panel.classList.toggle('format-expanded');panel.querySelector('.version-row').append(options);refreshEditors();
   const place = (x, y) => {
     const rect = panel.getBoundingClientRect();
     panel.style.left = `${Math.max(8, Math.min(x, innerWidth - rect.width - 8))}px`;
