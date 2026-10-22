@@ -62,7 +62,7 @@ final class BeatPopupTests: XCTestCase {
             XCTAssertNil(workspace.screenplayController(in: secondPanel))
             XCTAssertNil(workspace.screenplayController(in: nil))
             XCTAssertEqual(firstText.backgroundColor, .white)
-            XCTAssertEqual(firstText.textContainerInset.height, 72)
+            XCTAssertEqual(firstText.textContainerInset.height, 16)
             firstText.insertText("First paper", replacementRange: NSRange(location: 0, length: 0))
             secondText.insertText("Second paper", replacementRange: NSRange(location: 0, length: 0))
             XCTAssertTrue(workspace.whiteboard.beats.first { $0.id == a }!.html.contains("First paper"))
