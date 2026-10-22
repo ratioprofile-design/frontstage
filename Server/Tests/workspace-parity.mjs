@@ -48,6 +48,10 @@ try{
  const popupText=popup1.locator('[data-field="snippet-editor"]');await popupText.click();await popupText.press('ControlOrMeta+End');
  await popup1.getByLabel('Formatting options',{exact:true}).click();await popup1.getByLabel('Character',{exact:true}).selectOption('LENA');assert.equal(await popupText.locator('.sc-character').last().innerText(),'LENA');
  await popup1.getByLabel('Transition',{exact:true}).selectOption('CUT TO:');assert.equal(await popupText.locator('.sc-transition').last().innerText(),'CUT TO:');assert.ok((await popupText.innerText()).includes('Browser screenplay text.'));
+ await popup1.locator('[data-field="beat-visibility"]').selectOption('hidden');assert.equal(await popup1.locator('[data-field="beat-visibility"]').inputValue(),'hidden');await popup1.locator('[data-field="beat-visibility"]').selectOption('visible');
+ page.once('dialog',d=>d.accept('Popup saved version'));await popup1.locator('[data-field="version-save"]').click();
+ const versionID=await popup1.locator('[data-field="beat-version"] option').filter({hasText:'Popup saved version'}).getAttribute('value');
+ const versionText=await popupText.innerText();await popupText.fill('Temporary popup text.');await popup1.locator('[data-field="beat-version"]').selectOption(versionID);assert.equal(await popupText.innerText(),versionText);
  await popup1.getByLabel('Formatting options',{exact:true}).click();await page.screenshot({path:path.join(output,'browser-popup-slugline.png')});await popup1.locator('[data-field="close-editor"]').click();await popup2.locator('[data-field="close-editor"]').click();
  await view('edit');assert.ok((await page.locator('.continuous-paper .script-heading').first().innerText()).includes('EXT. ROOFTOP - NIGHT'));
  await view('edit');const long=Array.from({length:1200},(_,i)=>`word${i}`).join(' ');await page.getByRole('textbox',{name:'Script: The Invitation',exact:true}).fill(long);await view('pages');assert.ok(await page.locator('.paper-sheet').count()>1);const printed=await page.locator('.page-content').allTextContents();for(const word of ['word0','word599','word1199'])assert.ok(printed.join('').includes(word));assert.equal((printed.join('').match(/word1199/g)||[]).length,1);
@@ -63,6 +67,13 @@ try{
  page.once('dialog',d=>d.accept('Act One'));await page.locator('#board-actions').selectOption('group');
  const hierarchyDownload=page.waitForEvent('download');await page.locator('#download').click();await(await hierarchyDownload).saveAs(path.join(output,'hierarchy-edited.frontstage'));const hierarchy=JSON.parse(await readFile(path.join(output,'hierarchy-edited.frontstage'),'utf8')).project.frontstageWhiteboard,group=hierarchy.blocks.find(b=>b.containerKind==='beatGroup');assert.ok(group.parentID);assert.equal(hierarchy.blocks.find(b=>b.id===group.parentID).name,'Act One');assert.equal(hierarchy.beats.find(b=>b.id===created).sceneID,hierarchy.beats.find(b=>b.id==='beat-2').sceneID);assert.equal(hierarchy.beats.filter(b=>b.blockID===group.id).length,2);
  await page.screenshot({path:path.join(output,'browser-hierarchy-side-paper.png')});
+ // An empty-area drop preserves free placement inside a group through export.
+ const groupNode=page.locator('#blocks [data-container-kind="beatGroup"]');const groupBox=await groupNode.boundingBox();
+ await groupNode.evaluate((node,{x,y})=>{const transfer=new DataTransfer();transfer.setData('text/frontstage-beat','beat-2');node.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,clientX:x,clientY:y,dataTransfer:transfer}));},{x:groupBox.x+130,y:groupBox.y+160});
+ const placedDownload=page.waitForEvent('download');await page.locator('#download').click();await(await placedDownload).saveAs(path.join(output,'placed-edited.frontstage'));
+ const placed=JSON.parse(await readFile(path.join(output,'placed-edited.frontstage'),'utf8')).project.frontstageWhiteboard;
+ assert.deepEqual(placed.beats.find(b=>b.id==='beat-2').position,{x:130,y:160});
+ await page.locator('#undo').click();
  // A grouped beat can leave its container for an empty lane; selection follows into the paper.
  page.once('dialog',d=>d.accept('New story lane'));await page.locator('#add-layer').click();
  await page.locator('#blocks [data-beat-id="beat-2"]').click();

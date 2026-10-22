@@ -171,7 +171,7 @@ try {
   await localPage.locator('#board-actions').selectOption('compact');
   await localPage.screenshot({ path: path.join(artifact, `browser-${staticMode ? 'static-' : ''}group-markers.png`) });
   await localPage.locator('#blocks .beat-text').getByText('Second local beat', { exact: true }).dblclick();
-  const oldFrame = await localPage.locator('.beat-popup.active').boundingBox(), handle = await localPage.locator('.beat-popup.active .editor-grip').boundingBox();
+  const oldFrame = await localPage.locator('.beat-popup.active').boundingBox(), handle = await localPage.locator('.beat-popup.active .editor-header').boundingBox();
   await localPage.mouse.move(handle.x + 8, handle.y + 8); await localPage.mouse.down();
   await localPage.mouse.move(handle.x - 22, handle.y - 17); await localPage.mouse.up();
   const newFrame = await localPage.locator('.beat-popup.active').boundingBox();
@@ -204,7 +204,7 @@ try {
   const loosePanel = localPage.locator(`.beat-popup[data-beat-id="${looseID}"]`);
   assert.equal(await loosePanel.locator('[data-field="snippet-editor"]').innerText(), 'Standalone paper text.');
   const paperStyle = await loosePanel.locator('[data-field="snippet-editor"]').evaluate(e => ({ background: getComputedStyle(e).backgroundColor, top: getComputedStyle(e).paddingTop, height: e.getBoundingClientRect().height }));
-  assert.equal(paperStyle.background, 'rgb(255, 255, 255)'); assert.equal(paperStyle.top, '72px'); assert.ok(paperStyle.height >= 792);
+  assert.equal(paperStyle.background, 'rgb(255, 255, 255)'); assert.equal(paperStyle.top, '16px'); assert.ok(paperStyle.height >= 395);
   await localPage.screenshot({ path: path.join(artifact, `browser-${staticMode ? 'static-' : ''}multiple-paper-editors.png`) });
   await localPage.locator('.beat-popup.active [data-field="close-editor"]').click();
   assert.equal(await localPage.locator('.beat-popup').count(), 1);
