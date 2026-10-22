@@ -5,6 +5,33 @@ import FrontstageCore
 @testable import FrontstageApp
 
 final class BeatPopupTests: XCTestCase {
+    func testEnterOnBoardInsertsAfterSelectedBeatInsideItsGroup() async throws {
+        try await MainActor.run {
+            _ = NSApplication.shared
+            let workspace = Workspace()
+            workspace.createBeatGroup([])
+            let first = try XCTUnwrap(workspace.selectedBoardBeat)
+            workspace.popup.close()
+            let canvas = NativeWhiteboard(frame: NSRect(x: 0, y: 0, width: 1000, height: 600))
+            canvas.workspace = workspace; canvas.board = workspace.whiteboard; canvas.selection = [first.id]
+            let window = NSWindow(contentRect: canvas.frame, styleMask: [.titled], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false; window.contentView = canvas
+            defer { workspace.popup.close(); window.close() }
+            let enter = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                windowNumber: window.windowNumber, context: nil, characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36))
+            canvas.keyDown(with: enter)
+            let created = try XCTUnwrap(workspace.selectedBoardBeat)
+            XCTAssertNotEqual(created.id, first.id)
+            XCTAssertEqual(created.sceneID, first.sceneID)
+            XCTAssertEqual(created.blockID, first.blockID)
+            XCTAssertEqual(workspace.whiteboard.orderedBeats.map(\.id), [first.id, created.id])
+            XCTAssertEqual(workspace.whiteboard.blocks.first?.containerKind, "beatGroup")
+            workspace.undoProject()
+            XCTAssertEqual(workspace.whiteboard.beats.count, 1)
+            XCTAssertNil(workspace.errorMessage)
+        }
+    }
+
     func testMultiplePaperEditorsKeepIndependentTextAndCloseIndividually() async throws {
         try await MainActor.run {
             _ = NSApplication.shared

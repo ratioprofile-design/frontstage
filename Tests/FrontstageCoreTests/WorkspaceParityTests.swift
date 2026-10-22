@@ -18,6 +18,14 @@ final class WorkspaceParityTests: XCTestCase {
         XCTAssertEqual(project.parallelScript(sceneID: 1).last?.right, "வணக்கம்")
         XCTAssertTrue(try project.studio().records.contains { $0.title == "Browser research" })
         XCTAssertTrue(try project.studio().assets.contains { $0.data == Data("Portable attachment".utf8) })
+        let hierarchyURL = URL(fileURLWithPath: path).deletingLastPathComponent().appendingPathComponent("hierarchy-edited.frontstage")
+        if FileManager.default.fileExists(atPath: hierarchyURL.path) {
+            let hierarchy = try Project(data: Data(contentsOf: hierarchyURL))
+            let board = try hierarchy.whiteboard(), group = try XCTUnwrap(board.blocks.first { $0.containerKind == "beatGroup" })
+            XCTAssertNotNil(group.parentID)
+            XCTAssertEqual(board.beats.filter { $0.blockID == group.id }.count, 2)
+            XCTAssertEqual(try Project(data: hierarchy.encoded()), hierarchy)
+        }
         XCTAssertEqual(project.productionDays.last?.fields["locationName"], "Old Station")
         XCTAssertEqual(project.productionDays.last?.castCalls["LENA"]?["onSetTime"], "08:00")
         XCTAssertEqual(try Project(data: project.encoded()), project)

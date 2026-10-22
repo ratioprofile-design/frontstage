@@ -171,15 +171,37 @@ extension Workspace {
         if let beat = whiteboard.beats.first(where: { $0.id == id }) { selectedSceneID = beat.sceneID }
     }
 
-    func addWhiteboardBeat(blockID: String? = nil, layerID: String = "main", position: BoardPoint? = nil, before: String? = nil, standalone: Bool = true) {
+    func createBeatGroup(_ selection: Set<String>) {
+        if selection.isEmpty {
+            var created: String?
+            edit("Create Beat Group") { project in
+                created = try project.addBoardBeat(position: .init(x: max(70, (whiteboard.blocks.map { $0.position.x + $0.width }.max() ?? -214) + 60), y: 70))
+                if let created { try project.editWhiteboard { board in
+                    let owner = board.beats.first { $0.id == created }?.blockID
+                    if let i = board.blocks.firstIndex(where: { $0.id == owner }) { board.blocks[i].containerKind = "beatGroup"; board.blocks[i].name = "Beat Group" }
+                } }
+            }
+            if let created { selectBoardBeat(created); popup.open(created, workspace: self) }
+        } else { edit("Group Beats") { try $0.groupBoardBeats(selection) } }
+    }
+
+    func addWhiteboardBeat(blockID: String? = nil, layerID: String = "main", position: BoardPoint? = nil, before: String? = nil, standalone: Bool = true, sceneID: Decimal? = nil, after: String? = nil) {
         var created: String?
         let location = position ?? BoardPoint(x: min(900000, max(70, (whiteboard.blocks.map { $0.position.x + $0.width }.max() ?? -214) + 60)), y: 70)
         edit("Add Whiteboard Beat") { project in
-            created = try project.addBoardBeat(blockID: blockID, layerID: layerID, position: location)
+            created = try project.addBoardBeat(blockID: blockID, layerID: layerID, position: location, sceneID: sceneID)
             if blockID == nil, standalone, let created {
                 try project.editWhiteboard { board in
                     if let owner = board.beats.first(where: { $0.id == created })?.blockID,
                        let index = board.blocks.firstIndex(where: { $0.id == owner }) { board.blocks[index].standalone = true }
+                }
+            }
+            if let created, let after {
+                try project.editWhiteboard { board in
+                    let ordered = board.orderedBeats.filter { $0.id != created }
+                    if let index = ordered.firstIndex(where: { $0.id == after }), let target = board.beats.firstIndex(where: { $0.id == created }) {
+                        board.beats[target].order = (ordered[index].order + (index + 1 < ordered.count ? ordered[index + 1].order : ordered[index].order + 2)) / 2
+                    }
                 }
             }
             if let created, let blockID, let before { try project.moveBoardBeat(created, toBlock: blockID, before: before) }

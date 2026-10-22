@@ -33,7 +33,7 @@ struct WhiteboardWorkspace: View {
                 .background(Color(white: 0.24))
             HSplitView {
                 if workspace.showBoardScript {
-                    snippetPanel.frame(minWidth: 230, idealWidth: 280, maxWidth: 420)
+                    snippetPanel.frame(minWidth: 320, idealWidth: 340, maxWidth: 520)
                 }
                 VStack(spacing: 0) {
                     if showTimeline { timeline.frame(height: (showCharacters ? 150 : 88) + (markers.isEmpty ? 0 : 20)) }
@@ -78,14 +78,15 @@ struct WhiteboardWorkspace: View {
                 Button("Unused Layer") { addLayer(unused: true) }
             }
             Button("+ Block") { workspace.addWhiteboardBeat(standalone: false) }
+            Button("+ Beat Group") { workspace.createBeatGroup(selection.isEmpty ? Set([workspace.selectedBoardBeatID].compactMap { $0 }) : selection) }
             Button("+ Beat") { workspace.addWhiteboardBeat() }
             Button("Add to Block") { workspace.addWhiteboardBeat(blockID: workspace.selectedBoardBeat?.blockID) }
                 .disabled(workspace.selectedBoardBeat == nil)
             Menu {
-                Button("Group Selected Blocks") { workspace.edit("Group Blocks") { try $0.groupBoardBlocks(blockSelection, name: "New Group") } }
-                    .disabled(blockSelection.count < 2)
-                Button("Ungroup Selected Groups") { workspace.edit("Ungroup Blocks") { try $0.ungroupBoardBlocks(blockSelection) } }
-                    .disabled(!board.blocks.contains { $0.parentID.map(blockSelection.contains) == true })
+                Button("Wrap Selection in Block") { workspace.edit("Group Blocks") { try $0.groupBoardBlocks(blockSelection.isEmpty ? Set(board.beats.filter { selection.contains($0.id) }.map(\.blockID)) : blockSelection, name: "New Block") } }
+                    .disabled(blockSelection.isEmpty && selection.isEmpty)
+                Button("Unwrap Selected Blocks") { workspace.edit("Ungroup Blocks") { try $0.ungroupBoardBlocks(blockSelection) } }
+                    .disabled(!board.blocks.contains { $0.parentID.map(blockSelection.contains) == true || ($0.containerKind == "beatGroup" && blockSelection.contains($0.id)) })
                 Button("Resolve Causal Flow") { workspace.edit("Resolve Causes") { try $0.editWhiteboard { try $0.resolveCauses() } } }
                 Button("Compact Causal Time") { workspace.edit("Compact Causal Time") { try $0.editWhiteboard { try $0.compactCauses() } } }
                     .help("Remove time gaps while respecting causes and locked starts. Board placement stays independent.")
@@ -190,35 +191,7 @@ struct WhiteboardWorkspace: View {
         }.textFieldStyle(.roundedBorder).padding(22).frame(width: 370)
     }
 
-    private var snippetPanel: some View {
-        VStack(spacing: 0) {
-            Text("SCRIPT & SNIPPETS").font(.system(size: 10, weight: .semibold)).padding(8)
-            if let beat = workspace.selectedBoardBeat {
-                Text(beat.title).font(.headline).padding(8)
-                Picker("Format", selection: Binding(get: { workspace.editor.activeElement }, set: { workspace.editor.format($0) })) {
-                    ForEach(ScreenplayElement.editable, id: \.self) { Text($0.label).tag($0) }
-                }.padding(.horizontal, 8)
-                ScreenplayEditor(html: Binding(get: { workspace.whiteboard.beats.first { $0.id == beat.id }?.html ?? "" }, set: { html in
-                    workspace.edit("Edit Snippet", key: "snippet-\(beat.id)") { try $0.updateBoardBeat(beat.id) { $0.html = html } }
-                }), controller: workspace.editor, width: 260, typography: workspace.project.scriptLayout, onError: { workspace.errorMessage = $0 }, editable: workspace.project.scenes.first { $0.id == beat.sceneID }?.isTextLocked != true).id(beat.id)
-                Divider()
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 1) {
-                        ForEach(board.orderedBeats) { item in
-                            Button { workspace.selectBoardBeat(item.id) } label: {
-                                HStack {
-                                    Circle().fill(Color(boardHex: item.color)).frame(width: 6, height: 6)
-                                    Text(item.title).font(.caption).lineLimit(2)
-                                    Spacer()
-                                }.padding(7).frame(maxWidth: .infinity)
-                                    .background(item.id == beat.id ? Color.white.opacity(0.12) : .clear)
-                            }.buttonStyle(.plain)
-                        }
-                    }
-                }.frame(maxHeight: 170)
-            } else { ContentUnavailableView("Select a beat", systemImage: "text.alignleft") }
-        }.background(Color(white: 0.25))
-    }
+    private var snippetPanel: some View { ScriptSidePaper(workspace: workspace) }
 
     private var properties: some View {
         ScrollView {

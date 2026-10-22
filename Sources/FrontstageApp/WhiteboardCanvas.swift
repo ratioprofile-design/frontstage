@@ -138,7 +138,7 @@ final class NativeWhiteboard: NSView {
             if resizingBlock == block.id { rect.width = resizeWidth }
             if movingBlocks && expandedDragBlocks.contains(block.id) { rect.x += dragDelta.x; rect.y += dragDelta.y }
             let frame = NSRect(x: rect.x, y: rect.y, width: rect.width, height: rect.height)
-            NSColor(calibratedWhite: 0.9, alpha: groups.contains(block.id) ? 0.10 : 0.30).setFill()
+            NSColor(calibratedWhite: 0.9, alpha: groups.contains(block.id) ? 0.10 : block.containerKind == "beatGroup" ? 0.22 : 0.30).setFill()
             NSBezierPath(roundedRect: frame, xRadius: 5, yRadius: 5).fill()
             (blockSelection.contains(block.id) ? NSColor.white : NSColor(calibratedWhite: 1, alpha: 0.15)).setStroke()
             NSBezierPath(roundedRect: frame, xRadius: 5, yRadius: 5).stroke()
@@ -158,7 +158,9 @@ final class NativeWhiteboard: NSView {
             let path = NSBezierPath(roundedRect: frame, xRadius: 4, yRadius: 4); path.fill()
             (selection.contains(id) ? NSColor.white : NSColor(calibratedWhite: 1, alpha: 0.3)).setStroke()
             path.lineWidth = selection.contains(id) ? 2 / zoom : 1; path.stroke()
-            label(beat.title, at: frame.insetBy(dx: 7, dy: 5), size: 11, color: .white)
+            let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byCharWrapping
+            paragraph.minimumLineHeight = 14; paragraph.maximumLineHeight = 14
+            (beat.title as NSString).draw(in: frame.insetBy(dx: 7, dy: 5), withAttributes: [.font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular), .foregroundColor: NSColor.white, .paragraphStyle: paragraph])
             if issueBeats.contains(id) {
                 NSColor.systemRed.setFill()
                 NSBezierPath(ovalIn: NSRect(x: frame.maxX - 11, y: frame.minY - 7, width: 16, height: 16)).fill()
@@ -345,7 +347,15 @@ final class NativeWhiteboard: NSView {
 
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 49 { spaceHeld = true; return }
-        if event.keyCode == 36, let id = selection.sorted().first { openPopup(id); return }
+        if event.keyCode == 36 {
+            if let beat = board.orderedBeats.first(where: { selection.contains($0.id) }), let owner = board.blocks.first(where: { $0.id == beat.blockID }) {
+                let loose = owner.standalone == true
+                workspace?.addWhiteboardBeat(blockID: loose ? nil : owner.id, layerID: owner.layerID,
+                    position: BoardPoint(x: owner.position.x, y: owner.position.y + (geometry.beatRects[beat.id]?.height ?? 24) + 12),
+                    sceneID: beat.sceneID, after: beat.id)
+            } else { workspace?.addWhiteboardBeat() }
+            return
+        }
         if event.keyCode == 53 {
             workspace?.pendingBoardCauseID = nil
             dragStart = nil; panStart = nil; movingBlocks = false; movingBeat = nil; resizingBlock = nil
@@ -395,7 +405,7 @@ final class NativeWhiteboard: NSView {
         let menu = NSMenu()
         func item(_ name: String, _ action: Selector) { let item = NSMenuItem(title: name, action: action, keyEquivalent: ""); item.target = self; menu.addItem(item) }
         if contextBeat != nil {
-            item("Edit Beat…", #selector(editContextBeat)); item("Jump To Snippet", #selector(jumpToSnippet)); item("Show In Research", #selector(showResearch))
+            item("Group Selected Beats", #selector(groupBeatContext)); item("Edit Beat…", #selector(editContextBeat)); item("Jump To Snippet", #selector(jumpToSnippet)); item("Show In Research", #selector(showResearch))
             menu.addItem(.separator()); item("Create Cause", #selector(createCause)); item("Create Dependency From", #selector(startDependency))
             item("Must Be Caused", #selector(toggleRequired)); item("Split Beat at Cursor…", #selector(splitContext))
             item("Insert Beat Before", #selector(insertBeforeContext)); item("Insert Beat After", #selector(insertAfterContext))
@@ -404,7 +414,7 @@ final class NativeWhiteboard: NSView {
         } else if contextBlock != nil {
             item("Add Beat", #selector(insertContext)); item("Collapse / Expand Block", #selector(collapseContext))
             item("Lock / Unlock Block", #selector(lockContext))
-            if board.blocks.contains(where: { $0.parentID == contextBlock }) { item("Ungroup", #selector(ungroupContext)) }
+            if board.blocks.contains(where: { $0.parentID == contextBlock || ($0.id == contextBlock && $0.containerKind == "beatGroup") }) { item("Ungroup", #selector(ungroupContext)) }
             item("Delete Block and Contents", #selector(deleteBlockContext))
         } else { item("Add Beat Here", #selector(insertContext)) }
         if blockSelection.count > 1 { item("Group Selected Blocks", #selector(groupContext)) }
@@ -445,6 +455,7 @@ final class NativeWhiteboard: NSView {
     @objc private func deleteContext() { if let id = contextBeat { workspace?.edit("Delete Beat") { try $0.removeBoardBeats([id]) } } }
     @objc private func collapseContext() { if let id = contextBlock { workspace?.edit("Block Display") { try $0.editWhiteboard { board in if let i = board.blocks.firstIndex(where: { $0.id == id }) { board.blocks[i].collapsed.toggle() } } } } }
     @objc private func lockContext() { if let id = contextBlock { workspace?.edit("Block Lock") { try $0.editWhiteboard { board in if let i = board.blocks.firstIndex(where: { $0.id == id }) { board.blocks[i].locked.toggle() } } } } }
+    @objc private func groupBeatContext() { workspace?.edit("Group Beats") { try $0.groupBoardBeats(selection.isEmpty ? Set([contextBeat].compactMap { $0 }) : selection) } }
     @objc private func groupContext() { let ids = blockSelection; workspace?.edit("Group Blocks") { try $0.groupBoardBlocks(ids, name: "New Group") } }
     @objc private func ungroupContext() { if let id = contextBlock { workspace?.edit("Ungroup Blocks") { try $0.ungroupBoardBlocks([id]) } } }
     @objc private func deleteBlockContext() { if let id = contextBlock { workspace?.edit("Delete Block") { try $0.removeBoardBlocks([id]) } } }

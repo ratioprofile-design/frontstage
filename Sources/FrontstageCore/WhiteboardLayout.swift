@@ -21,6 +21,15 @@ public struct WhiteboardLayout: Sendable {
     private let largeItems: Set<String>
     private static let cellSize = 320.0
 
+    /// Compact monospace cards grow with their title; long titles wrap at the container width.
+    public static func beatSize(_ text: String, maximumWidth: Double) -> (width: Double, height: Double) {
+        let limit = max(1, Int((maximumWidth - 18) / 6.7))
+        let lines = text.components(separatedBy: "\n").map { max(1, $0.count) }
+        let columns = min(limit, lines.max() ?? 1)
+        let rows = lines.reduce(0) { $0 + Int(ceil(Double($1) / Double(limit))) }
+        return (max(32, Double(columns) * 6.7 + 18), max(26, Double(rows) * 14 + 12))
+    }
+
     public init(_ board: Whiteboard) {
         var layers = [String: BoardRect](), blocks = [String: BoardRect](), beats = [String: BoardRect]()
         let blockByID = Dictionary(uniqueKeysWithValues: board.blocks.map { ($0.id, $0) })
@@ -35,18 +44,21 @@ public struct WhiteboardLayout: Sendable {
         }
         for layer in board.layers {
             let items = board.blocks.filter { $0.layerID == layer.id && !hidden($0) }
-            let contentHeight = items.map { $0.position.y + ($0.collapsed ? 32 : Double((byBlock[$0.id] ?? []).count) * 44 + 42) }.max() ?? 0
+            let contentHeight = items.map { $0.position.y + ($0.collapsed ? 32 : (byBlock[$0.id] ?? []).reduce(42.0) { $0 + Self.beatSize($1.title, maximumWidth: blockByID[$1.blockID]!.width - 12).height + 4 }) }.max() ?? 0
             let layerHeight = layer.collapsed ? 38 : max(layer.height, contentHeight + 45)
             layers[layer.id] = BoardRect(x: 0, y: offset, width: 1_000_000, height: layerHeight)
             if !layer.collapsed {
                 for block in items {
                     let members = byBlock[block.id] ?? []
                     let rect = BoardRect(x: 110 + block.position.x, y: offset + block.position.y,
-                        width: block.width, height: block.collapsed ? 28 : max(60, Double(members.count) * 44 + 32))
+                        width: block.width, height: block.collapsed ? 28 : max(60, members.reduce(32.0) { $0 + Self.beatSize($1.title, maximumWidth: block.width - 12).height + 4 }))
                     blocks[block.id] = rect; maximumX = max(maximumX, rect.maxX + 120)
                     if !block.collapsed {
-                        for (index, beat) in members.enumerated() {
-                            beats[beat.id] = BoardRect(x: rect.x + 6, y: rect.y + 24 + Double(index) * 44, width: rect.width - 12, height: 40)
+                        var top = rect.y + 24
+                        for beat in members {
+                            let size = Self.beatSize(beat.title, maximumWidth: block.width - 12)
+                            beats[beat.id] = BoardRect(x: rect.x + 6, y: top, width: size.width, height: size.height)
+                            top += size.height + 4
                         }
                     }
                 }

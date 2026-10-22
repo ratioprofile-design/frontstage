@@ -57,11 +57,12 @@ struct ScriptWritingWorkspace: View {
     }
 }
 
-private struct ContinuousSnippet: View {
+struct ContinuousSnippet: View {
     @ObservedObject var workspace: Workspace
     let sceneID: Decimal
     let beatID: String?
     @ObservedObject var controller: ScreenplayEditorController
+    var compact = false
     private var beat: BoardBeat? { workspace.whiteboard.beats.first { $0.id == beatID } }
     private var scene: FrontstageCore.Scene? { workspace.project.scenes.first { $0.id == sceneID } }
     private var html: Binding<String> {
@@ -72,24 +73,52 @@ private struct ContinuousSnippet: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if let beatID, let beat {
+            if !compact, let beatID, let beat {
                 Button(beat.title) { workspace.selectBoardBeat(beatID); workspace.popup.open(beatID, workspace: workspace) }
                     .font(.caption).frame(maxWidth: .infinity, alignment: .leading).buttonStyle(.plain)
                     .padding(4).background(Color(white: 0.93))
             }
-            HStack {
+            if !compact { HStack {
                 Picker("Element", selection: Binding(get: { controller.activeElement }, set: { controller.format($0) })) {
                     ForEach(ScreenplayElement.editable, id: \.self) { Text($0.label).tag($0) }
                 }.frame(width: 180)
                 InlineFormatButtons(controller: controller)
                 Spacer()
-            }.font(.caption).disabled(scene?.isTextLocked == true)
-            ScreenplayEditor(html: html, controller: controller, width: workspace.paper.contentWidth,
+            }.font(.caption).disabled(scene?.isTextLocked == true) }
+            ScreenplayEditor(html: html, controller: controller, width: compact ? 252 : workspace.paper.contentWidth,
                 typography: workspace.project.scriptLayout, onError: { workspace.errorMessage = $0 }, editable: scene?.isTextLocked != true, continuous: true)
                 .frame(height: controller.layoutHeight)
         }
     }
 }
+struct ScriptSidePaper: View {
+    @ObservedObject var workspace: Workspace
+    var body: some View {
+        VStack(spacing: 0) {
+            Text("SCRIPT").font(.caption).padding(8)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(Array(((try? workspace.project.orderedScript()) ?? []).enumerated()), id: \.offset) { _, segment in
+                        Text("\(segment.number)  \(segment.scene.heading.text)\(segment.isContinuation ? " (CONTINUED)" : "")")
+                            .font(.custom("Courier", size: 12).bold()).foregroundStyle(.black).padding(.top, 14)
+                        if segment.beatIDs.isEmpty {
+                            ContinuousSnippet(workspace: workspace, sceneID: segment.scene.id, beatID: nil,
+                                controller: workspace.scriptController("scene-\(segment.scene.id)"), compact: true)
+                        }
+                        ForEach(segment.beatIDs, id: \.self) { id in
+                            ContinuousSnippet(workspace: workspace, sceneID: segment.scene.id, beatID: id,
+                                controller: workspace.scriptController(id), compact: true)
+                                .onTapGesture { workspace.selectBoardBeat(id) }
+                        }
+                    }
+                    Spacer(minLength: 72)
+                }.frame(width: 252, alignment: .leading).padding(24).frame(minHeight: 792, alignment: .topLeading)
+                    .background(Color.white).environment(\.colorScheme, .light).shadow(radius: 2).padding(10)
+            }
+        }.background(Color(white: 0.47))
+    }
+}
+
 struct InlineFormatButtons: View {
     @ObservedObject var controller: ScreenplayEditorController
     var body: some View {

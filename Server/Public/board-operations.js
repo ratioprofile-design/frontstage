@@ -92,7 +92,7 @@ export function moveStandaloneBeats(source, ids, dx, dy) {
 }
 export function groupBlocks(source, ids, name, id) {
   const board = copy(source), items = board.blocks.filter(b => ids.has(b.id));
-  if (items.length !== ids.size || items.length < 2 || items.some(b => blockLocked(board, b.id)) || new Set(items.map(b => b.layerID)).size !== 1 || items.some(b => b.parentID !== items[0].parentID)) throw Error('Select at least two unlocked blocks with the same layer and parent.');
+  if (items.length !== ids.size || items.length < 1 || items.some(b => blockLocked(board, b.id)) || new Set(items.map(b => b.layerID)).size !== 1 || items.some(b => b.parentID !== items[0].parentID)) throw Error('Select unlocked containers with the same layer and parent.');
   if (!id || board.blocks.some(b => b.id === id)) throw Error('Invalid new group identifier.');
   const position = { x: Math.max(0, Math.min(...items.map(b => b.position.x)) - 18), y: Math.max(32, Math.min(...items.map(b => b.position.y)) - 28) };
   const group = { id, name, layerID: items[0].layerID, position, width: Math.min(2000, Math.max(224, Math.max(...items.map(b => b.position.x + b.width)) - position.x + 18)), collapsed: false, locked: false };
@@ -101,7 +101,8 @@ export function groupBlocks(source, ids, name, id) {
 }
 export function ungroupBlocks(source, ids) {
   const board = copy(source), groups = board.blocks.filter(b => ids.has(b.id)), byID = new Map(board.blocks.map(b => [b.id, b]));
-  if (!ids.size || groups.length !== ids.size || groups.some(g => blockLocked(board, g.id) || !board.blocks.some(b => b.parentID === g.id))) throw Error('Select unlocked groups to ungroup.');
+  if (!ids.size || groups.length !== ids.size || groups.some(g => blockLocked(board, g.id) || (g.containerKind!=='beatGroup' && !board.blocks.some(b => b.parentID === g.id)))) throw Error('Select unlocked groups to ungroup.');
+  for(const group of groups.filter(g=>g.containerKind==='beatGroup')){let top=group.position.y;for(const beat of board.beats.filter(b=>b.blockID===group.id).sort((a,b)=>a.order-b.order)){if(beat.locked)throw Error('Unlock the group members.');const loose={...copy(group),id:crypto.randomUUID(),name:'Beat',standalone:true,position:{x:group.position.x,y:top}};delete loose.containerKind;top+=beatSize(beat.title,group.width-12).height+4;beat.blockID=loose.id;board.blocks.push(loose);}}
   for (const block of board.blocks) {
     let parent = block.parentID; while (ids.has(parent)) parent = byID.get(parent)?.parentID;
     if (parent !== block.parentID) {
@@ -123,4 +124,19 @@ export function deleteBlocks(source, ids) {
   const remaining = new Set(board.beats.map(b => b.sceneID));
   for (const scene of document.project.beats) if (scenes.has(scene.id) && !remaining.has(scene.id)) { scene.content = ''; scene.isDisabled = true; }
   return document;
+}
+
+export function groupBeats(source, ids, id) {
+  const board=copy(source),members=board.beats.filter(b=>ids.has(b.id)),owners=board.blocks.filter(b=>members.some(x=>x.blockID===b.id));
+  if(!members.length||members.length!==ids.size||new Set(owners.map(b=>b.layerID)).size!==1||members.some(b=>b.locked||blockLocked(board,b.blockID)))throw Error('Select unlocked beats in one layer.');
+  const first=owners[0],group={id,name:'Beat Group',containerKind:'beatGroup',layerID:first.layerID,position:copy(first.position),width:224,collapsed:false,locked:false};
+  if(owners.length===1&&!first.standalone&&first.containerKind!=='beatGroup'){group.parentID=first.id;group.position.y+=60;}
+  else if(owners.every(b=>b.parentID===first.parentID)&&first.parentID)group.parentID=first.parentID;
+  for(const beat of members)beat.blockID=id;
+  const occupied=new Set(board.beats.map(b=>b.blockID)),parents=new Set(board.blocks.map(b=>b.parentID));
+  board.blocks=board.blocks.filter(b=>!b.standalone||occupied.has(b.id)||parents.has(b.id));board.blocks.push(group);return board;
+}
+export function beatSize(text,maximumWidth) {
+  const segmenter=new Intl.Segmenter(undefined,{granularity:'grapheme'}),limit=Math.max(1,Math.floor((maximumWidth-18)/6.7)),lines=text.split('\n').map(s=>Math.max(1,[...segmenter.segment(s)].length));
+  return {width:Math.max(32,Math.min(limit,Math.max(...lines))*6.7+18),height:Math.max(26,lines.reduce((n,l)=>n+Math.ceil(l/limit),0)*14+12)};
 }

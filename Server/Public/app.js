@@ -1,9 +1,9 @@
 import { mountWorkspaces } from './workspaces.js';
 import { splitAtCaret, screenplayToolbar } from './screenplay-editor.js';
-import { splitBeat } from './workspace-model.js';
+import { splitBeat, scriptSegments, heading } from './workspace-model.js';
 import { mergeDocuments } from './merge.js';
 import { apiOrigin as configuredOrigin } from './config.js';
-import { causalOrder as orderCauses, compactCausalTime, groupBlocks, ungroupBlocks, moveBlocks, moveStandaloneBeats, descendantBlocks, deleteBlocks, validateBoard } from './board-operations.js';
+import { causalOrder as orderCauses, compactCausalTime, groupBlocks, ungroupBlocks, moveBlocks, moveStandaloneBeats, descendantBlocks, deleteBlocks, validateBoard, groupBeats, beatSize } from './board-operations.js';
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
 
@@ -213,7 +213,7 @@ function choose(id, multiple = false) {
   selectedBlocks.clear();
   if (multiple) { if (selectedBeats.has(id)) selectedBeats.delete(id); else selectedBeats.add(id); }
   else selectedBeats = new Set([id]);
-  selected = id; render();
+  selected = id; render(); $('canvas').focus({preventScroll:true});
 }
 function causalOrder() {
   return orderCauses(board());
@@ -238,16 +238,16 @@ function storyIssues() {
 function geometry() {
   const blocks = new Map(), beats = new Map(), layers = new Map(); let y = 0, maxX = 1500;
   for (const layer of board().layers) {
-    const members = board().blocks.filter(b => b.layerID === layer.id), height = layer.collapsed ? 38 : Math.max(layer.height, ...members.map(b => b.position.y + board().beats.filter(t => t.blockID === b.id).length * 44 + 80));
+    const members = board().blocks.filter(b => b.layerID === layer.id), height = layer.collapsed ? 38 : Math.max(layer.height, ...members.map(b => b.position.y + board().beats.filter(t => t.blockID === b.id).reduce((h,t)=>h+beatSize(t.title,b.width-12).height+4,80)));
     layers.set(layer.id, { y, height });
     if (!layer.collapsed) for (const block of members) {
       let parent = board().blocks.find(b => b.id === block.parentID), hidden = false; const seen = new Set();
       while (parent && !seen.has(parent.id)) { if (parent.collapsed) hidden = true; seen.add(parent.id); parent = board().blocks.find(b => b.id === parent.parentID); }
       if (hidden) continue;
       const children = board().beats.filter(b => b.blockID === block.id).sort((a, b) => a.order - b.order);
-      const rect = { x: block.position.x + 110, y: block.position.y + y, width: block.width, height: block.collapsed ? 28 : Math.max(65, children.length * 44 + 32) };
+      const rect = { x: block.position.x + 110, y: block.position.y + y, width: block.width, height: block.collapsed ? 28 : Math.max(60, children.reduce((h,b)=>h+beatSize(b.title,block.width-12).height+4,32)) };
       blocks.set(block.id, rect); maxX = Math.max(maxX, rect.x + rect.width + 120);
-      if (!block.collapsed) children.forEach((beat, i) => beats.set(beat.id, { x: rect.x + 6, y: rect.y + 24 + i * 44, width: rect.width - 12, height: 40 }));
+      if (!block.collapsed) { let top=rect.y+24;for(const beat of children){const size=beatSize(beat.title,block.width-12);beats.set(beat.id,{x:rect.x+6,y:top,...size});top+=size.height+4;} }
     }
     y += height;
   }
@@ -266,12 +266,13 @@ function geometry() {
 }
 function position(node, rect) { node.style.left = `${rect.x}px`; node.style.top = `${rect.y}px`; node.style.width = `${rect.width}px`; node.style.height = `${rect.height}px`; }
 function render() {
+  const editingSide=document.activeElement?.hasAttribute('data-script-beat');
   if (!doc) return;
   const beatIDs = new Set(board().beats.map(b => b.id)), blockIDs = new Set(board().blocks.map(b => b.id));
   selectedBeats = new Set([...selectedBeats].filter(id => beatIDs.has(id))); selectedBlocks = new Set([...selectedBlocks].filter(id => blockIDs.has(id)));
   if (!beatIDs.has(selected)) selected = null;
   const g = geometry(), issues = storyIssues(), warning = new Set(issues.map(i => i.id));
-  $('layers').replaceChildren(); $('blocks').replaceChildren(); $('links').replaceChildren(); $('snippet-list').replaceChildren(); $('issues').replaceChildren();
+  $('layers').replaceChildren(); $('blocks').replaceChildren(); $('links').replaceChildren(); if(!editingSide)$('snippet-list').replaceChildren(); $('issues').replaceChildren();
   for (const layer of board().layers) {
     const rect = g.layers.get(layer.id), node = element('div', undefined, 'layer'); position(node, { x: 0, y: rect.y, width: g.width, height: rect.height });
     const label = element('button', `${layer.collapsed ? '▸' : '▾'} ${layer.name}`, 'layer-label'); label.onclick = () => edit(() => { layer.collapsed = !layer.collapsed; }); node.append(label); $('layers').append(node);
@@ -281,7 +282,7 @@ function render() {
     const rect = g.blocks.get(block.id); if (!rect) continue;
     const node = element('div', undefined, `block${selectedBlocks.has(block.id) ? ' selected-block' : ''}`); node.dataset.blockId = block.id; position(node, rect);
     const loose = block.standalone && board().beats.filter(b => b.blockID === block.id).length === 1 && !board().blocks.some(b => b.parentID === block.id);
-    node.classList.toggle('standalone', !!loose);
+    node.classList.toggle('standalone', !!loose);node.classList.toggle('beat-group',block.containerKind==='beatGroup');node.dataset.containerKind=block.containerKind||'block';
     const title = element('div', block.name, 'block-title'); node.append(title);
     title.ondblclick = () => { const value = prompt('Block name', block.name); if (value !== null) edit(() => { block.name = value; }); };
     title.onpointerdown = e => {
@@ -303,6 +304,7 @@ function render() {
     if (!block.collapsed) for (const beat of board().beats.filter(b => b.blockID === block.id).sort((a, b) => a.order - b.order)) {
       const tile = element('div', undefined, `beat${selectedBeats.has(beat.id) ? ' selected' : ''}`); tile.style.backgroundColor = /^#[a-f0-9]{6}$/i.test(beat.color) ? beat.color : '#a34eae';
       tile.dataset.beatId = beat.id;
+      const card=g.beats.get(beat.id);if(card){tile.style.position='absolute';position(tile,{...card,x:card.x-rect.x,y:card.y-rect.y});}
       tile.append(element('span', beat.title, 'beat-text')); tile.draggable = current.access !== 'reader' && !locked(beat);
       if (warning.has(beat.id)) tile.append(element('span', '!', 'badge'));
       tile.onclick = e => { e.stopPropagation(); choose(beat.id, e.shiftKey); }; tile.ondblclick = () => openEditor(beat.id);
@@ -319,15 +321,17 @@ function render() {
   for (const edge of board().dependencies) {
     const a = g.beats.get(edge.cause), b = g.beats.get(edge.effect); if (!a || !b) continue;
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path'), bend = Math.max(35, Math.abs(b.x - a.x - a.width) * .45);
-    path.setAttribute('d', `M${a.x + a.width},${a.y + 20} C${a.x + a.width + bend},${a.y + 20} ${b.x - bend},${b.y + 20} ${b.x},${b.y + 20}`);
+    path.setAttribute('d', `M${a.x + a.width},${a.y + a.height / 2} C${a.x + a.width + bend},${a.y + a.height / 2} ${b.x - bend},${b.y + b.height / 2} ${b.x},${b.y + b.height / 2}`);
     path.setAttribute('stroke', edge.cause === selected || edge.effect === selected ? '#8be8f2' : '#d1d1d3'); path.setAttribute('fill', 'none'); if (edge.reference) path.setAttribute('stroke-dasharray', '4 4'); $('links').append(path);
   }
   for (const marker of storyMarkers()) {
     const line = document.createElementNS('http://www.w3.org/2000/svg', 'path'), x = 110 + marker.unit * 120;
     line.setAttribute('d', `M${x},0 V${g.height}`); line.setAttribute('stroke', '#4d8ed6'); line.setAttribute('stroke-dasharray', '3 5'); $('links').append(line);
   }
-  for (const beat of [...board().beats].sort((a, b) => a.order - b.order)) {
-    const card = element('article', undefined, 'snippet-card'); card.append(element('strong', beat.title), element('p', plain(beat.html))); card.onclick = () => { choose(beat.id); openEditor(beat.id); }; $('snippet-list').append(card);
+  if(!editingSide) for (const segment of scriptSegments(doc)) {
+    $('snippet-list').append(element('h3',`${segment.number}  ${heading(segment.scene)}${segment.continuation?' (CONTINUED)':''}`,'script-heading'));
+    for(const id of segment.beatIDs){const beat=board().beats.find(b=>b.id===id),text=element('div',undefined,'side-script-text script-text');text.innerHTML=cleanHTML(beat.html);text.dataset.scriptBeat=id;text.tabIndex=0;text.setAttribute('aria-label',`Edit script: ${beat.title}`);text.contentEditable=current.access!=='reader'&&!segment.scene.frontstageTextLocked;text.setAttribute('role','textbox');text.onfocus=()=>{selected=id;selectedBeats=new Set([id]);};text.oninput=()=>edit(()=>{board().beats.find(b=>b.id===id).html=cleanHTML(text.innerHTML);});text.ondblclick=()=>openEditor(id);$('snippet-list').append(text);}
+    if(!segment.beatIDs.length){const text=element('div',undefined,'script-text');text.innerHTML=cleanHTML(segment.html);$('snippet-list').append(text);}
   }
   for (const issue of issues) { const button = element('button', issue.text, 'issue'); button.onclick = () => { if (issue.id) choose(issue.id); }; $('issues').append(button); }
   $('beat-count').textContent = `${board().beats.length} beats`; renderProperties(); renderTimeline();
@@ -467,17 +471,19 @@ function openEditor(id) {
   field('split-beat').onclick = () => { try { const [first, second] = splitAtCaret(text); let next; edit(() => { next = splitBeat(doc, id, cleanHTML(first), cleanHTML(second)); }); if (next && board().beats.some(b => b.id === next)) { refreshEditors(); openEditor(next); } } catch (e) { status(e.message); } };
   field('beat-title').focus();
 }
-function addBeat(standalone = false) {
+function addBeat(standalone = false, afterID = null, asGroup = false) {
   edit(() => {
-    const owner = standalone ? null : board().beats.find(b => b.id === selected); let blockID = owner?.blockID, sceneID = owner?.sceneID;
+    const previous=board().beats.find(b=>b.id===afterID),previousBlock=board().blocks.find(b=>b.id===previous?.blockID);const owner = standalone ? null : board().beats.find(b => b.id === selected); let blockID = owner?.blockID, sceneID = previous?.sceneID??owner?.sceneID;
+    if((owner&&locked(owner))||(previous&&locked(previous)))throw Error('Unlock the destination before adding a beat.');
     if (!blockID) {
-      blockID = uuid(); sceneID = Math.max(0, ...doc.project.beats.map(b => Number(b.id))) + 1;
-      doc.project.beats.push({ id: sceneID, title: 'Untitled Scene', content: '', slug: { prefix: 'INT.', location: '', time: 'DAY' }, boardId: 0 }); doc.project.nextId = sceneID + 1;
+      blockID = uuid(); if(sceneID==null){ sceneID = Math.max(0, ...doc.project.beats.map(b => Number(b.id))) + 1;
+      doc.project.beats.push({ id: sceneID, title: 'Untitled Scene', content: '', slug: { prefix: 'INT.', location: '', time: 'DAY' }, boardId: 0 }); doc.project.nextId = sceneID + 1; }
       const right = Math.max(-244, ...board().blocks.map(b => b.position.x + b.width));
-      board().blocks.push({ standalone, id: blockID, name: 'Untitled Block', layerID: board().layers[0].id, position: { x: Math.max(40, right + 60), y: 70 }, width: 224, collapsed: false, locked: false });
+      board().blocks.push({ standalone, id: blockID, name: asGroup?'Beat Group':'Untitled Block', ...(asGroup?{containerKind:'beatGroup'}:{}), layerID: previousBlock?.layerID??board().layers[0].id, position: previousBlock ? {x:previousBlock.position.x,y:previousBlock.position.y+beatSize(previous.title,previousBlock.width-12).height+12} : { x: Math.max(40, right + 60), y: 70 }, width: 224, collapsed: false, locked: false });
     }
     const beat = { id: uuid(), sceneID, blockID, title: 'Untitled Beat', synopsis: '', html: '', kind: 'story', color: '#a34eae', characters: [], tags: [], mustBeCaused: false, omitted: false, locked: false, order: Math.max(-1, ...board().beats.map(b => b.order)) + 1, start: Math.max(0, ...board().beats.map(b => b.start + b.duration)), duration: 1.5 };
-    board().beats.push(beat); selected = beat.id;
+    if(previous){const ordered=[...board().beats].sort((a,b)=>a.order-b.order),index=ordered.findIndex(b=>b.id===previous.id);beat.order=(previous.order+(ordered[index+1]?.order??previous.order+2))/2;}
+    board().beats.push(beat); selected = beat.id; selectedBeats=new Set([beat.id]);
   }); openEditor(selected);
 }
 $('canvas').ondragover = e => e.preventDefault();
@@ -512,8 +518,8 @@ $('board-actions').onchange = () => {
   const action = $('board-actions').value; $('board-actions').value = '';
   if (action === 'marker') { editMarker(); return; }
   if (action === 'group') {
-    const name = prompt('Group name', 'New Group'); if (name === null) return;
-    const id = uuid(); edit(() => { doc.project.frontstageWhiteboard = groupBlocks(board(), selectedBlocks, name, id); });
+    const name = prompt('Block name', 'New Block'); if (name === null) return;
+    const id = uuid(); edit(() => { doc.project.frontstageWhiteboard = groupBlocks(board(), selectedBlocks.size?selectedBlocks:new Set(board().beats.filter(b=>selectedBeats.has(b.id)).map(b=>b.blockID)), name, id); });
     if (board().blocks.some(b => b.id === id)) { selectedBlocks = new Set([id]); render(); } return;
   }
   if (action === 'ungroup') edit(() => { doc.project.frontstageWhiteboard = ungroupBlocks(board(), selectedBlocks); });
@@ -523,6 +529,7 @@ $('board-actions').onchange = () => {
 $('timeline-toggle').onclick = () => { $('timeline').hidden = !$('timeline').hidden; };
 $('properties-toggle').onclick = () => { $('properties').hidden = !$('properties').hidden; };
 $('script-toggle').onclick = () => { $('script').hidden = !$('script').hidden; };
+$('add-group').onclick=()=>{const ids=selectedBeats.size?selectedBeats:new Set(selected?[selected]:[]);if(!ids.size){selected=null;addBeat(false,null,true);}else edit(()=>{doc.project.frontstageWhiteboard=groupBeats(board(),ids,uuid());});};
 $('add-beat').onclick = () => addBeat(true); $('add-to-block').onclick = () => addBeat(); $('add-block').onclick = () => { selected = null; addBeat(); };
 $('add-layer').onclick = () => { const name = prompt('Layer name', 'New Layer'); if (name) edit(() => board().layers.push({ id: uuid(), name, height: 300, collapsed: false, locked: false, unused: false })); };
 $('cause').onclick = () => { if (selected) { source = selected; status('Select the effect beat'); } };
@@ -531,15 +538,15 @@ $('fit').onclick = () => { if (!doc) return; const rect = geometry().beats.get(s
 $('keep-local').onclick = () => { if (!pendingConflict) return; base = clone(pendingConflict.document); current.revision = pendingConflict.revision; pendingConflict = null; $('conflict').hidden = true; dirty = true; sync(); };
 $('take-server').onclick = async () => { if (!pendingConflict) return; download(); doc = initializeBoard(clone(pendingConflict.document)); base = clone(pendingConflict.document); current.revision = pendingConflict.revision; dirty = false; pendingConflict = null; $('conflict').hidden = true; closeEditors(); editorID = null; await saveLocal(); render(); status('Server copy loaded; previous local copy downloaded'); };
 $('share').onclick = async () => { if (current?.local) { status('Download your local project, sign in, then import it to create a shared copy.'); return; } if (!current || current.access !== 'owner') { status('Only the project owner can change access'); return; } const username = prompt('Existing account username'); if (!username) return; const access = prompt('Access: reader or editor', 'editor'); if (!['reader', 'editor'].includes(access)) return; try { await api(`/api/projects/${current.id}/members`, 'POST', { username, access }); status(`Shared with ${username} (${access})`); } catch (error) { status(error.message); } };
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (editorID) closeEditor(editorID); source = null; } if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); sync(); } if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !['INPUT', 'TEXTAREA'].includes(e.target.tagName) && !e.target.isContentEditable) { e.preventDefault(); if (e.shiftKey) restoreHistory(future, history); else restoreHistory(history, future); } if (e.key === 'Enter' && e.target === $('canvas') && selected) openEditor(selected); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (editorID) closeEditor(editorID); source = null; } if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); sync(); } if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !['INPUT', 'TEXTAREA'].includes(e.target.tagName) && !e.target.isContentEditable) { e.preventDefault(); if (e.shiftKey) restoreHistory(future, history); else restoreHistory(history, future); } if (e.key === 'Enter' && !e.isComposing && e.target === $('canvas')) {e.preventDefault();const owner=board().blocks.find(b=>b.id===board().beats.find(b=>b.id===selected)?.blockID);addBeat(!owner||!!owner.standalone,selected);} });
 window.addEventListener('online', () => { if (dirty) sync(); });
 window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
 setInterval(async () => {
-  if (!current || current.local || !token || dirty || syncing || editorID || pendingConflict) return;
+  if (!current || current.local || !token || dirty || syncing || editorID || document.activeElement?.isContentEditable || pendingConflict) return;
   const epoch = documentEpoch, projectID = current.id;
   try {
     const { data } = await api(`/api/projects/${projectID}`);
-    if (epoch !== documentEpoch || current?.id !== projectID || dirty || syncing || editorID || pendingConflict) return;
+    if (epoch !== documentEpoch || current?.id !== projectID || dirty || syncing || editorID || document.activeElement?.isContentEditable || pendingConflict) return;
     if (data.revision !== current.revision) { const nextDocument = initializeBoard(clone(data.document)); current = data; base = clone(data.document); doc = nextDocument; render(); await saveLocal(); status(`Updated · revision ${current.revision}`); }
   } catch {}
 }, 5000);

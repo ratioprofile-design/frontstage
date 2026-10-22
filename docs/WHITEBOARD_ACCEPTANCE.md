@@ -27,3 +27,11 @@ Record OS version, screen size, processor and build commit with each result.
 ## Reference-dependent work
 
 Compare the board against the supplied Causality layouts. An open-editor reference and behavioral examples remain necessary to assess exact popup appearance, snapping/ripple rules and readability/tension tracks. Until then these are functional Frontstage implementations, not verified exact matches.
+
+## Beat hierarchy and script paper (22 October 2026)
+
+The model distinguishes loose beats, explicit beat groups (`containerKind: beatGroup`), and enclosing blocks. Select beats and use **+ Beat Group**, then **Wrap Selection in Block** to place the group inside a block. Blocks can also contain beats directly. Existing nested containers remain readable. Unwrapping a beat group retains its beats, scene identities, narrative order and cause links.
+
+Cards now grow with their title text and wrap long titles to the container width; drawing, links and hit testing use the same dimensions. **Enter with the whiteboard focused** inserts a beat after the selected beat, retaining its scene and group. Enter inside an editor continues to edit screenplay text.
+
+The optional side script is continuous white screenplay paper with scene headings and semantic dialogue/character indentation. Its text remains linked to the board and popup editors. The browser acceptance capture `browser-hierarchy-side-paper.png` shows the three levels and the paper together. Portable tests verify hierarchy save/reopen and preserved links; native tests exercise board Enter and undo.

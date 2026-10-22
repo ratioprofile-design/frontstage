@@ -28,6 +28,8 @@ public struct BoardLayer: Codable, Identifiable, Equatable, Sendable {
 public struct BoardBlock: Codable, Identifiable, Equatable, Sendable {
     /// A loose beat retains its container identity for links and movement, without block chrome.
     public var standalone: Bool?
+    /// Explicit beat groups contain beats; ordinary blocks may also contain groups.
+    public var containerKind: String?
     public var id: String
     public var name: String
     public var layerID: String
@@ -326,14 +328,17 @@ extension Project {
     }
 
     @discardableResult
-    public mutating func addBoardBeat(blockID: String? = nil, layerID: String = "main", position: BoardPoint = .init(x: 60, y: 60), title: String = "Untitled Beat") throws -> String {
+    public mutating func addBoardBeat(blockID: String? = nil, layerID: String = "main", position: BoardPoint = .init(x: 60, y: 60), title: String = "Untitled Beat", sceneID targetSceneID: Decimal? = nil) throws -> String {
         var candidate = self
         let existing = try candidate.whiteboard()
         try candidate.validateNativeScriptText(existing)
         guard existing.layers.contains(where: { $0.id == layerID }), !existing.layers.first(where: { $0.id == layerID })!.locked else { throw ProjectError.invalidProject("unlock the destination layer") }
         if let blockID { guard existing.blocks.contains(where: { $0.id == blockID }), !existing.isBlockLocked(blockID) else { throw ProjectError.invalidProject("unlock the destination block") } }
         let sceneID: Decimal
-        if let blockID, let owner = existing.beats.first(where: { $0.blockID == blockID }) { sceneID = owner.sceneID }
+        if let targetSceneID {
+            guard candidate.scenes.contains(where: { $0.id == targetSceneID }) else { throw ProjectError.sceneNotFound }
+            sceneID = targetSceneID
+        } else if let blockID, let owner = existing.beats.first(where: { $0.blockID == blockID }) { sceneID = owner.sceneID }
         else { sceneID = candidate.addScene(); try candidate.updateScene(id: sceneID, title: title) }
         // Preserve the projection taken before addScene, which otherwise introduces a duplicate legacy beat.
         var board = existing
@@ -502,10 +507,35 @@ extension Project {
         }
     }
 
+    public mutating func groupBoardBeats(_ ids: Set<String>, name: String = "Beat Group") throws {
+        try editWhiteboard { board in
+            let members = board.orderedBeats.filter { ids.contains($0.id) }
+            let owners = board.blocks.filter { Set(members.map(\.blockID)).contains($0.id) }
+            guard !members.isEmpty, members.count == ids.count, Set(owners.map(\.layerID)).count == 1,
+                  members.allSatisfy({ !$0.locked && !board.isBlockLocked($0.blockID) }) else {
+                throw ProjectError.invalidProject("select unlocked beats in one layer")
+            }
+            let layout = WhiteboardLayout(board), first = owners[0]
+            var group = BoardBlock(name: name, layerID: first.layerID, position: first.position)
+            group.containerKind = "beatGroup"
+            if owners.count == 1 && first.standalone != true && first.containerKind != "beatGroup" {
+                group.parentID = first.id; group.position.y += 60
+            } else if owners.allSatisfy({ $0.parentID == first.parentID }) { group.parentID = first.parentID }
+            if let frame = members.compactMap({ layout.beatRects[$0.id] }).first, group.parentID != first.id {
+                group.position.x = max(0, frame.x - 116)
+                group.position.y = max(32, frame.y - (layout.layerRects[first.layerID]?.y ?? 0) - 24)
+            }
+            for i in board.beats.indices where ids.contains(board.beats[i].id) { board.beats[i].blockID = group.id }
+            let occupied = Set(board.beats.map(\.blockID)), parents = Set(board.blocks.compactMap(\.parentID))
+            board.blocks.removeAll { $0.standalone == true && !occupied.contains($0.id) && !parents.contains($0.id) }
+            board.blocks.append(group)
+        }
+    }
+
     public mutating func groupBoardBlocks(_ ids: Set<String>, name: String) throws {
         try editWhiteboard { board in
             let items = board.blocks.filter { ids.contains($0.id) }
-            guard items.count == ids.count, items.count > 1, Set(items.map(\.layerID)).count == 1, items.allSatisfy({ !board.isBlockLocked($0.id) }) else { throw ProjectError.invalidProject("select unlocked blocks in one layer") }
+            guard items.count == ids.count, !items.isEmpty, Set(items.map(\.layerID)).count == 1, items.allSatisfy({ !board.isBlockLocked($0.id) }) else { throw ProjectError.invalidProject("select unlocked blocks in one layer") }
             guard items.allSatisfy({ $0.parentID == items[0].parentID }) else { throw ProjectError.invalidProject("group blocks that share the same parent") }
             let selected = Set(items.map(\.id)), id = UUID().uuidString
             var group = BoardBlock(id: id, name: name, layerID: items[0].layerID,
@@ -521,8 +551,19 @@ extension Project {
         try editWhiteboard { board in
             let groups = board.blocks.filter { ids.contains($0.id) }
             guard !ids.isEmpty, groups.count == ids.count,
-                  groups.allSatisfy({ group in !board.isBlockLocked(group.id) && board.blocks.contains(where: { $0.parentID == group.id }) }) else {
+                  groups.allSatisfy({ group in !board.isBlockLocked(group.id) && (group.containerKind == "beatGroup" || board.blocks.contains(where: { $0.parentID == group.id })) }) else {
                 throw ProjectError.invalidProject("select unlocked groups to ungroup")
+            }
+            let geometry = WhiteboardLayout(board)
+            for group in groups where group.containerKind == "beatGroup" {
+                for i in board.beats.indices where board.beats[i].blockID == group.id {
+                    guard !board.beats[i].locked else { throw ProjectError.invalidProject("unlock the group members") }
+                    let rect = geometry.beatRects[board.beats[i].id]
+                    var loose = BoardBlock(name: "Beat", layerID: group.layerID,
+                        position: BoardPoint(x: max(0, (rect?.x ?? 116) - 116), y: max(32, (rect?.y ?? 56) - (geometry.layerRects[group.layerID]?.y ?? 0) - 24)))
+                    loose.standalone = true; loose.parentID = group.parentID
+                    board.beats[i].blockID = loose.id; board.blocks.append(loose)
+                }
             }
             let byID = Dictionary(uniqueKeysWithValues: board.blocks.map { ($0.id, $0) })
             for i in board.blocks.indices {
