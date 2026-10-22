@@ -74,6 +74,25 @@ final class ScreenplayEditorController: ObservableObject {
         activeElement = element
     }
 
+    func insertCue(_ value: String, element: ScreenplayElement) {
+        guard let textView, textView.isEditable, !textView.hasMarkedText() else { return }
+        textView.window?.makeFirstResponder(textView)
+        let source = textView.string as NSString
+        var range = source.paragraphRange(for: textView.selectedRange())
+        let line = source.substring(with: range)
+        let same = ScreenplayTextCodec.element(in: textView.attributedString(), at: range.location) == element
+        var prefix = ""
+        if !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !same {
+            range = NSRange(location: NSMaxRange(range), length: 0)
+            if range.location > 0 && source.substring(with: NSRange(location: range.location - 1, length: 1)) != "\n" { prefix = "\n" }
+        }
+        let suffix = (range.length > 0 && line.hasSuffix("\n")) || (range.length == 0 && range.location < source.length) ? "\n" : ""
+        let attributes = ScreenplayTypography.attributes(element, width: contentWidth, settings: typography)
+        textView.insertText(NSAttributedString(string: prefix + value + suffix, attributes: attributes), replacementRange: range)
+        textView.setSelectedRange(NSRange(location: range.location + (prefix + value).utf16.count, length: 0))
+        textView.typingAttributes = attributes; activeElement = element
+    }
+
     @discardableResult
     func handleCommand(_ selector: Selector, in textView: NSTextView) -> Bool {
         guard textView.isEditable, !textView.hasMarkedText() else { return false }

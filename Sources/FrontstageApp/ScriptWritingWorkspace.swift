@@ -78,13 +78,15 @@ struct ContinuousSnippet: View {
                     .font(.caption).frame(maxWidth: .infinity, alignment: .leading).buttonStyle(.plain)
                     .padding(4).background(Color(white: 0.93))
             }
-            if !compact { HStack {
+            if !compact || workspace.selectedBoardBeatID == beatID { HStack {
                 Picker("Element", selection: Binding(get: { controller.activeElement }, set: { controller.format($0) })) {
                     ForEach(ScreenplayElement.editable, id: \.self) { Text($0.label).tag($0) }
-                }.frame(width: 180)
+                }.frame(width: compact ? 120 : 180)
                 InlineFormatButtons(controller: controller)
                 Spacer()
-            }.font(.caption).disabled(scene?.isTextLocked == true) }
+            }.font(.caption).disabled(scene?.isTextLocked == true)
+            ScreenplaySuggestions(workspace: workspace, controller: controller).disabled(scene?.isTextLocked == true)
+            }
             ScreenplayEditor(html: html, controller: controller, width: compact ? 252 : workspace.paper.contentWidth,
                 typography: workspace.project.scriptLayout, onError: { workspace.errorMessage = $0 }, editable: scene?.isTextLocked != true, continuous: true)
                 .frame(height: controller.layoutHeight)
@@ -96,6 +98,9 @@ struct ScriptSidePaper: View {
     var body: some View {
         VStack(spacing: 0) {
             Text("SCRIPT").font(.caption).padding(8)
+            if let beat = workspace.selectedBoardBeat, let scene = workspace.project.scenes.first(where: { $0.id == beat.sceneID }) {
+                SceneHeadingFields(scene: scene, workspace: workspace, compact: true).padding(8)
+            }
             ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {

@@ -112,6 +112,10 @@ struct BeatPopupView: View {
                         workspace.edit("Beat Tags", key: "tags-\(beatID)") { try $0.updateBoardBeat(beatID) { $0.tags = value.boardList } }
                     }))
                 }
+                if let scene = workspace.project.scenes.first(where: { $0.id == beat.sceneID }) {
+                    SceneHeadingFields(scene: scene, workspace: workspace)
+                    Text(scene.heading.text).font(.custom("Courier", size: 12).bold())
+                }
                 Divider()
                 HStack {
                 Picker("Format", selection: Binding(get: { controller.activeElement }, set: { controller.format($0) })) {
@@ -120,6 +124,8 @@ struct BeatPopupView: View {
                 InlineFormatButtons(controller: controller)
                 Spacer()
                 }
+                ScreenplaySuggestions(workspace: workspace, controller: controller)
+                    .disabled(workspace.project.scenes.first { $0.id == beat.sceneID }?.isTextLocked == true)
                 ScreenplayEditor(html: text(\.html, label: "Snippet Text"), controller: controller, width: 432, typography: workspace.project.scriptLayout,
                     onError: { workspace.errorMessage = $0 }, editable: workspace.project.scenes.first { $0.id == beat.sceneID }?.isTextLocked != true, paper: true).id(beatID)
                     .frame(width: WorkspaceDesign.paperWidth).frame(maxWidth: .infinity)

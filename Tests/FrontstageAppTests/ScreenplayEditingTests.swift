@@ -6,6 +6,29 @@ import FrontstageCore
 @testable import FrontstageApp
 
 final class ScreenplayEditingTests: XCTestCase {
+    func testSuggestionInsertionPreservesSurroundingScriptAndRespectsLocks() async throws {
+        try await MainActor.run {
+            _ = NSApplication.shared
+            let text = NSTextView(), controller = ScreenplayEditorController()
+            text.isRichText = true; text.isEditable = true; text.allowsUndo = true
+            controller.textView = text
+            text.textStorage?.setAttributedString(try ScreenplayTextCodec.decode("<p class='sc-action'>Before.</p><p class='sc-action'>After.</p>"))
+            text.setSelectedRange(NSRange(location: 2, length: 0))
+            controller.insertCue("LENA", element: .character)
+            XCTAssertTrue(text.string.contains("Before.\nLENA\nAfter."))
+            let cue = (text.string as NSString).range(of: "LENA")
+            XCTAssertEqual(ScreenplayTextCodec.element(in: text.attributedString(), at: cue.location), .character)
+            controller.insertCue("MAYA", element: .character)
+            XCTAssertFalse(text.string.contains("LENA"))
+            XCTAssertTrue(text.string.contains("Before.\nMAYA\nAfter."))
+            controller.insertCue("CUT TO:", element: .transition)
+            XCTAssertTrue(text.string.contains("MAYA\nCUT TO:\nAfter."))
+            let original = text.string
+            text.isEditable = false; controller.insertCue("FADE OUT.", element: .transition)
+            XCTAssertEqual(text.string, original)
+        }
+    }
+
     func testSemanticHTMLRoundTripPreservesTypesTamilAndEmphasis() async throws {
         try await MainActor.run {
             _ = NSApplication.shared

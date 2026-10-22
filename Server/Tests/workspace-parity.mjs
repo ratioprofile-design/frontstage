@@ -36,6 +36,20 @@ try{
  // Export the browser-produced copy for native XCTest consumption, then verify long pagination separately.
  const pending=page.waitForEvent('download');await page.locator('#download').click();const file=await pending;await file.saveAs(path.join(output,'browser-edited.frontstage'));const saved=JSON.parse(await readFile(path.join(output,'browser-edited.frontstage'),'utf8'));
  assert.equal(saved.project.characterData.LENA.backstory,'Knows the station.');assert.equal(saved.project.beats[0].content,'<p class="sc-action">Browser screenplay text.</p>');assert.equal(saved.project.frontstageStudio.records.at(-1).body,'A portable research note.');assert.deepEqual(saved.project.customFuture,{preserve:true});
+ // Slugline controls are scene-specific across simultaneous popups and the continuous script.
+ await view('board');await page.locator('#blocks [data-beat-id="beat-1"]').dblclick();await page.locator('#blocks [data-beat-id="beat-2"]').dblclick();
+ const popup1=page.locator('.beat-popup[data-beat-id="beat-1"]'),popup2=page.locator('.beat-popup[data-beat-id="beat-2"]');
+ const otherLocation=await popup2.getByLabel('Location',{exact:true}).inputValue();
+ await popup1.getByLabel('INT. / EXT. options',{exact:true}).selectOption('EXT.');
+ await popup1.getByLabel('Location',{exact:true}).fill('ROOFTOP');await popup1.getByLabel('Location',{exact:true}).blur();
+ await popup1.getByLabel('DAY / NIGHT options',{exact:true}).selectOption('NIGHT');
+ assert.equal(await popup1.locator('.popup-slugline').innerText(),'EXT. ROOFTOP - NIGHT');assert.equal(await popup2.getByLabel('Location',{exact:true}).inputValue(),otherLocation);
+ assert.ok(await popup1.locator('datalist option[value="CONTINUOUS"]').count());
+ const popupText=popup1.locator('[data-field="snippet-editor"]');await popupText.click();await popupText.press('ControlOrMeta+End');
+ await popup1.getByLabel('Character',{exact:true}).selectOption('LENA');assert.equal(await popupText.locator('.sc-character').last().innerText(),'LENA');
+ await popup1.getByLabel('Transition',{exact:true}).selectOption('CUT TO:');assert.equal(await popupText.locator('.sc-transition').last().innerText(),'CUT TO:');assert.ok((await popupText.innerText()).includes('Browser screenplay text.'));
+ await page.screenshot({path:path.join(output,'browser-popup-slugline.png')});await popup1.locator('[data-field="close-editor"]').click();await popup2.locator('[data-field="close-editor"]').click();
+ await view('edit');assert.ok((await page.locator('.continuous-paper .script-heading').first().innerText()).includes('EXT. ROOFTOP - NIGHT'));
  await view('edit');const long=Array.from({length:1200},(_,i)=>`word${i}`).join(' ');await page.getByRole('textbox',{name:'Script: The Invitation',exact:true}).fill(long);await view('pages');assert.ok(await page.locator('.paper-sheet').count()>1);const printed=await page.locator('.page-content').allTextContents();for(const word of ['word0','word599','word1199'])assert.ok(printed.join('').includes(word));assert.equal((printed.join('').match(/word1199/g)||[]).length,1);
  const overflows=await page.locator('.page-content').evaluateAll(nodes=>nodes.filter(n=>n.scrollHeight>n.clientHeight+2).length);assert.equal(overflows,0);
  await page.screenshot({path:path.join(output,'browser-long-pages.png')});

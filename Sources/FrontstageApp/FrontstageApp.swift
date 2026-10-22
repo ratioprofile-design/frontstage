@@ -529,31 +529,69 @@ struct SceneWritingView: View {
     }
 }
 
+struct ScriptSuggestionField: View {
+    let label: String
+    @Binding var text: String
+    let options: [String]
+    var body: some View {
+        HStack(spacing: 2) {
+            TextField(label, text: $text).accessibilityLabel(label)
+            Menu { ForEach(options, id: \.self) { value in Button(value) { text = value } } }
+                label: { Image(systemName: "chevron.down") }
+                .menuStyle(.borderlessButton).fixedSize().accessibilityLabel("\(label) options")
+        }.textFieldStyle(.roundedBorder)
+    }
+}
+
 struct SceneHeadingFields: View {
     let scene: FrontstageCore.Scene
     @ObservedObject var workspace: Workspace
-
+    var compact = false
+    private var current: FrontstageCore.Scene { workspace.project.scenes.first { $0.id == scene.id } ?? scene }
     private func heading(_ key: WritableKeyPath<SceneHeading, String>) -> Binding<String> {
-        Binding(get: { (workspace.selectedScene?.heading ?? scene.heading)[keyPath: key] }, set: { value in
-            var current = workspace.selectedScene?.heading ?? scene.heading
-            current[keyPath: key] = value
-            workspace.updateScene(id: scene.id, heading: current)
+        Binding(get: { current.heading[keyPath: key] }, set: { value in
+            var updated = current.heading; updated[keyPath: key] = value
+            workspace.updateScene(id: scene.id, heading: updated)
         })
     }
-
+    @ViewBuilder private var fields: some View {
+        ScriptSuggestionField(label: "INT. / EXT.", text: heading(\.prefix), options: ["INT.", "EXT.", "INT./EXT.", "EXT./INT."])
+        ScriptSuggestionField(label: "Location", text: heading(\.location), options: Array(Set(workspace.project.scenes.map { $0.heading.location }.filter { !$0.isEmpty })).sorted())
+        ScriptSuggestionField(label: "DAY / NIGHT", text: heading(\.time), options: ["DAY", "NIGHT", "DAWN", "DUSK", "MORNING", "AFTERNOON", "EVENING", "LATER", "CONTINUOUS", "SAME TIME"])
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("SCENE HEADING").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            HStack {
-                TextField("INT. / EXT.", text: heading(\.prefix)).frame(width: 90)
-                    .accessibilityLabel("Interior or exterior")
-                TextField("Location", text: heading(\.location)).accessibilityLabel("Scene location")
-                TextField("DAY / NIGHT", text: heading(\.time)).frame(width: 110).accessibilityLabel("Time of day")
-                TextField("Auto #", text: Binding(get: { workspace.selectedScene?.sceneNumber ?? "" },
-                    set: { workspace.updateScene(id: scene.id, sceneNumber: $0) }))
-                    .frame(width: 65).accessibilityLabel("Scene number override")
-            }.textFieldStyle(.roundedBorder)
-        }
+            Text("SLUGLINE").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            if compact { VStack { fields } } else { HStack { fields } }
+            TextField("Auto #", text: Binding(get: { current.sceneNumber }, set: { workspace.updateScene(id: scene.id, sceneNumber: $0) }))
+                .frame(width: 65).accessibilityLabel("Scene number override")
+        }.disabled(current.isTextLocked)
+    }
+}
+
+struct ScreenplaySuggestions: View {
+    @ObservedObject var workspace: Workspace
+    @ObservedObject var controller: ScreenplayEditorController
+    private var names: [String] {
+        Array(Set(workspace.project.characters.map(\.name) + workspace.whiteboard.beats.flatMap(\.characters))).filter { !$0.isEmpty }.sorted()
+    }
+    var body: some View {
+        HStack {
+            Menu("Character") {
+                if names.isEmpty { Text("Add characters in People or type a new name") }
+                ForEach(names, id: \.self) { name in Button(name) { controller.insertCue(name, element: .character) } }
+            }
+            Menu("Transition") {
+                ForEach(["CUT TO:", "DISSOLVE TO:", "FADE IN:", "FADE OUT.", "FADE TO BLACK.", "SMASH CUT TO:", "MATCH CUT TO:"], id: \.self) { value in
+                    Button(value) { controller.insertCue(value, element: .transition) }
+                }
+            }
+            Menu("More") {
+                ForEach(["(beat)", "(quietly)", "(into phone)"], id: \.self) { value in Button(value) { controller.insertCue(value, element: .parenthetical) } }
+                Divider()
+                ForEach(["CLOSE ON", "ANGLE ON", "INSERT", "POV"], id: \.self) { value in Button(value) { controller.insertCue(value, element: .shot) } }
+            }
+        }.font(.caption)
     }
 }
 

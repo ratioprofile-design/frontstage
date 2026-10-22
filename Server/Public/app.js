@@ -1,5 +1,5 @@
 import { mountWorkspaces } from './workspaces.js';
-import { splitAtCaret, screenplayToolbar } from './screenplay-editor.js';
+import { splitAtCaret, screenplayToolbar, sluglineFields, characterNames } from './screenplay-editor.js';
 import { splitBeat, scriptSegments, heading } from './workspace-model.js';
 import { mergeDocuments } from './merge.js';
 import { apiOrigin as configuredOrigin } from './config.js';
@@ -328,9 +328,10 @@ function render() {
     const line = document.createElementNS('http://www.w3.org/2000/svg', 'path'), x = 110 + marker.unit * 120;
     line.setAttribute('d', `M${x},0 V${g.height}`); line.setAttribute('stroke', '#4d8ed6'); line.setAttribute('stroke-dasharray', '3 5'); $('links').append(line);
   }
+  renderSideSlugline();
   if(!editingSide) for (const segment of scriptSegments(doc)) {
     $('snippet-list').append(element('h3',`${segment.number}  ${heading(segment.scene)}${segment.continuation?' (CONTINUED)':''}`,'script-heading'));
-    for(const id of segment.beatIDs){const beat=board().beats.find(b=>b.id===id),text=element('div',undefined,'side-script-text script-text');text.innerHTML=cleanHTML(beat.html);text.dataset.scriptBeat=id;text.tabIndex=0;text.setAttribute('aria-label',`Edit script: ${beat.title}`);text.contentEditable=current.access!=='reader'&&!segment.scene.frontstageTextLocked;text.setAttribute('role','textbox');text.onfocus=()=>{selected=id;selectedBeats=new Set([id]);highlightScript();document.querySelectorAll('[data-beat-id]').forEach(n=>n.classList.toggle('selected',n.dataset.beatId===id));};text.oninput=()=>edit(()=>{board().beats.find(b=>b.id===id).html=cleanHTML(text.innerHTML);});screenplayToolbar(text,()=>text.dispatchEvent(new Event('input')),text.contentEditable==='true');text.ondblclick=()=>openEditor(id);$('snippet-list').append(text);}
+    for(const id of segment.beatIDs){const beat=board().beats.find(b=>b.id===id),text=element('div',undefined,'side-script-text script-text');text.innerHTML=cleanHTML(beat.html);text.dataset.scriptBeat=id;text.tabIndex=0;text.setAttribute('aria-label',`Edit script: ${beat.title}`);text.contentEditable=current.access!=='reader'&&!segment.scene.frontstageTextLocked;text.setAttribute('role','textbox');text.onfocus=()=>{selected=id;selectedBeats=new Set([id]);highlightScript();document.querySelectorAll('[data-beat-id]').forEach(n=>n.classList.toggle('selected',n.dataset.beatId===id));};text.oninput=()=>edit(()=>{board().beats.find(b=>b.id===id).html=cleanHTML(text.innerHTML);});const toolbar=screenplayToolbar(text,()=>text.dispatchEvent(new Event('input')),text.contentEditable==='true',()=>characterNames(doc));toolbar.classList.add('side-screenplay-toolbar');toolbar.dataset.scriptToolbar=id;toolbar.hidden=selected!==id;$('snippet-list').append(toolbar);text.ondblclick=()=>openEditor(id);$('snippet-list').append(text);}
     if(!segment.beatIDs.length){const text=element('div',undefined,'script-text');text.innerHTML=cleanHTML(segment.html);$('snippet-list').append(text);}
   }
   for (const issue of issues) { const button = element('button', issue.text, 'issue'); button.onclick = () => { if (issue.id) choose(issue.id); }; $('issues').append(button); }
@@ -346,7 +347,16 @@ function render() {
   refreshEditors();
   workspaces.render();
 }
+function renderSideSlugline() {
+  let controls=$('side-slugline');
+  const beat=board().beats.find(b=>b.id===selected),sceneID=beat?.sceneID;
+  if(controls?.dataset.sceneId===String(sceneID)){controls.refresh();return;}
+  controls?.remove();if(sceneID==null)return;
+  controls=sluglineFields(()=>doc.project.beats.find(s=>s.id===sceneID),()=>doc.project.beats,edit,current.access!=='reader');controls.id='side-slugline';controls.dataset.sceneId=String(sceneID);$('snippet-list').before(controls);
+}
 function highlightScript(scroll = false) {
+  renderSideSlugline();
+  for(const toolbar of $('snippet-list').querySelectorAll('[data-script-toolbar]'))toolbar.hidden=toolbar.dataset.scriptToolbar!==selected;
   for (const text of $('snippet-list').querySelectorAll('[data-script-beat]')) {
     const active = text.dataset.scriptBeat === selected;
     text.classList.toggle('active-script-beat', active);
@@ -419,6 +429,10 @@ function refreshEditors(force = false) {
       if (key === 'mustBeCaused') input.checked = beat[key];
       else { const value = Array.isArray(beat[key]) ? beat[key].join(', ') : (beat[key] ?? ''); if (input.value !== value) input.value = value; }
     }
+    panel.querySelector('.slugline-fields')?.refresh();
+    const isReadOnly=current.access==='reader'||!!doc.project.beats.find(s=>s.id===beat.sceneID)?.frontstageTextLocked;
+    panel.querySelectorAll('.screenplay-toolbar select,.screenplay-toolbar button').forEach(control=>control.disabled=isReadOnly);
+    const headingNode=panel.querySelector('.popup-slugline');if(headingNode)headingNode.textContent=heading(doc.project.beats.find(s=>s.id===beat.sceneID));
     const text = panel.querySelector('[data-field="snippet-editor"]'), html = cleanHTML(beat.html);
     if (cleanHTML(text.innerHTML) !== html) text.innerHTML = html;
   }
@@ -457,10 +471,13 @@ function openEditor(id) {
     input.oninput = () => edit(() => { const target = board().beats.find(b => b.id === id); if (target) target[key] = key === 'mustBeCaused' ? input.checked : ['characters', 'tags'].includes(key) ? list(input.value) : input.value; });
   }
   field('editor-label').style.backgroundColor = /^#[a-f0-9]{6}$/i.test(beat.color) ? beat.color : '#a34eae';
-  const text = field('snippet-editor'); text.innerHTML = cleanHTML(beat.html);
+  const sceneID=beat.sceneID;
+  const controls=sluglineFields(()=>doc.project.beats.find(s=>s.id===sceneID),()=>doc.project.beats,edit,current.access!=='reader');
+  field('element').parentElement.before(controls);
+  const text = field('snippet-editor'); text.before(element('h3',heading(doc.project.beats.find(s=>s.id===sceneID)),'popup-slugline script-heading')); text.innerHTML = cleanHTML(beat.html);
   text.contentEditable = current.access === 'reader' || doc.project.beats.find(s => s.id === beat.sceneID)?.frontstageTextLocked ? 'false' : 'true';
   text.oninput = () => { const html = cleanHTML(text.innerHTML); edit(() => { const target = board().beats.find(b => b.id === id); if (target) target.html = html; }); };
-  field('element').parentElement.replaceWith(screenplayToolbar(text, () => text.dispatchEvent(new Event('input')), text.contentEditable === 'true'));
+  field('element').parentElement.replaceWith(screenplayToolbar(text, () => text.dispatchEvent(new Event('input')), text.contentEditable === 'true',()=>characterNames(doc)));
   const place = (x, y) => {
     const rect = panel.getBoundingClientRect();
     panel.style.left = `${Math.max(8, Math.min(x, innerWidth - rect.width - 8))}px`;

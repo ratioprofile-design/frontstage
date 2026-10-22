@@ -2,7 +2,7 @@ import { workspaceDesign as design } from './workspace-design.js';
 import * as model from './workspace-model.js';
 import { baminiPairs } from './bamini.js';
 import { paginateParagraphs } from './pagination.js';
-import { screenplayToolbar } from './screenplay-editor.js';
+import { screenplayToolbar, sluglineFields, characterNames } from './screenplay-editor.js';
 const el=(tag,text,className)=>{const e=document.createElement(tag);if(text!=null)e.textContent=text;if(className)e.className=className;return e;};
 const $=id=>document.getElementById(id);
 const download=(name,data,type='text/plain')=>{const url=URL.createObjectURL(new Blob([data],{type})),a=el('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
@@ -49,19 +49,19 @@ export function mountWorkspaces(api) {
     const current=currentScene();
     if(current){const fields=el('div',null,'writing-scene-fields');
       fields.append(field('Scene title',current.title,(v,d)=>model.scene(d,current.id).title=v),field('Synopsis',current.summary,(v,d)=>model.scene(d,current.id).summary=v));
-      for(const[key,title,fallback]of[['prefix','INT. / EXT.','INT.'],['location','Location',''],['time','DAY / NIGHT','DAY']])fields.append(field(title,current.slug?.[key]??fallback,(v,d)=>{const s=model.scene(d,current.id);if(s.frontstageTextLocked)throw Error('Unlock the scene heading before changing it.');(s.slug||={})[key]=v;}));
+      fields.append(sluglineFields(()=>model.scene(doc(),current.id),()=>scenes(),action=>change(()=>action(),true),!readonly()));
       fields.append(field('Scene number',current.sceneNumber,(v,d)=>{const s=model.scene(d,current.id);if(s.frontstageTextLocked)throw Error('Unlock the scene heading before changing it.');s.sceneNumber=v;}));wrap.append(fields);
     }
     const segments=model.scriptSegments(doc());if(!segments.length){wrap.append(empty('Your next story starts here','Add a scene or a beat to begin.'),button('Add Scene',()=>api.addScene(),true));return;}
     const desk=el('div',null,'continuous-desk'),sheet=el('div',null,'continuous-paper');desk.append(sheet);wrap.append(desk);applyTypography(sheet);
     for(const segment of segments){
       const s=segment.scene,heading=el('h3',`${segment.number}  ${model.heading(s)}${segment.continuation?' (CONTINUED)':''}`,'script-heading');sheet.append(heading);
-      heading.onclick=()=>{sceneID=s.id;api.selectScene(s.id);};
+      heading.onclick=()=>{sceneID=s.id;api.selectScene(s.id);render();};
       for(const id of segment.beatIDs){const beat=model.board(doc()).beats.find(b=>b.id===id),block=el('section',null,'script-snippet'),name=el('button',beat.title,'snippet-heading');name.onclick=()=>api.openBeat(id);block.append(name);
         const text=el('div',null,'script-text');text.contentEditable=!(readonly()||s.frontstageTextLocked);text.setAttribute('role','textbox');text.setAttribute('aria-label',`Script: ${beat.title}`);text.innerHTML=api.cleanHTML(beat.html);text.dataset.beatId=id;
         const changed=()=>{if(text.isComposing)return;change(d=>{const target=model.board(d).beats.find(b=>b.id===id);if(target)target.html=api.cleanHTML(text.innerHTML);});};
         text.oncompositionstart=()=>text.isComposing=true;text.oncompositionend=()=>{text.isComposing=false;changed();};text.oninput=changed;
-        block.append(screenplayToolbar(text,changed,text.contentEditable==='true'),text);sheet.append(block);
+        block.append(screenplayToolbar(text,changed,text.contentEditable==='true',()=>characterNames(doc())),text);sheet.append(block);
       }
       if(!segment.beatIDs.length){const p=el('div',null,'script-text');p.innerHTML=api.cleanHTML(segment.html);sheet.append(p);}
     }

@@ -16,3 +16,18 @@
 #board-area footer{overflow-x:auto;white-space:nowrap;flex-shrink:0}#board-area footer>*{flex-shrink:0}
 
 .side-script-text.active-script-beat { box-shadow: -4px 0 0 #227bc4; background-color: #edf6ff; }
+
+.slugline-fields { display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:8px; }
+.slugline-fields strong { flex-basis:100%; font-size:10px; }
+.slugline-fields label { flex:1; min-width:80px; font-size:10px; }
+.slugline-fields input { display:block; width:100%; min-width:0; box-sizing:border-box; }
+#side-slugline label { flex-basis:100%; }
+.screenplay-toolbar { flex-wrap:wrap; }
+.screenplay-toolbar select { max-width:150px; }
+.popup-slugline { background:white; color:black; margin:0; padding:16px 30px; font-family:Courier,monospace; }
+
+.slugline-combo { display:flex; gap:2px; }
+.slugline-combo input { flex:1; }
+.slugline-combo select { width:34px; flex:none; padding:3px; }
+.writing-scene-fields .slugline-fields { grid-column:1 / -1; }
+.side-screenplay-toolbar[hidden] { display:none; }

@@ -42,3 +42,9 @@ The optional side script is continuous white screenplay paper with scene heading
 - Selecting a beat marks its screenplay passage in the side paper and scrolls it into view.
 - Board moves apply left-to-right narrative order, with top-to-bottom lane/card order for horizontal ties. Automatic script scene numbers follow first appearance, top to bottom; explicit scene numbers and continuation identities remain intact.
 - Portable model tests and Chromium parity coverage exercise lane transfer, locks, order, highlight and undo. Native acceptance coverage also drives an actual canvas drag.
+
+### Sluglines and screenplay dropdowns
+
+Popup editors, Write and the board-side script expose scene-owned INT./EXT., location and time-of-day controls. Dropdowns suggest standard prefixes/times and existing locations while allowing custom text. Each popup binds to its own scene, including when several popups are open. Locked scripts disable heading changes.
+
+Character, transition, parenthetical and shot choices insert formatted paragraphs without replacing surrounding action/dialogue. Element selection still offers action, character, dialogue, parenthetical, transition, shot and lyrics. Side-paper tools follow the active beat. Browser parity tests cover simultaneous popup heading isolation and formatted insertion; native editor tests cover insertion between existing paragraphs and read-only behavior.
