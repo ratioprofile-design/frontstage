@@ -638,7 +638,7 @@ extension Project {
             }
             for i in board.beats.indices where ids.contains(board.beats[i].id) { board.beats[i].blockID = group.id; board.beats[i].position = nil }
             let occupied = Set(board.beats.map(\.blockID)), parents = Set(board.blocks.compactMap(\.parentID))
-            board.blocks.removeAll { $0.standalone == true && !occupied.contains($0.id) && !parents.contains($0.id) }
+            board.blocks.removeAll { ($0.standalone == true || $0.containerKind == "beatGroup") && !occupied.contains($0.id) && !parents.contains($0.id) }
             board.blocks.append(group)
         }
     }

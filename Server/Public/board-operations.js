@@ -148,7 +148,7 @@ export function groupBeats(source, ids, id) {
   else if(owners.every(b=>b.parentID===first.parentID)&&first.parentID)group.parentID=first.parentID;
   for(const beat of members){beat.blockID=id;delete beat.position;}
   const occupied=new Set(board.beats.map(b=>b.blockID)),parents=new Set(board.blocks.map(b=>b.parentID));
-  board.blocks=board.blocks.filter(b=>!b.standalone||occupied.has(b.id)||parents.has(b.id));board.blocks.push(group);return board;
+  board.blocks=board.blocks.filter(b=>(!b.standalone&&b.containerKind!=='beatGroup')||occupied.has(b.id)||parents.has(b.id));board.blocks.push(group);return board;
 }
 export function beatSize(text,maximumWidth) {
   const segmenter=new Intl.Segmenter(undefined,{granularity:'grapheme'}),limit=Math.max(1,Math.floor((maximumWidth-18)/6.7)),lines=text.split('\n').map(s=>Math.max(1,[...segmenter.segment(s)].length));

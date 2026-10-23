@@ -38,6 +38,9 @@ extension Project {
         } else if board.usesBlocks(layerID) && parent == nil {
             throw ProjectError.invalidProject("This layer uses blocks. Drop inside a block")
         }
+        if board.layers.first(where: { $0.id == layerID })?.useBlocks == nil && !board.blocks.contains(where: { $0.layerID == layerID }) {
+            try candidate.setLayerUsesBlocks(layerID, enabled: false)
+        }
         if kind == .beat {
             let id = try candidate.addBoardBeat(blockID: parentID, layerID: layerID, position: position)
             try candidate.editWhiteboard { board in

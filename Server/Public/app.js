@@ -127,7 +127,7 @@ function initializeBoard(document) {
   if (!document.project.frontstageWhiteboard) {
     const beats = document.project.beats;
     document.project.frontstageWhiteboard = {
-      version: 1, layers: [{ id: 'main', name: 'Main Layer', height: 360, collapsed: false, locked: false, unused: false }, { id: 'unused', name: 'Unused', height: 300, collapsed: false, locked: false, unused: true }],
+      version: 1, layers: [{ ...(beats.length?{}:{useBlocks:false}), id: 'main', name: 'Main Layer', height: 360, collapsed: false, locked: false, unused: false }, { id: 'unused', name: 'Unused', height: 300, collapsed: false, locked: false, unused: true }],
       blocks: beats.map((b, i) => ({ id: `block-${b.id}`, name: b.title, layerID: 'main', position: { x: b.x || i * 260, y: 60 }, width: 224, collapsed: false, locked: false })),
       beats: beats.map((b, i) => ({ id: `scene-${b.id}`, sceneID: b.id, blockID: `block-${b.id}`, title: b.title, synopsis: b.summary || '', html: b.content || '', kind: 'story', color: '#a34eae', characters: b.characters || [], tags: [], mustBeCaused: false, omitted: !!b.isDisabled, locked: false, order: i, start: i * 1.5, duration: 1.5 })),
       dependencies: (document.project.connections || []).filter(l => beats.some(b => b.id === l.from) && beats.some(b => b.id === l.to)).map(l => ({ id: uuid(), cause: `scene-${l.from}`, effect: `scene-${l.to}`, reason: l.label || '', reference: l.frontstageKind === 'reference' })),
