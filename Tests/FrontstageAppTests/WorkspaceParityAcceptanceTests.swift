@@ -65,11 +65,29 @@ final class WorkspaceParityAcceptanceTests: XCTestCase {
             XCTAssertGreaterThan(canvasRect.height, 100)
             XCTAssertTrue(sideView.bounds.insetBy(dx: -1, dy: -1).contains(canvasRect), "Compact windows must keep the board inside the visible workspace")
             try capture(sideView, name: "board-compact")
+            let inlineLayer = try XCTUnwrap(workspace.whiteboard.layers.first)
+            let inlineCount = workspace.whiteboard.beats.count
+            canvas.beginInlineBeat(layerID: inlineLayer.id, position: .init(x: 700, y: 120))
+            let draft = try XCTUnwrap(canvas.subviews.compactMap { $0 as? NSTextField }.first)
+            draft.stringValue = "Inline native beat"
+            XCTAssertTrue(canvas.control(draft, textView: NSTextView(), doCommandBy: #selector(NSResponder.insertNewline(_:))))
+            XCTAssertEqual(workspace.whiteboard.beats.count, inlineCount + 1)
+            XCTAssertTrue(workspace.whiteboard.beats.contains { $0.title == "Inline native beat" })
+            let nextDraft = try XCTUnwrap(canvas.subviews.compactMap { $0 as? NSTextField }.first)
+            XCTAssertTrue(canvas.control(nextDraft, textView: NSTextView(), doCommandBy: #selector(NSResponder.cancelOperation(_:))))
+            XCTAssertEqual(workspace.whiteboard.beats.count, inlineCount + 1)
+            XCTAssertFalse(canvas.subviews.contains { $0 is NSTextField })
             workspace.popup.open("beat-1", workspace: workspace)
             let popup = try XCTUnwrap(workspace.popup.panel?.contentView)
             popup.layoutSubtreeIfNeeded()
             RunLoop.main.run(until: Date().addingTimeInterval(0.15))
             try capture(popup, name: "popup")
+            XCTAssertTrue(workspace.popup.panel?.firstResponder === workspace.popup.controller?.textView, "Named beats open directly in the screenplay editor")
+            let panel = try XCTUnwrap(workspace.popup.panel)
+            let escape = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: panel.windowNumber, context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
+            panel.sendEvent(escape)
+            XCTAssertNil(workspace.popup.panels["beat-1"])
+
         }
     }
 }

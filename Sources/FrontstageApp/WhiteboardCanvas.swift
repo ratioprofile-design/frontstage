@@ -26,7 +26,7 @@ struct WhiteboardCanvas: NSViewRepresentable {
 }
 
 @MainActor
-final class NativeWhiteboard: NSView {
+final class NativeWhiteboard: NSView, NSTextFieldDelegate {
     weak var workspace: Workspace?
     var board = Whiteboard() { didSet { geometry = WhiteboardLayout(board) } }
     private var geometry = WhiteboardLayout(Whiteboard())
@@ -50,6 +50,48 @@ final class NativeWhiteboard: NSView {
     private var contextBeat: String?
     private var contextBlock: String?
     private var contextPoint = BoardPoint()
+    private var inlineField: NSTextField?
+    private var inlineDestination: (layer: String, position: BoardPoint, parent: String?)?
+    func beginInlineBeat(layerID: String, position: BoardPoint, parentID: String? = nil) {
+        guard let workspace, let layer = board.layers.first(where: { $0.id == layerID }), !layer.locked else { return }
+        guard !board.usesBlocks(layerID) || parentID != nil else { workspace.errorMessage = "Create beats inside a block on this layer"; return }
+        if let parentID, board.isBlockLocked(parentID) { return }
+        inlineField?.removeFromSuperview()
+        let field = NSTextField(string: "")
+        field.placeholderString = "Beat name"; field.setAccessibilityLabel("New beat name")
+        field.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        field.backgroundColor = .systemPurple; field.textColor = .white
+        field.frame = NSRect(x: (position.x + 110 - board.viewport.origin.x) * zoom,
+            y: (position.y + (geometry.layerRects[layerID]?.y ?? 0) - board.viewport.origin.y) * zoom,
+            width: max(140, 224 * zoom), height: 28)
+        field.delegate = self; inlineField = field; inlineDestination = (layerID, position, parentID)
+        addSubview(field); window?.makeFirstResponder(field)
+    }
+    private func finishInlineBeat(next: Bool, cancel: Bool = false) {
+        guard let field = inlineField, let destination = inlineDestination else { return }
+        let title = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        inlineField = nil; inlineDestination = nil; field.delegate = nil; field.removeFromSuperview()
+        guard !cancel, !title.isEmpty, let workspace else { window?.makeFirstResponder(self); return }
+        var created: String?
+        workspace.edit("Create Beat") { project in
+            let id = try project.createBoardItem(.beat, layerID: destination.layer, position: destination.position, parentID: destination.parent)
+            try project.updateBoardBeat(id) { $0.title = title }; created = id
+        }
+        guard let created else { return }
+        board = workspace.whiteboard; workspace.selectBoardBeat(created); selection = [created]; selected?(selection, [])
+        if next {
+            let height = geometry.beatRects[created]?.height ?? 28
+            beginInlineBeat(layerID: destination.layer, position: .init(x: destination.position.x, y: destination.position.y + height + 12), parentID: destination.parent)
+        }
+        needsDisplay = true
+    }
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        if commandSelector == #selector(NSResponder.insertNewline(_:)) { finishInlineBeat(next: true); return true }
+        if commandSelector == #selector(NSResponder.cancelOperation(_:)) { finishInlineBeat(next: false, cancel: true); return true }
+        return false
+    }
+    func controlTextDidEndEditing(_ obj: Notification) { finishInlineBeat(next: false) }
+
     private func paletteKind(_ sender: NSDraggingInfo) -> BoardPaletteItem? {
         guard let value = sender.draggingPasteboard.string(forType: .string), value.hasPrefix("frontstage-palette:") else { return nil }
         return BoardPaletteItem(rawValue: String(value.dropFirst("frontstage-palette:".count)))
@@ -212,6 +254,12 @@ final class NativeWhiteboard: NSView {
         viewStart = point; dragStart = worldPoint; dragDelta = .init()
         if spaceHeld || event.modifierFlags.contains(.option) { panStart = board.viewport.origin; return }
         if drawingMode { stroke = [worldPoint]; return }
+        if event.clickCount == 2, geometry.hitBeat(worldPoint) == nil {
+            let layer = layerAt(worldPoint)
+            let parent = hitBlock(worldPoint).flatMap { id in board.blocks.first { $0.id == id && $0.standalone != true }?.id }
+            beginInlineBeat(layerID: layer.id, position: .init(x: max(0, worldPoint.x - 110), y: max(32, worldPoint.y - (geometry.layerRects[layer.id]?.y ?? 0))), parentID: parent)
+            return
+        }
         if let id = hitBlock(worldPoint), let rect = geometry.blockRects[id],
            abs(worldPoint.x - rect.maxX) <= 7 / zoom, worldPoint.y >= rect.y, !board.isBlockLocked(id) {
             resizingBlock = id; resizeWidth = board.blocks.first { $0.id == id }?.width ?? rect.width

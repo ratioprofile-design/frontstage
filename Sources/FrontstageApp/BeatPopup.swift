@@ -4,6 +4,14 @@ import SwiftUI
 import FrontstageCore
 
 @MainActor
+private final class BeatEditorPanel: NSPanel {
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown, event.keyCode == 53 { close(); return }
+        super.sendEvent(event)
+    }
+}
+
+@MainActor
 final class BeatPopupPresenter: NSObject, NSWindowDelegate {
     private(set) var panel: NSPanel?
     private(set) var beatID: String?
@@ -26,9 +34,13 @@ final class BeatPopupPresenter: NSObject, NSWindowDelegate {
 
     func open(_ id: String, workspace: Workspace, near anchor: NSRect? = nil) {
         guard let beat = workspace.whiteboard.beats.first(where: { $0.id == id }) else { return }
-        if let panel = panels[id] { panel.makeKeyAndOrderFront(nil); return }
+        if let panel = panels[id] {
+            panel.makeKeyAndOrderFront(nil)
+            if !beat.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, beat.title != "Untitled Beat", let text = controllers[id]?.textView { panel.makeFirstResponder(text) }
+            return
+        }
         let editor = ScreenplayEditorController()
-        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: WorkspaceDesign.popupWidth, height: WorkspaceDesign.popupHeight),
+        let panel = BeatEditorPanel(contentRect: NSRect(x: 0, y: 0, width: WorkspaceDesign.popupWidth, height: WorkspaceDesign.popupHeight),
             styleMask: [.titled, .closable, .resizable, .utilityWindow], backing: .buffered, defer: false)
         panel.title = "Edit Beat"
         panel.isFloatingPanel = true
@@ -85,6 +97,7 @@ struct BeatPopupView: View {
         })
     }
 
+    @FocusState private var nameFocused: Bool
     @State private var scriptExpanded = true
     @State private var showTools = false
     private var scene: FrontstageCore.Scene? { beat.flatMap { b in workspace.project.scenes.first { $0.id == b.sceneID } } }
@@ -98,7 +111,7 @@ struct BeatPopupView: View {
         if let beat {
             HStack(alignment: .top, spacing: 16) {
                 VStack(spacing: 10) {
-                    HStack { Text("Beat Name").frame(width: 80, alignment: .leading); TextField("Beat Name", text: text(\.title, label: "Beat Title")) }
+                    HStack { Text("Beat Name").frame(width: 80, alignment: .leading); TextField("Beat Name", text: text(\.title, label: "Beat Title")).focused($nameFocused) }
                     HStack { Text("Synopsis").frame(width: 80, alignment: .leading); TextField("Synopsis", text: text(\.synopsis, label: "Beat Synopsis"), axis: .vertical).lineLimit(2...3) }
                     HStack { Text("Visibility").frame(width: 80, alignment: .leading)
                         Picker("Visibility", selection: Binding(get: { beat.omitted }, set: { value in workspace.edit("Beat Visibility") { try $0.updateBoardBeat(beatID) { $0.omitted = value } } })) {
@@ -162,6 +175,11 @@ struct BeatPopupView: View {
                 Button("Close", action: dismiss).frame(width: 100).keyboardShortcut(.cancelAction)
             } else { Text("This beat was removed"); Button("Close", action: dismiss) }
         }.padding(18).textFieldStyle(.roundedBorder).background(Color(white: 0.267))
+        .onAppear {
+            if beat?.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false || beat?.title == "Untitled Beat" { nameFocused = true }
+            else { DispatchQueue.main.async { if let view = controller.textView { view.window?.makeFirstResponder(view) } } }
+        }
+        .onExitCommand(perform: dismiss)
     }
 }
 

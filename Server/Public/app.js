@@ -563,7 +563,7 @@ function openEditor(id) {
   };
   field('split-beat').onpointerdown = e => e.preventDefault();
   field('split-beat').onclick = () => { try { const [first, second] = splitAtCaret(text); let next; edit(() => { next = splitBeat(doc, id, cleanHTML(first), cleanHTML(second)); }); if (next && board().beats.some(b => b.id === next)) { refreshEditors(); openEditor(next); } } catch (e) { status(e.message); } };
-  field('beat-title').focus();
+  field(!beat.title.trim() || beat.title === 'Untitled Beat' ? 'beat-title' : 'snippet-editor').focus();
 }
 function addBeat(standalone = false, afterID = null, asGroup = false) {
   edit(() => {
@@ -604,7 +604,7 @@ function dropStandaloneBeats(e) {
     doc.project.frontstageWhiteboard=spatialOrder(board());
   });
 }
-function createPalette(kind,layerID,position,parentID=null){
+function createPalette(kind,layerID,position,parentID=null,inlineTitle=null){
   let created=null;edit(()=>{
     const layer=board().layers.find(l=>l.id===layerID);if(!layer||layer.locked)throw Error('Unlock the destination layer.');
     if(kind==='lane'){const index=board().layers.indexOf(layer);board().layers.splice(index+1,0,{id:uuid(),name:'New Layer',height:300,collapsed:false,locked:false,unused:false,useBlocks:false});return;}
@@ -615,8 +615,8 @@ function createPalette(kind,layerID,position,parentID=null){
     if(kind!=='beat'){board().blocks.push({id:uuid(),name:kind==='group'?'Beat Group':'Untitled Block',...(kind==='group'?{containerKind:'beatGroup'}:{}),...(parent?{parentID:parent.id}:{}),layerID,position,width:kind==='block'?500:224,collapsed:false,locked:false});return;}
     let blockID=parent?.id;if(!blockID){blockID=uuid();board().blocks.push({id:blockID,name:'Beat',standalone:true,layerID,position,width:224,collapsed:false,locked:false});}
     const sceneID=Math.max(0,...doc.project.beats.map(b=>Number(b.id)))+1;doc.project.beats.push({id:sceneID,title:'Untitled Scene',content:'',slug:{prefix:'INT.',location:'',time:'DAY'},boardId:0});doc.project.nextId=sceneID+1;
-    created=uuid();board().beats.push({id:created,sceneID,blockID,title:'Untitled Beat',synopsis:'',html:'',kind:'story',color:'#a34eae',characters:[],tags:[],mustBeCaused:false,omitted:false,locked:false,order:Math.max(-1,...board().beats.map(b=>b.order))+1,start:Math.max(0,...board().beats.map(b=>b.start+b.duration)),duration:1.5,...(parent?{position:{x:Math.max(6,position.x-parent.position.x),y:Math.max(24,position.y-parent.position.y)}}:{})});selected=created;selectedBeats=new Set([created]);
-  });if(created&&board().beats.some(b=>b.id===created))openEditor(created);
+    created=uuid();board().beats.push({id:created,sceneID,blockID,title:inlineTitle??'Untitled Beat',synopsis:'',html:'',kind:'story',color:'#a34eae',characters:[],tags:[],mustBeCaused:false,omitted:false,locked:false,order:Math.max(-1,...board().beats.map(b=>b.order))+1,start:Math.max(0,...board().beats.map(b=>b.start+b.duration)),duration:1.5,...(parent?{position:{x:Math.max(6,position.x-parent.position.x),y:Math.max(24,position.y-parent.position.y)}}:{})});selected=created;selectedBeats=new Set([created]);
+  });if(created&&board().beats.some(b=>b.id===created)){if(inlineTitle===null)openEditor(created);return created;}return null;
 }
 function paletteDrop(e){
   const kind=e.dataTransfer?.getData('text/frontstage-create');if(!['lane','block','group','beat'].includes(kind))return false;
@@ -626,6 +626,31 @@ function paletteDrop(e){
   createPalette(kind,layer.id,{x:Math.max(0,x-110),y:Math.max(32,y-g.layers.get(layer.id).y)},['block','lane'].includes(kind)?null:parent?.id);return true;
 }
 for(const [id,kind]of [['add-layer','lane'],['add-block','block'],['add-group','group'],['add-beat','beat']]){const button=$(id);button.draggable=true;button.title='Drag onto the whiteboard to create a '+kind;button.ondragstart=e=>{if(current.access==='reader'){e.preventDefault();return;}e.dataTransfer.setData('text/frontstage-create',kind);e.dataTransfer.effectAllowed='copy';};}
+let inlineBeatInput=null;
+function beginInlineBeat(layerID,position,parentID=null){
+  inlineBeatInput?.remove();inlineBeatInput=null;
+  const layer=board().layers.find(l=>l.id===layerID);
+  if(current.access==='reader'||!layer||layer.locked)return;
+  if(usesBlocks(board(),layerID)&&!parentID){status('Create beats inside a block on this layer.');return;}
+  if(parentID&&locked({blockID:parentID}))return;
+  const input=element('input',undefined,'inline-beat-name');input.placeholder='Beat name';input.setAttribute('aria-label','New beat name');
+  input.style.left=(position.x+110)+'px';input.style.top=(position.y+geometry().layers.get(layerID).y)+'px';
+  $('canvas').append(input);inlineBeatInput=input;input.focus();
+  let finished=false;
+  const finish=next=>{if(finished)return;finished=true;const title=input.value.trim();input.remove();inlineBeatInput=null;
+    if(title){const id=createPalette('beat',layerID,position,parentID,title);if(id&&next){const rect=geometry().beats.get(id);beginInlineBeat(layerID,{x:position.x,y:position.y+(rect?.height??28)+12},parentID);}}
+  };
+  input.onkeydown=e=>{if(e.isComposing)return;if(e.key==='Enter'){e.preventDefault();e.stopPropagation();finish(true);}if(e.key==='Escape'){e.preventDefault();e.stopPropagation();finished=true;input.remove();inlineBeatInput=null;$('canvas').focus();}};
+  input.onblur=()=>finish(false);
+  input.ondblclick=e=>e.stopPropagation();
+}
+$('canvas').addEventListener('dblclick',event=>{
+  if(event.target.closest('[data-beat-id],.block-title,button,input'))return;
+  const frame=$('canvas').getBoundingClientRect(),g=geometry(),x=event.clientX-frame.left+$('canvas').scrollLeft,y=event.clientY-frame.top+$('canvas').scrollTop;
+  const layer=board().layers.find(l=>{const r=g.layers.get(l.id);return y>=r.y&&y<r.y+r.height;});if(!layer)return;
+  const parent=board().blocks.find(b=>b.id===event.target.closest('[data-block-id]')?.dataset.blockId&&!b.standalone);
+  beginInlineBeat(layer.id,{x:Math.max(0,x-110),y:Math.max(32,y-g.layers.get(layer.id).y)},parent?.id);
+});
 let boardMenu=null;
 function closeBoardMenu(){boardMenu?.remove();boardMenu=null;}
 $('canvas').addEventListener('contextmenu',event=>{

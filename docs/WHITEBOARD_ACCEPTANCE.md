@@ -88,3 +88,7 @@ Dragging an existing group by its title onto an ordinary block now reparents it,
 Browser right-click menus expose beat editing, script navigation, grouping, dependencies, container rename/ungroup/delete, creation and lane policy. Arrow keys and Escape navigate/dismiss the menu.
 
 The Mac board reserves bottom space for its horizontally scrollable creation/action toolbar. The script sidebar defaults narrower and its top controls scroll horizontally in compact windows. Empty screenplay sections show a writing cue, and absent character/tag metadata no longer creates an empty strip. Native acceptance captures a 1073 × 800 window and checks that the board remains within the workspace.
+
+### Inline beat creation and popup focus
+
+Double-click empty board space (or empty space inside a block/group) to enter a beat name on the board. Enter commits a nonempty name and starts another draft below it; Escape cancels the current draft without adding an empty beat. Clicking away commits a nonempty draft. Layer and container locks and block-only rules still apply. Double-clicking an existing beat opens its popup: unnamed/Untitled Beat entries focus Beat Name, named entries focus the screenplay editor. Escape closes the active popup. Browser interaction checks cover consecutive commits, cancellation and both focus paths; Mac acceptance covers inline commit/cancel, named-popup focus and Escape.

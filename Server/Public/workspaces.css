@@ -120,3 +120,6 @@ input::-webkit-calendar-picker-indicator{display:none!important;}
 .board-context-menu button{display:block;width:100%;text-align:left;border:0;background:transparent;padding:7px;}.board-context-menu button:focus,.board-context-menu button:hover{background:#555;}.board-context-menu button:disabled{opacity:.4;}
 .side-script-text:empty:before{content:attr(data-placeholder);color:#888;pointer-events:none;}
 #board-area>footer{flex-shrink:0;overflow-x:auto;white-space:nowrap;}#board-area>footer>*{flex-shrink:0;}
+
+.inline-beat-name{position:absolute;z-index:10;width:224px;background:#a34eae;color:white;border:2px solid white;font:12px monospace;padding:5px;max-width:none}.inline-beat-name::placeholder{color:#eee}
+.block.standalone{pointer-events:none}.block.standalone .beat{pointer-events:auto}
