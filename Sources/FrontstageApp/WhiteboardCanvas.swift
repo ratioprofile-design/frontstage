@@ -300,8 +300,15 @@ final class NativeWhiteboard: NSView {
             }
             let ripple = workspace?.whiteboardRipple ?? true
             let point = world(convert(event.locationInWindow, from: nil))
-            let container = board.blocks.filter { !expandedDragBlocks.contains($0.id) && !ids.contains($0.id) && $0.standalone != true && $0.containerKind != "beatGroup" && geometry.blockRects[$0.id]?.contains(point) == true }
-                .min { (geometry.blockRects[$0.id]?.width ?? 0) * (geometry.blockRects[$0.id]?.height ?? 0) < (geometry.blockRects[$1.id]?.width ?? 0) * (geometry.blockRects[$1.id]?.height ?? 0) }
+            var container: BoardBlock?
+            var smallestArea = Double.infinity
+            for block in board.blocks {
+                guard !expandedDragBlocks.contains(block.id), !ids.contains(block.id),
+                      block.standalone != true, block.containerKind != "beatGroup",
+                      let rect = geometry.blockRects[block.id], rect.contains(point) else { continue }
+                let area = rect.width * rect.height
+                if area < smallestArea { container = block; smallestArea = area }
+            }
             workspace?.edit("Move Groups or Blocks") {
                 if let container, ids.allSatisfy({ id in board.blocks.first { $0.id == id }?.containerKind == "beatGroup" }) {
                     try $0.nestBoardGroups(ids, inBlock: container.id, delta: delta)
