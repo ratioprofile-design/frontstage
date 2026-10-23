@@ -22,6 +22,7 @@ struct WhiteboardWorkspace: View {
     private var timelineEnd: Double { max(20, board.beats.map { $0.start + $0.duration }.max() ?? 20, (markers.last?.x ?? 0) / StorySequencer.pointsPerPage + 3) }
 
     var body: some View {
+        GeometryReader { viewport in
         VStack(spacing: 0) {
             HStack(spacing: 12) {
                 Text(workspace.project.name).font(.caption.weight(.semibold))
@@ -41,10 +42,13 @@ struct WhiteboardWorkspace: View {
                         }.font(.caption).padding(6).background(.cyan.opacity(0.18))
                     }
                     WhiteboardCanvas(workspace: workspace, selection: $selection, blockSelection: $blockSelection, drawing: drawing, fitRequest: fitRequest)
-                    bottomTools
-                }.frame(minWidth: 360)
+                        .frame(minHeight: 100, maxHeight: .infinity)
+                }.frame(minWidth: 240, maxWidth: .infinity, maxHeight: .infinity)
+                    .safeAreaInset(edge: .bottom, spacing: 0) { bottomTools }
                 if showProperties { properties.frame(minWidth: 210, idealWidth: 240, maxWidth: 300) }
             }
+        }
+        .frame(width: viewport.size.width, height: viewport.size.height, alignment: .topLeading)
         }
         .environment(\.colorScheme, .dark)
         .sheet(isPresented: $showMarkerEditor) { markerEditor }
@@ -60,6 +64,7 @@ struct WhiteboardWorkspace: View {
     }
 
     private var bottomTools: some View {
+        ScrollView(.horizontal, showsIndicators: true) {
         HStack(spacing: 12) {
             Button { drawing = false } label: { Image(systemName: "cursorarrow") }.tint(drawing ? .gray : .cyan)
             Button { drawing.toggle() } label: { Image(systemName: "pencil.tip") }.tint(drawing ? .cyan : .gray)
@@ -94,9 +99,10 @@ struct WhiteboardWorkspace: View {
                 Button("Apply Story Order to Script") { workspace.edit("Apply Story Order") { try $0.applyWhiteboardStoryOrder() } }
                 Button("Merge Selected Snippets") { workspace.edit("Merge Snippets") { try $0.mergeBoardBeats(selection) } }.disabled(selection.count < 2)
                 Button("Clear Annotations") { workspace.edit("Clear Drawing") { try $0.editWhiteboard { $0.strokes = [] } } }
-            } label: { Image(systemName: "ellipsis.circle") }
+            } label: { Text("Board Actions") }
             Text("\(board.beats.count) beats").foregroundStyle(.secondary)
-        }.font(.system(size: 10)).buttonStyle(.borderless).padding(7).background(Color(white: 0.2))
+        }.font(.system(size: 11)).buttonStyle(.bordered).fixedSize(horizontal: true, vertical: false).padding(7)
+        }.frame(height: 48).background(Color(white: 0.2)).accessibilityIdentifier("whiteboard-bottom-tools")
     }
 
     private var timeline: some View {

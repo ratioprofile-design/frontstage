@@ -58,3 +58,24 @@ extension Project {
         self = candidate; return container.id
     }
 }
+
+extension Project {
+    /// Reparent and translate a group and its descendants as one undoable operation.
+    public mutating func nestBoardGroups(_ ids: Set<String>, inBlock targetID: String, delta: BoardPoint) throws {
+        var candidate = self
+        let original = try whiteboard()
+        guard !ids.isEmpty, ids.allSatisfy({ id in original.blocks.contains { $0.id == id && $0.containerKind == "beatGroup" } }),
+              let target = original.blocks.first(where: { $0.id == targetID }), target.standalone != true, target.containerKind != "beatGroup", !original.isBlockLocked(targetID) else { throw ProjectError.invalidProject("Drop unlocked groups inside a block") }
+        var moving = ids
+        while true { let next = moving.union(original.blocks.filter { $0.parentID.map(moving.contains) == true }.map(\.id)); if next == moving { break }; moving = next }
+        guard !moving.contains(targetID), moving.isDisjoint(with: original.lockedBlockIDs) else { throw ProjectError.invalidProject("Cannot nest a locked group or create a container loop") }
+        try candidate.editWhiteboard { board in
+            for i in board.blocks.indices where moving.contains(board.blocks[i].id) {
+                board.blocks[i].layerID = target.layerID
+                if ids.contains(board.blocks[i].id), !(board.blocks[i].parentID.map(moving.contains) ?? false) { board.blocks[i].parentID = targetID }
+            }
+        }
+        try candidate.moveBoardBlocks(ids, delta: delta, ripple: false)
+        self = candidate
+    }
+}

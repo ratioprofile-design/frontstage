@@ -3,7 +3,7 @@ import { splitAtCaret, screenplayToolbar, sluglineFields, characterNames } from 
 import { splitBeat, scriptSegments, heading, captureRevision, restoreRevision } from './workspace-model.js';
 import { mergeDocuments } from './merge.js';
 import { apiOrigin as configuredOrigin } from './config.js';
-import { causalOrder as orderCauses, compactCausalTime, groupBlocks, ungroupBlocks, moveBlocks, moveStandaloneBeats, descendantBlocks, deleteBlocks, validateBoard, groupBeats, beatSize, moveBeatsToLayer, spatialOrder, dropBeats, pruneEmptyBeatContainers, usesBlocks } from './board-operations.js';
+import { causalOrder as orderCauses, compactCausalTime, groupBlocks, ungroupBlocks, moveBlocks, moveStandaloneBeats, descendantBlocks, deleteBlocks, validateBoard, groupBeats, beatSize, moveBeatsToLayer, spatialOrder, dropBeats, pruneEmptyBeatContainers, usesBlocks, nestGroups } from './board-operations.js';
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
 
@@ -309,7 +309,11 @@ function render() {
         title.onpointermove = null; title.onpointerup = null;
         const frame=$('canvas').getBoundingClientRect(),y=event.clientY-frame.top+$('canvas').scrollTop;
         const target=board().layers.find(l=>{const r=g.layers.get(l.id);return y>=r.y&&y<r.y+r.height;});
-        if(selectedBlocks.size&&target)edit(()=>{const dy=event.clientY-start.y+g.layers.get(block.layerID).y-g.layers.get(target.id).y;doc.project.frontstageWhiteboard=spatialOrder(moveBlocks(board(),selectedBlocks,event.clientX-start.x,dy,{layerID:target.id,ripple:$('ripple').checked}));});render();
+        if(selectedBlocks.size&&target&&Math.abs(event.clientX-start.x)+Math.abs(event.clientY-start.y)>3)edit(()=>{
+          const x=event.clientX-frame.left+$('canvas').scrollLeft,dx=event.clientX-start.x,dy=event.clientY-start.y+g.layers.get(block.layerID).y-g.layers.get(target.id).y;
+          const container=board().blocks.filter(b=>!moving.has(b.id)&&!b.standalone&&b.containerKind!=='beatGroup').filter(b=>{const r=g.blocks.get(b.id);return r&&x>=r.x&&x<=r.x+r.width&&y>=r.y&&y<=r.y+r.height;}).sort((a,b)=>{const r=g.blocks.get(a.id),s=g.blocks.get(b.id);return r.width*r.height-s.width*s.height;})[0];
+          doc.project.frontstageWhiteboard=spatialOrder(container&&[...selectedBlocks].every(id=>board().blocks.find(b=>b.id===id)?.containerKind==='beatGroup')?nestGroups(board(),selectedBlocks,container.id,dx,dy):moveBlocks(board(),selectedBlocks,dx,dy,{layerID:target.id,ripple:$('ripple').checked}));
+        });render();
       };
       title.onpointercancel = () => { title.onpointermove = null; title.onpointerup = null; render(); };
     };
@@ -360,12 +364,12 @@ function render() {
       title.style.backgroundColor=beat.color+'22';title.ondblclick=()=>openEditor(id);
       const body=element('div',undefined,'script-beat-body');title.onclick=()=>{body.hidden=!body.hidden;title.textContent=(body.hidden?'▶ ':'▼ ')+beat.title;selected=id;selectedBeats=new Set([id]);highlightScript();};
       const plain=['Content Only','Final Script'].includes(reader.display);if(!plain)section.append(title);
-      if(!plain&&(reader.characters||reader.tags))section.append(metadataChips({...beat,characters:reader.characters?beat.characters:[],tags:reader.tags?beat.tags:[]}));
+      if(!plain&&((reader.characters&&beat.characters.length)||(reader.tags&&beat.tags.length)))section.append(metadataChips({...beat,characters:reader.characters?beat.characters:[],tags:reader.tags?beat.tags:[]}));
       if(!plain&&(reader.synopsis||reader.display==='Index Cards'))section.append(element('p',beat.synopsis,'reader-synopsis'));
       body.hidden=['Collapse All','Index Cards'].includes(reader.display);
       if(reader.boundaries){const owner=board().blocks.find(b=>b.id===beat.blockID);if(!owner.standalone&&board().beats.filter(b=>b.blockID===owner.id).sort((a,b)=>a.order-b.order)[0]?.id===id)$('snippet-list').append(element('div',owner.name,'reader-boundary'));}
 
-      const text=element('div',undefined,'side-script-text script-text');text.innerHTML=cleanHTML(beat.html);text.dataset.scriptBeat=id;text.tabIndex=0;text.setAttribute('aria-label',`Edit script: ${beat.title}`);text.contentEditable=current.access!=='reader'&&!segment.scene.frontstageTextLocked;text.setAttribute('role','textbox');
+      const text=element('div',undefined,'side-script-text script-text');text.innerHTML=cleanHTML(beat.html);text.dataset.scriptBeat=id;text.dataset.placeholder='Write this beat’s screenplay here…';text.tabIndex=0;text.setAttribute('aria-label',`Edit script: ${beat.title}`);text.contentEditable=current.access!=='reader'&&!segment.scene.frontstageTextLocked;text.setAttribute('role','textbox');
       text.onfocus=()=>{selected=id;selectedBeats=new Set([id]);highlightScript();document.querySelectorAll('[data-beat-id]').forEach(n=>n.classList.toggle('selected',n.dataset.beatId===id));};
       text.oninput=()=>edit(()=>{board().beats.find(b=>b.id===id).html=cleanHTML(text.innerHTML);});screenplayToolbar(text,()=>text.dispatchEvent(new Event('input')),text.contentEditable==='true',()=>characterNames(doc));text.ondblclick=()=>openEditor(id);
       body.append(text);section.append(body);$('snippet-list').append(section);
@@ -622,6 +626,35 @@ function paletteDrop(e){
   createPalette(kind,layer.id,{x:Math.max(0,x-110),y:Math.max(32,y-g.layers.get(layer.id).y)},['block','lane'].includes(kind)?null:parent?.id);return true;
 }
 for(const [id,kind]of [['add-layer','lane'],['add-block','block'],['add-group','group'],['add-beat','beat']]){const button=$(id);button.draggable=true;button.title='Drag onto the whiteboard to create a '+kind;button.ondragstart=e=>{if(current.access==='reader'){e.preventDefault();return;}e.dataTransfer.setData('text/frontstage-create',kind);e.dataTransfer.effectAllowed='copy';};}
+let boardMenu=null;
+function closeBoardMenu(){boardMenu?.remove();boardMenu=null;}
+$('canvas').addEventListener('contextmenu',event=>{
+  event.preventDefault();closeBoardMenu();const frame=$('canvas').getBoundingClientRect(),g=geometry(),x=event.clientX-frame.left+$('canvas').scrollLeft,y=event.clientY-frame.top+$('canvas').scrollTop;
+  const beat=board().beats.find(b=>b.id===event.target.closest('[data-beat-id]')?.dataset.beatId),block=board().blocks.find(b=>b.id===event.target.closest('[data-block-id]')?.dataset.blockId),layer=board().layers.find(l=>{const r=g.layers.get(l.id);return y>=r.y&&y<r.y+r.height;});if(!layer)return;
+  const menu=element('div',undefined,'board-context-menu');boardMenu=menu;menu.setAttribute('role','menu');menu.setAttribute('aria-label','Whiteboard actions');
+  const item=(label,run,disabled=false)=>{const button=element('button',label);button.setAttribute('role','menuitem');button.disabled=disabled;button.onclick=()=>{closeBoardMenu();run();};menu.append(button);};
+  const readOnly=current.access==='reader',uneditable=readOnly||layer.locked||(block&&locked({blockID:block.id}));
+  if(beat){
+    if(!selectedBeats.has(beat.id)){selectedBeats=new Set([beat.id]);selected=beat.id;}
+    item('Edit Beat',()=>openEditor(beat.id));item('Jump to Script',()=>{$('script').hidden=false;const text=document.querySelector(`[data-script-beat="${beat.id}"]`);if(text){text.closest('.script-beat-body').hidden=false;text.scrollIntoView({block:'start'});}});
+    item('Group Selected Beats',()=>edit(()=>{doc.project.frontstageWhiteboard=groupBeats(board(),selectedBeats,uuid());}),uneditable||beat.locked);
+    item('Create Dependency From',()=>{source=beat.id;status('Select the effect beat');},uneditable||beat.locked);
+    item(beat.omitted?'Include Beat':'Omit Beat',()=>edit(()=>{beat.omitted=!beat.omitted;}),uneditable||beat.locked);
+  }
+  if(block&&!block.standalone){
+    item('Rename '+(block.containerKind==='beatGroup'?'Group':'Block'),()=>{const name=prompt('Container name',block.name);if(name?.trim())edit(()=>{block.name=name.trim();});},uneditable);
+    item(block.collapsed?'Expand Container':'Collapse Container',()=>edit(()=>{block.collapsed=!block.collapsed;}),readOnly);
+    item('Ungroup Container',()=>edit(()=>{doc.project.frontstageWhiteboard=ungroupBlocks(board(),new Set([block.id]));}),uneditable);
+    item('Delete Container and Contents',()=>edit(()=>{doc=deleteBlocks(doc,new Set([block.id]));}),uneditable);
+  }
+  const position={x:Math.max(0,x-110),y:Math.max(32,y-g.layers.get(layer.id).y)},parent=block&&!block.standalone?block.id:null;
+  for(const kind of ['beat','group','block','lane'])item('Add '+kind[0].toUpperCase()+kind.slice(1)+' Here',()=>createPalette(kind,layer.id,position,['beat','group'].includes(kind)?parent:null),uneditable||(kind==='block'&&!usesBlocks(board(),layer.id))||(['beat','group'].includes(kind)&&usesBlocks(board(),layer.id)&&!parent));
+  item(usesBlocks(board(),layer.id)?'Disable Use Blocks':'Enable Use Blocks',()=>edit(()=>{layer.useBlocks=!usesBlocks(board(),layer.id);}),readOnly||layer.locked);
+  item('Undo',()=>restoreHistory(history,future),readOnly||!history.length);
+  menu.style.left=Math.max(4,Math.min(event.clientX,window.innerWidth-260))+'px';menu.style.top=Math.max(4,Math.min(event.clientY,window.innerHeight-440))+'px';document.body.append(menu);menu.querySelector('button:not(:disabled)')?.focus();
+  menu.onkeydown=e=>{const buttons=[...menu.querySelectorAll('button:not(:disabled)')],index=buttons.indexOf(document.activeElement);if(e.key==='Escape'){closeBoardMenu();$('canvas').focus();}if(['ArrowDown','ArrowUp'].includes(e.key)){e.preventDefault();buttons[(index+(e.key==='ArrowDown'?1:buttons.length-1))%buttons.length]?.focus();}};
+});
+document.addEventListener('pointerdown',event=>{if(boardMenu&&!boardMenu.contains(event.target))closeBoardMenu();});window.addEventListener('resize',closeBoardMenu);
 function download() { if (!doc) return; const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' }); const link = element('a'); link.href = URL.createObjectURL(blob); link.download = `${doc.name || 'Story'}.frontstage`; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 1000); }
 async function authenticate(signup = false) {
   const form = new FormData($('login')); $('auth-error').textContent = '';

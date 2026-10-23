@@ -202,3 +202,10 @@ export function pruneEmptyBeatContainers(board) {
 }
 
 export function usesBlocks(board,layerID){return board.layers.find(l=>l.id===layerID)?.useBlocks===true;}
+
+export function nestGroups(source,ids,targetID,dx,dy){
+  const board=copy(source),target=board.blocks.find(b=>b.id===targetID),moving=descendantBlocks(board,ids);
+  if(!ids.size||!target||target.standalone||target.containerKind==='beatGroup'||blockLocked(board,targetID)||moving.has(targetID)||[...ids].some(id=>board.blocks.find(b=>b.id===id)?.containerKind!=='beatGroup')||[...moving].some(id=>blockLocked(board,id)))throw Error('Drop unlocked groups into a block without creating a container loop.');
+  for(const block of board.blocks)if(moving.has(block.id)){if(ids.has(block.id)&&!moving.has(block.parentID))block.parentID=targetID;block.layerID=target.layerID;}
+  return moveBlocks(board,ids,dx,dy,{layerID:target.layerID,ripple:false});
+}

@@ -115,3 +115,8 @@
 input::-webkit-calendar-picker-indicator{display:none!important;}
 
 .layer-block-policy{position:sticky;left:160px;top:6px;pointer-events:auto;font-size:10px;margin-left:12px;padding:2px 5px;background:#4449;}
+
+.board-context-menu{position:fixed;z-index:2147483647;width:250px;max-height:430px;overflow:auto;padding:5px;background:#353535;border:1px solid #888;box-shadow:0 5px 20px #0008;}
+.board-context-menu button{display:block;width:100%;text-align:left;border:0;background:transparent;padding:7px;}.board-context-menu button:focus,.board-context-menu button:hover{background:#555;}.board-context-menu button:disabled{opacity:.4;}
+.side-script-text:empty:before{content:attr(data-placeholder);color:#888;pointer-events:none;}
+#board-area>footer{flex-shrink:0;overflow-x:auto;white-space:nowrap;}#board-area>footer>*{flex-shrink:0;}

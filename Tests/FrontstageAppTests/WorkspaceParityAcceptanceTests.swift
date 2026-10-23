@@ -51,6 +51,20 @@ final class WorkspaceParityAcceptanceTests: XCTestCase {
             XCTAssertTrue(workspace.whiteboard.beats.first { $0.id == "beat-1" }?.html.contains("Side paper.") == true)
             workspace.undoProject()
             XCTAssertEqual(workspace.project, project)
+            window.setContentSize(NSSize(width: 1073, height: 800))
+            sideView.frame = NSRect(x: 0, y: 0, width: 1073, height: 800)
+            sideView.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.25))
+            sideView.layoutSubtreeIfNeeded()
+            @MainActor func findCanvas(_ view: NSView) -> NativeWhiteboard? {
+                if let canvas = view as? NativeWhiteboard { return canvas }
+                return view.subviews.lazy.compactMap { findCanvas($0) }.first
+            }
+            let canvas = try XCTUnwrap(findCanvas(sideView))
+            let canvasRect = canvas.convert(canvas.bounds, to: sideView)
+            XCTAssertGreaterThan(canvasRect.height, 100)
+            XCTAssertTrue(sideView.bounds.insetBy(dx: -1, dy: -1).contains(canvasRect), "Compact windows must keep the board inside the visible workspace")
+            try capture(sideView, name: "board-compact")
             workspace.popup.open("beat-1", workspace: workspace)
             let popup = try XCTUnwrap(workspace.popup.panel?.contentView)
             popup.layoutSubtreeIfNeeded()

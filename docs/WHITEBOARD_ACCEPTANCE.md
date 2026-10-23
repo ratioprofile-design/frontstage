@@ -80,3 +80,11 @@ Reference access: on 23 October 2026 the supplied manual host returned HTTP 403 
 - https://caudocs.hollywoodcamerawork.com/beats/creating-beats.html
 - https://caudocs.hollywoodcamerawork.com/structural-breaks/structural-breaks-overview.html
 - https://caudocs.hollywoodcamerawork.com/timeline/timeline-overview.html
+
+### Existing groups, context actions and compact windows
+
+Dragging an existing group by its title onto an ordinary block now reparents it, including across layers. All descendants adopt the destination layer; moving the destination block carries the group. Locked destinations and cycles are rejected atomically. Browser acceptance covers nesting, export, undo/redo and right-click menus; core tests cover nesting, save/reopen and subsequent block movement.
+
+Browser right-click menus expose beat editing, script navigation, grouping, dependencies, container rename/ungroup/delete, creation and lane policy. Arrow keys and Escape navigate/dismiss the menu.
+
+The Mac board reserves bottom space for its horizontally scrollable creation/action toolbar. The script sidebar defaults narrower and its top controls scroll horizontally in compact windows. Empty screenplay sections show a writing cue, and absent character/tag metadata no longer creates an empty strip. Native acceptance captures a 1073 × 800 window and checks that the board remains within the workspace.

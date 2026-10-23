@@ -143,12 +143,15 @@ struct SideScriptBeat: View {
                 Button { expanded.toggle(); workspace.selectBoardBeat(beat.id) } label: {
                     Text((expanded ? "▼ " : "▶ ") + beat.title).font(.system(size: 16)).frame(maxWidth: .infinity, alignment: .leading).padding(9)
                 }.buttonStyle(.plain).background(Color(boardHex: beat.color).opacity(0.2))
-                if settings.characters || settings.tags {
+                if (settings.characters && !beat.characters.isEmpty) || (settings.tags && !beat.tags.isEmpty) {
                     BeatReferenceChips(characters: settings.characters ? beat.characters : [], tags: settings.tags ? beat.tags : []).padding(8).frame(maxWidth: .infinity, alignment: .leading).background(Color(white: 0.94))
                 }
                 if settings.synopsis || settings.display == "Index Cards" { Text(beat.synopsis).padding(8) }
             }
             if plain || (expanded && settings.display != "Index Cards") {
+                if beat.html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("Write this beat’s screenplay here…").font(.custom("Courier", size: 14)).foregroundStyle(.secondary).padding(.horizontal, settings.inset).padding(.top, 10)
+                }
                 ContinuousSnippet(workspace: workspace, sceneID: beat.sceneID, beatID: beat.id, controller: workspace.scriptController("reader-" + beat.id), compact: true, readerWidth: max(180, width - settings.inset * 2), readerZoom: settings.zoom)
                     .padding(.horizontal, settings.inset).padding(.vertical, 12)
             }
@@ -169,6 +172,7 @@ struct ScriptSidePaper: View {
         return query.isEmpty || ([beat.title, beat.synopsis, beat.html] + beat.characters + beat.tags).joined(separator: " ").localizedCaseInsensitiveContains(query)
     }
     private var tools: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: 12) {
             Menu {
                 Section("Beat Display") { ForEach(["Expand All", "Index Cards", "Collapse All", "Content Only", "Final Script"], id: \.self) { mode in Button(mode) { display(mode) } } }
@@ -198,11 +202,12 @@ struct ScriptSidePaper: View {
                 Toggle("Follow Selected Beat", isOn: $workspace.reader.followSelection)
                 Button("Full Screen") { NSApp.keyWindow?.toggleFullScreen(nil) }
             } label: { Label("Options", systemImage: "gearshape") }
-        }.labelStyle(.titleOnly).font(.system(size: 11)).padding(8).background(Color(white: 0.2))
+        }.labelStyle(.titleAndIcon).font(.system(size: 11)).fixedSize(horizontal: true, vertical: false).padding(8)
+        }.frame(height: 44).background(Color(white: 0.2)).accessibilityIdentifier("script-reader-tools")
     }
     var body: some View {
         VStack(spacing: 0) {
-            tools
+            tools.frame(maxWidth: .infinity, alignment: .leading)
             TextField("Filter script, characters or tags", text: $workspace.reader.filter).textFieldStyle(.roundedBorder).padding(6)
             GeometryReader { geometry in
                 ScrollViewReader { proxy in

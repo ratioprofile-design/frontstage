@@ -397,7 +397,7 @@ struct WorkspaceView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $columns) {
             ScriptSidePaper(workspace: workspace)
-                .navigationSplitViewColumnWidth(min: 360, ideal: 560, max: 800)
+                .navigationSplitViewColumnWidth(min: 320, ideal: 460, max: 700)
         } detail: {
             Group {
             if workspace.mode == .shared {

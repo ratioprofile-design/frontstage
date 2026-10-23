@@ -114,6 +114,17 @@ try{
  const blockLane=paletteBoard.layers.find(l=>l.name==='New Layer');assert.equal(blockLane.useBlocks,true);
  const placedGroup=paletteBoard.blocks.find(b=>b.layerID===blockLane.id&&b.containerKind==='beatGroup');assert.equal(placedGroup.parentID,newBlockID);assert.equal(paletteBoard.beats.filter(b=>b.blockID===placedGroup.id).length,1);
  await page.screenshot({path:path.join(output,'browser-block-layer-palette.png')});
+ // Existing group title drags must establish containment, not just overlap the block.
+ const existingGroup=page.locator(`[data-block-id="${group.id}"] .block-title`);await existingGroup.scrollIntoViewIfNeeded();
+ let from=await existingGroup.boundingBox();await newBlock.scrollIntoViewIfNeeded();let to=await newBlock.boundingBox();from=await existingGroup.boundingBox();
+ await page.mouse.move(from.x+15,from.y+8);await page.mouse.down();await page.mouse.move(to.x+160,to.y+90,{steps:12});await page.mouse.up();
+ const nestedDownload=page.waitForEvent('download');await page.locator('#download').click();await(await nestedDownload).saveAs(path.join(output,'nested-edited.frontstage'));
+ const nestedBoard=JSON.parse(await readFile(path.join(output,'nested-edited.frontstage'),'utf8')).project.frontstageWhiteboard;
+ assert.equal(nestedBoard.blocks.find(b=>b.id===group.id).parentID,newBlockID);assert.equal(nestedBoard.blocks.find(b=>b.id===group.id).layerID,blockLane.id);
+ await page.locator('#undo').click();await page.locator('#redo').click();
+ await page.locator('#blocks [data-beat-id="beat-2"]').click({button:'right'});await page.getByRole('menuitem',{name:'Edit Beat',exact:true}).click();await page.locator('.beat-popup.active').waitFor();await page.locator('.beat-popup.active [data-field="close-editor"]').click();
+ await newBlock.click({button:'right',position:{x:10,y:10}});await page.getByRole('menuitem',{name:'Rename Block',exact:true}).waitFor();await page.keyboard.press('Escape');assert.equal(await page.getByRole('menu',{name:'Whiteboard actions'}).count(),0);
+ await page.screenshot({path:path.join(output,'browser-nested-group.png')});
  // Navigation and new workspaces remain available after a cold offline launch.
  await page.evaluate(()=>navigator.serviceWorker.ready.then(()=>new Promise(resolve=>navigator.serviceWorker.controller?resolve():navigator.serviceWorker.addEventListener('controllerchange',resolve,{once:true}))));await context.setOffline(true);await page.reload();await page.locator('#local-mode').click();await page.getByRole('button',{name:'The Invitation · on this device',exact:true}).click();await view('people');await page.getByRole('button',{name:'LENA',exact:true}).click();assert.equal(await page.getByLabel('Backstory',{exact:true}).inputValue(),'Knows the station.');
  assert.deepEqual(errors,[]);await writeFile(path.join(output,'index.html'),'<!doctype html><meta charset="utf-8"><title>Frontstage page parity</title><style>body{font:14px system-ui;background:#303133;color:white}section{margin:24px}article{display:flex;gap:16px}figure{margin:0;width:50%}img{width:100%}h2{margin-bottom:8px}</style><h1>Same project · 1440 × 950 · Mac and browser</h1>'+[...design.pages,{id:'board-script',title:'Whiteboard side screenplay'},{id:'popup',title:'Beat popup'}].map(p=>`<section><h2>${p.title}</h2><article><figure><figcaption>Mac</figcaption><img src="mac-${p.id}.png"></figure><figure><figcaption>Browser</figcaption><img src="browser-${p.id}.png"></figure></article></section>`).join(''));

@@ -299,7 +299,15 @@ final class NativeWhiteboard: NSView {
                 delta.y += (geometry.layerRects[sourceLayer]?.y ?? 0) - (geometry.layerRects[target.id]?.y ?? 0)
             }
             let ripple = workspace?.whiteboardRipple ?? true
-            workspace?.edit("Move Blocks") { try $0.moveBoardBlocks(ids, delta: delta, layerID: sourceLayer == target.id ? nil : target.id, ripple: ripple); try $0.applyWhiteboardSpatialOrder() }
+            let point = world(convert(event.locationInWindow, from: nil))
+            let container = board.blocks.filter { !expandedDragBlocks.contains($0.id) && !ids.contains($0.id) && $0.standalone != true && $0.containerKind != "beatGroup" && geometry.blockRects[$0.id]?.contains(point) == true }
+                .min { (geometry.blockRects[$0.id]?.width ?? 0) * (geometry.blockRects[$0.id]?.height ?? 0) < (geometry.blockRects[$1.id]?.width ?? 0) * (geometry.blockRects[$1.id]?.height ?? 0) }
+            workspace?.edit("Move Groups or Blocks") {
+                if let container, ids.allSatisfy({ id in board.blocks.first { $0.id == id }?.containerKind == "beatGroup" }) {
+                    try $0.nestBoardGroups(ids, inBlock: container.id, delta: delta)
+                } else { try $0.moveBoardBlocks(ids, delta: delta, layerID: sourceLayer == target.id ? nil : target.id, ripple: ripple) }
+                try $0.applyWhiteboardSpatialOrder()
+            }
         } else if let beat = movingBeat {
             let point = world(convert(event.locationInWindow, from: nil))
             let destination = hitBlock(point)
