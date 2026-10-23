@@ -8,3 +8,5 @@ assert.equal(model.tracks.find(t=>t.kind==='heat').items.length,1);
 assert.equal(timelineModel(board,[] ,[],'time').beats[1].start,4);
 assert.equal(timelineClock(12.5),'00:12:30');
 console.log('PASS: serialized beat/time/page projections, emotion checkpoints and tension heat map');
+
+const carried=structuredClone(board);carried.beats.push({...carried.beats[1],id:'three',order:2,emotionChanges:undefined,emotionAbsoluteTags:undefined});assert.deepEqual(timelineModel(carried,[]).tracks.find(t=>t.kind==='tags').items.map(i=>i.value),[20,80,80]);

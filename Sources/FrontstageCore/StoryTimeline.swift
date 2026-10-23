@@ -65,6 +65,7 @@ public struct StoryTimeline: Sendable {
             for name in names {
                 let matching = beats.filter { (kind == "tags" ? $0.tags : $0.characters).contains(name) }
                 let color = Self.color(name)
+                let tracksEmotion = kind == "tags" && matching.contains { $0.emotionChanges?[name] != nil }
                 var emotionValue = 0.0
                 let trackItems = matching.compactMap { beat -> Item? in
                     guard var item = items.first(where: { $0.id == beat.id }) else { return nil }
@@ -72,8 +73,8 @@ public struct StoryTimeline: Sendable {
                     if kind == "tags", let change = beat.emotionChanges?[name] {
                         item.absolute = beat.emotionAbsoluteTags?.contains(name) == true
                         emotionValue = item.absolute ? change : emotionValue + change
-                        item.value = emotionValue
                     }
+                    if tracksEmotion { item.value = emotionValue }
                     item.tension = beat.tensions?[name] ?? 0
                     return item
                 }

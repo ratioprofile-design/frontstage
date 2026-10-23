@@ -16,6 +16,10 @@ final class StoryTimelineTests: XCTestCase {
         XCTAssertEqual(time.tracks.first { $0.kind == "beats" }?.items.last?.start, 4)
         XCTAssertEqual(StoryTimeline.clock(12.5), "00:12:30")
         XCTAssertEqual(try Project(data: p.encoded()), p)
+        try p.updateBoardBeat(b) { $0.emotionChanges = nil; $0.emotionAbsoluteTags = nil }
+        XCTAssertEqual(try StoryTimeline(project: p).tracks.first { $0.kind == "tags" }?.items.map(\.value), [20, 20])
+        try p.updateBoardBeat(a) { $0.timelineDuration = nil }
+        XCTAssertNil(try p.whiteboard().beats.first { $0.id == a }?.timelineDuration)
         try p.reorderTimelineBeats([b], before: a)
         XCTAssertEqual(try p.whiteboard().orderedBeats.first?.id, b)
     }

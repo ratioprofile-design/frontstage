@@ -336,7 +336,10 @@ extension Project {
                     var merged = old[id] ?? [:]
                     // Optional parent IDs need explicit removal when a block is ungrouped.
                     if key == "blocks" && current["parentID"] == nil { merged.removeValue(forKey: "parentID") }
-                    if key == "beats" && current["position"] == nil { merged.removeValue(forKey: "position") }
+                    if key == "beats" {
+                        for optional in ["position", "timelineDuration", "emotionChanges", "emotionAbsoluteTags", "tensions"] where current[optional] == nil { merged.removeValue(forKey: optional) }
+                    }
+                    if key == "blocks" && current["synopsis"] == nil { merged.removeValue(forKey: "synopsis") }
                     current.forEach { merged[$0.key] = $0.value }; return .object(merged)
                 })
             } else { fields[key] = value }
