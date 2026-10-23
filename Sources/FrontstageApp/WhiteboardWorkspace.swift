@@ -77,7 +77,7 @@ struct WhiteboardWorkspace: View {
             }
             Menu("Layer Settings") {
                 ForEach(board.layers) { layer in
-                    Toggle("\(layer.name): Use Blocks", isOn: Binding(get: { board.usesBlocks(layer.id) }, set: { enabled in workspace.edit("Layer Block Policy") { try $0.setLayerUsesBlocks(layer.id, enabled: enabled) } }))
+                    Toggle("\(layer.name): Use Blocks\(layer.useBlocks == nil && board.blocks.contains(where: { $0.layerID == layer.id && $0.standalone != true && $0.containerKind != "beatGroup" }) ? " (legacy layout)" : "")", isOn: Binding(get: { board.usesBlocks(layer.id) }, set: { enabled in workspace.edit("Layer Block Policy") { try $0.setLayerUsesBlocks(layer.id, enabled: enabled) } }))
                 }
             }
             Button("Add to Block") { workspace.addWhiteboardBeat(blockID: workspace.selectedBoardBeat?.blockID) }
