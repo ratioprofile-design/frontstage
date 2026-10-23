@@ -45,7 +45,7 @@ final class WorkspaceParityAcceptanceTests: XCTestCase {
             sideView.layoutSubtreeIfNeeded()
             RunLoop.main.run(until: Date().addingTimeInterval(0.25))
             try capture(sideView, name: "board-script")
-            let sideText = try XCTUnwrap(workspace.scriptController("beat-1").textView)
+            let sideText = try XCTUnwrap(workspace.scriptController("reader-beat-1").textView)
             XCTAssertTrue(sideText.string.contains("invitation arrives"))
             sideText.insertText("Side paper. ", replacementRange: NSRange(location: 0, length: 0))
             XCTAssertTrue(workspace.whiteboard.beats.first { $0.id == "beat-1" }?.html.contains("Side paper.") == true)

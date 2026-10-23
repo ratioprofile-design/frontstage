@@ -57,7 +57,7 @@ final class StoryWorkspaceTests: XCTestCase {
             }
             workspace.mode = .board; workspace.selectedSceneID = 3; workspace.showBoardScript = true
             let before = workspace.project
-            let view = NSHostingView(rootView: StoryWorkspaceView(workspace: workspace, boardFirst: true))
+            let view = NSHostingView(rootView: WorkspaceView(workspace: workspace))
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1440, height: 1000),
                 styleMask: [.titled, .resizable], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
@@ -69,7 +69,7 @@ final class StoryWorkspaceTests: XCTestCase {
             view.layoutSubtreeIfNeeded()
             XCTAssertEqual(workspace.project, before)
             let segment = try XCTUnwrap(before.orderedScript().first { $0.scene.id == 3 })
-            let controller = workspace.scriptController(segment.beatIDs.first ?? "scene-3")
+            let controller = workspace.scriptController("reader-" + (segment.beatIDs.first ?? "scene-3"))
             let text = try XCTUnwrap(controller.textView)
             XCTAssertTrue(text.string.contains("Someone was here before us."))
             XCTAssertEqual(text.backgroundColor, .white)

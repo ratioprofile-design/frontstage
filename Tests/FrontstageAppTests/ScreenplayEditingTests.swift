@@ -6,6 +6,23 @@ import FrontstageCore
 @testable import FrontstageApp
 
 final class ScreenplayEditingTests: XCTestCase {
+    func testTypedCompletionHandlesMultiwordNamesWithoutChangingText() async throws {
+        try await MainActor.run {
+            _ = NSApplication.shared
+            let text = NSTextView(), controller = ScreenplayEditorController()
+            controller.textView = text
+            text.textStorage?.setAttributedString(try ScreenplayTextCodec.decode("<p class='sc-character'>MARY JA</p>"))
+            text.setSelectedRange(NSRange(location: 7, length: 0)); controller.selectionChanged()
+            let coordinator = ScreenplayEditor.Coordinator(html: .constant(""), controller: controller, onError: { _ in })
+            coordinator.suggestions = [.character: ["MARY JANE", "MAYA"], .transition: ["CUT TO:"]]
+            var index = 0
+            let suggestions = coordinator.textView(text, completions: [], forPartialWordRange: NSRange(location: 5, length: 2), indexOfSelectedItem: &index)
+            XCTAssertEqual(suggestions, ["JANE"])
+            XCTAssertEqual(text.string.trimmingCharacters(in: .newlines), "MARY JA")
+            XCTAssertEqual(index, -1)
+        }
+    }
+
     func testSuggestionInsertionPreservesSurroundingScriptAndRespectsLocks() async throws {
         try await MainActor.run {
             _ = NSApplication.shared
