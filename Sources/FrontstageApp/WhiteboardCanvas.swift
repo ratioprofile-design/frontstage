@@ -13,6 +13,7 @@ struct WhiteboardCanvas: NSViewRepresentable {
     func makeNSView(context: Context) -> NativeWhiteboard {
         let view = NativeWhiteboard()
         view.workspace = workspace
+        view.registerForDraggedTypes([.string])
         return view
     }
     func updateNSView(_ view: NativeWhiteboard, context: Context) {
@@ -49,6 +50,23 @@ final class NativeWhiteboard: NSView {
     private var contextBeat: String?
     private var contextBlock: String?
     private var contextPoint = BoardPoint()
+    private func paletteKind(_ sender: NSDraggingInfo) -> BoardPaletteItem? {
+        guard let value = sender.draggingPasteboard.string(forType: .string), value.hasPrefix("frontstage-palette:") else { return nil }
+        return BoardPaletteItem(rawValue: String(value.dropFirst("frontstage-palette:".count)))
+    }
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { paletteKind(sender) == nil ? [] : .copy }
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation { draggingEntered(sender) }
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let kind = paletteKind(sender), let workspace else { return false }
+        let point = world(convert(sender.draggingLocation, from: nil)), layer = layerAt(point)
+        let parent = hitBlock(point).flatMap { id in board.blocks.first { $0.id == id && $0.standalone != true }?.id }
+        let position = BoardPoint(x: max(0, point.x - 110), y: max(32, point.y - (geometry.layerRects[layer.id]?.y ?? 0)))
+        var created: String?
+        workspace.edit("Create \(kind.rawValue.capitalized)") { created = try $0.createBoardItem(kind, layerID: layer.id, position: position, parentID: kind == .block || kind == .lane ? nil : parent) }
+        if let created, kind == .beat { workspace.selectBoardBeat(created); workspace.popup.open(created, workspace: workspace) }
+        return created != nil
+    }
+
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
 
@@ -433,8 +451,14 @@ final class NativeWhiteboard: NSView {
             if board.blocks.contains(where: { $0.parentID == contextBlock || ($0.id == contextBlock && $0.containerKind == "beatGroup") }) { item("Ungroup", #selector(ungroupContext)) }
             item("Delete Block and Contents", #selector(deleteBlockContext))
         } else { item("Add Beat Here", #selector(insertContext)) }
+        menu.addItem(.separator())
+        item(board.usesBlocks(layerAt(contextPoint).id) ? "Disable Use Blocks" : "Enable Use Blocks", #selector(toggleLayerBlocks))
         if blockSelection.count > 1 { item("Group Selected Blocks", #selector(groupContext)) }
         NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+    @objc private func toggleLayerBlocks() {
+        let layer = layerAt(contextPoint), enabled = !board.usesBlocks(layer.id)
+        workspace?.edit("Layer Block Policy") { try $0.setLayerUsesBlocks(layer.id, enabled: enabled) }
     }
     @objc private func editContextBeat() { if let id = contextBeat { openPopup(id) } }
     @objc private func jumpToSnippet() { if let id = contextBeat { workspace?.selectBoardBeat(id); workspace?.showBoardScript = true } }

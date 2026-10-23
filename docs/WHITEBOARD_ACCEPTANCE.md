@@ -68,3 +68,15 @@ The application sidebar now contains the top-aligned script reader across worksp
 Slugline fields offer typing completions without adjacent arrow menus. Character, transition, parenthetical and shot paragraphs suggest matching entries while typing; accept with Enter/Tab and dismiss with Escape. Custom values and IME composition remain supported.
 
 Dropping onto another beat creates or joins a beat group. Moving loose beats or detaching group members does not create visible blocks; empty loose-beat and automatic group containers are cleaned up. Explicitly created blocks are retained, including empty ones.
+
+### Creation palette and layer block policy
+
+Lane, Block, Group and Beat tools can be dragged onto the whiteboard in Mac and browser. A dropped lane is inserted after the destination lane; a block or group starts empty. Beats placed on flat layers remain loose. Use **Layer Settings → Use Blocks** on Mac (also available in a lane's context menu), or the lane's **Blocks: Off/On** button in the browser. Enable blocks before creating a block, then drop beats/groups inside it. Model validation rejects loose creation or movement into block-enabled layers and blocks on explicitly flat layers, including non-drag commands and import.
+
+Policy changes are atomic. Enabling blocks on a layer with loose content, or disabling them while blocks remain, is rejected without rearranging existing content. Create an empty lane, enable blocks, create a block manually, and move existing beats into it. Older projects with no policy retain their existing structure; they must explicitly enable blocks before creating new ones with the palette.
+
+Reference access: on 23 October 2026 the supplied manual host returned HTTP 403 from this execution environment. The explicitly described creation and layer rules above are implemented; exact manual-specific beat creation, structural-break semantics and timeline behavior remain unverified/pending readable manual content:
+- https://caudocs.hollywoodcamerawork.com/whiteboard/whiteboard-overview.html
+- https://caudocs.hollywoodcamerawork.com/beats/creating-beats.html
+- https://caudocs.hollywoodcamerawork.com/structural-breaks/structural-breaks-overview.html
+- https://caudocs.hollywoodcamerawork.com/timeline/timeline-overview.html

@@ -7,8 +7,11 @@ export function validateBoard(board, sceneIDs) {
   const strings = rows => Array.isArray(rows) && rows.every(s => typeof s === 'string');
   if (board?.version !== 1 || !['layers', 'blocks', 'beats', 'dependencies', 'strokes'].every(k => unique(board[k])) || !board.layers.length || !coordinate(board.viewport?.origin?.x) || !coordinate(board.viewport?.origin?.y) || !Number.isFinite(board.viewport?.zoom) || board.viewport.zoom < .15 || board.viewport.zoom > 3) fail();
   const layers = new Set(board.layers.map(l => l.id)), blocks = new Map(board.blocks.map(b => [b.id, b])), beats = new Set(board.beats.map(b => b.id));
-  for (const layer of board.layers) if (typeof layer.name !== 'string' || !Number.isFinite(layer.height) || layer.height < 100 || layer.height > 10000 || !['locked', 'collapsed', 'unused'].every(k => typeof layer[k] === 'boolean')) fail();
+  for (const layer of board.layers) if ((layer.useBlocks!=null&&typeof layer.useBlocks!=='boolean') || typeof layer.name !== 'string' || !Number.isFinite(layer.height) || layer.height < 100 || layer.height > 10000 || !['locked', 'collapsed', 'unused'].every(k => typeof layer[k] === 'boolean')) fail();
   for (const block of board.blocks) {
+    const policy=board.layers.find(l=>l.id===block.layerID)?.useBlocks,isBlock=!block.standalone&&block.containerKind!=='beatGroup';
+    if(policy===false&&isBlock)throw Error('Enable Use Blocks on the layer before creating a block.');
+    if(policy===true&&!isBlock){let parent=blocks.get(block.parentID),contained=false,seen=new Set();while(parent&&!seen.has(parent.id)){seen.add(parent.id);if(parent.layerID!==block.layerID)break;if(!parent.standalone&&parent.containerKind!=='beatGroup'){contained=true;break;}parent=blocks.get(parent.parentID);}if(!contained)throw Error('This layer uses blocks. Place beats and groups inside a block.');}
     if (!layers.has(block.layerID) || typeof block.name !== 'string' || !coordinate(block.position?.x) || !coordinate(block.position?.y) || !Number.isFinite(block.width) || block.width < 140 || block.width > 2000 || !['locked', 'collapsed'].every(k => typeof block[k] === 'boolean') || (block.parentID != null && !blocks.has(block.parentID))) fail();
     const seen = new Set([block.id]);
     for (let parent = block.parentID; parent != null; parent = blocks.get(parent)?.parentID) { if (seen.has(parent)) fail(); seen.add(parent); }
@@ -197,3 +200,5 @@ export function pruneEmptyBeatContainers(board) {
   const occupied=new Set(board.beats.map(b=>b.blockID)),parents=new Set(board.blocks.map(b=>b.parentID));
   board.blocks=board.blocks.filter(b=>(!b.standalone&&b.containerKind!=='beatGroup')||occupied.has(b.id)||parents.has(b.id));return board;
 }
+
+export function usesBlocks(board,layerID){return board.layers.find(l=>l.id===layerID)?.useBlocks===true;}

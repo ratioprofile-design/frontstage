@@ -47,7 +47,7 @@ try {
   page.once('dialog', dialog => dialog.accept('Browser Story'));
   await page.getByRole('button', { name: 'New Whiteboard', exact: true }).click();
   await page.waitForSelector('#workspace:not([hidden])');
-  await page.locator('#add-block').click();
+  await page.locator('#add-beat').click();
   await page.locator('.beat-popup.active [data-field="beat-title"]').fill('The Arrival');
   await page.locator('.beat-popup.active [data-field="snippet-editor"]').fill('The first decision.');
   await page.locator('.beat-popup.active [data-field="close-editor"]').click();
@@ -123,7 +123,7 @@ try {
   await localPage.goto(webAddress);
   await localPage.locator('#local-mode').click();
   await localPage.waitForSelector('#workspace:not([hidden])');
-  await localPage.locator('#add-block').click();
+  await localPage.locator('#add-beat').click();
   await localPage.locator('.beat-popup.active [data-field="beat-title"]').fill('Local story beat');
   await localPage.locator('.beat-popup.active [data-field="snippet-editor"]').fill('தமிழ் — stored on this device.');
   await localPage.locator('.beat-popup.active [data-field="close-editor"]').click();
@@ -146,7 +146,7 @@ try {
   assert.equal(localDocument.project.frontstageWhiteboard.beats[0].title, 'Local story beat');
   assert.ok(localDocument.project.beats[0].content.includes('local edit while offline'));
   await localContext.setOffline(false);
-  await localPage.locator('#add-block').click();
+  await localPage.locator('#add-beat').click();
   await localPage.locator('.beat-popup.active [data-field="beat-title"]').fill('Second local beat');
   await localPage.locator('.beat-popup.active [data-field="snippet-editor"]').fill('A second block.');
   await localPage.locator('.beat-popup.active [data-field="close-editor"]').click();

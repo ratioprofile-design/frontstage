@@ -13,6 +13,8 @@ public struct BoardViewport: Codable, Equatable, Sendable {
 }
 
 public struct BoardLayer: Codable, Identifiable, Equatable, Sendable {
+    /// Nil preserves legacy documents; newly created layers set an explicit policy.
+    public var useBlocks: Bool?
     public var id: String
     public var name: String
     public var height: Double
@@ -188,6 +190,20 @@ public struct Whiteboard: Codable, Equatable, Sendable {
         }
         let layerIDs = Set(layers.map(\.id)), blockIDs = Set(blocks.map(\.id)), beatIDs = Set(beats.map(\.id))
         for block in blocks {
+            if let policy = layers.first(where: { $0.id == block.layerID })?.useBlocks {
+                let isBlock = block.standalone != true && block.containerKind != "beatGroup"
+                if !policy && isBlock { throw ProjectError.invalidProject("Enable Use Blocks on this layer before adding a block") }
+                if policy && !isBlock {
+                    var parent = block.parentID.flatMap { id in blocks.first { $0.id == id } }
+                    var visited = Set<String>(), contained = false
+                    while let item = parent, visited.insert(item.id).inserted {
+                        if item.layerID != block.layerID { break }
+                        if item.standalone != true && item.containerKind != "beatGroup" { contained = true; break }
+                        parent = item.parentID.flatMap { id in blocks.first { $0.id == id } }
+                    }
+                    if !contained { throw ProjectError.invalidProject("This layer uses blocks. Place beats and groups inside a block") }
+                }
+            }
             guard layerIDs.contains(block.layerID), coordinate(block.position.x), coordinate(block.position.y), block.width.isFinite,
                   (140...2000).contains(block.width), block.parentID.map(blockIDs.contains) ?? true else { throw ProjectError.invalidProject("invalid whiteboard block") }
             var parent = block.parentID, seen: Set<String> = [block.id]
@@ -346,7 +362,12 @@ extension Project {
         // Preserve the projection taken before addScene, which otherwise introduces a duplicate legacy beat.
         var board = existing
         let destination = blockID ?? UUID().uuidString
-        if blockID == nil { board.blocks.append(BoardBlock(id: destination, name: "Untitled Block", layerID: layerID, position: position)) }
+        if blockID == nil {
+            guard existing.layers.first(where: { $0.id == layerID })?.useBlocks != true else { throw ProjectError.invalidProject("Drop the beat inside a block on this layer") }
+            var container = BoardBlock(id: destination, name: "Untitled Block", layerID: layerID, position: position)
+            if existing.layers.first(where: { $0.id == layerID })?.useBlocks == false { container.standalone = true }
+            board.blocks.append(container)
+        }
         let id = UUID().uuidString
         let last = board.orderedBeats.last
         board.beats.append(BoardBeat(id: id, sceneID: sceneID, blockID: destination, title: title, order: (last?.order ?? -1) + 1, start: (last?.start ?? -1.5) + 1.5))

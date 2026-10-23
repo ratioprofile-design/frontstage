@@ -48,7 +48,7 @@ public struct WhiteboardLayout: Sendable {
                 let members = byBlock[block.id] ?? []
                 let stacked = members.reduce(42.0) { $0 + Self.beatSize($1.title, maximumWidth: block.width - 12).height + 4 }
                 let placed = members.map { ($0.position?.y ?? 24) + Self.beatSize($0.title, maximumWidth: block.width - 12).height + 12 }.max() ?? 0
-                return block.position.y + (block.collapsed ? 32 : max(stacked, placed))
+                return block.position.y + (block.collapsed ? 32 : max(stacked, placed, layer.useBlocks == true && block.standalone != true && block.containerKind != "beatGroup" ? 180 : 60))
             }.max() ?? 0
             let layerHeight = layer.collapsed ? 38 : max(layer.height, contentHeight + 45)
             layers[layer.id] = BoardRect(x: 0, y: offset, width: 1_000_000, height: layerHeight)
@@ -57,7 +57,7 @@ public struct WhiteboardLayout: Sendable {
                     let members = byBlock[block.id] ?? []
                     let rect = BoardRect(x: 110 + block.position.x, y: offset + block.position.y,
                         width: max(block.width, members.map { ($0.position?.x ?? 6) + Self.beatSize($0.title, maximumWidth: block.width - 12).width + 12 }.max() ?? 0),
-                        height: block.collapsed ? 28 : max(60, members.reduce(32.0) { $0 + Self.beatSize($1.title, maximumWidth: block.width - 12).height + 4 }, members.map { ($0.position?.y ?? 24) + Self.beatSize($0.title, maximumWidth: block.width - 12).height + 12 }.max() ?? 0))
+                        height: block.collapsed ? 28 : max(layer.useBlocks == true && block.standalone != true && block.containerKind != "beatGroup" ? 180 : 60, members.reduce(32.0) { $0 + Self.beatSize($1.title, maximumWidth: block.width - 12).height + 4 }, members.map { ($0.position?.y ?? 24) + Self.beatSize($0.title, maximumWidth: block.width - 12).height + 12 }.max() ?? 0))
                     blocks[block.id] = rect; maximumX = max(maximumX, rect.maxX + 120)
                     if !block.collapsed {
                         var top = rect.y + 24

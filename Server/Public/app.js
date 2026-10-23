@@ -3,7 +3,7 @@ import { splitAtCaret, screenplayToolbar, sluglineFields, characterNames } from 
 import { splitBeat, scriptSegments, heading, captureRevision, restoreRevision } from './workspace-model.js';
 import { mergeDocuments } from './merge.js';
 import { apiOrigin as configuredOrigin } from './config.js';
-import { causalOrder as orderCauses, compactCausalTime, groupBlocks, ungroupBlocks, moveBlocks, moveStandaloneBeats, descendantBlocks, deleteBlocks, validateBoard, groupBeats, beatSize, moveBeatsToLayer, spatialOrder, dropBeats, pruneEmptyBeatContainers } from './board-operations.js';
+import { causalOrder as orderCauses, compactCausalTime, groupBlocks, ungroupBlocks, moveBlocks, moveStandaloneBeats, descendantBlocks, deleteBlocks, validateBoard, groupBeats, beatSize, moveBeatsToLayer, spatialOrder, dropBeats, pruneEmptyBeatContainers, usesBlocks } from './board-operations.js';
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
 
@@ -256,7 +256,7 @@ function geometry() {
       while (parent && !seen.has(parent.id)) { if (parent.collapsed) hidden = true; seen.add(parent.id); parent = board().blocks.find(b => b.id === parent.parentID); }
       if (hidden) continue;
       const children = board().beats.filter(b => b.blockID === block.id).sort((a, b) => a.order - b.order);
-      const rect = { x: block.position.x + 110, y: block.position.y + y, width: block.width, height: block.collapsed ? 28 : Math.max(60, children.reduce((h,b)=>h+beatSize(b.title,block.width-12).height+4,32)) };
+      const rect = { x: block.position.x + 110, y: block.position.y + y, width: block.width, height: block.collapsed ? 28 : Math.max(layer.useBlocks===true&&!block.standalone&&block.containerKind!=='beatGroup'?180:60, children.reduce((h,b)=>h+beatSize(b.title,block.width-12).height+4,32)) };
       blocks.set(block.id, rect); maxX = Math.max(maxX, rect.x + rect.width + 120);
       if (!block.collapsed) { let top=rect.y+24;for(const beat of children){const size=beatSize(beat.title,block.width-12);beats.set(beat.id,{x:rect.x+(beat.position?.x??6),y:beat.position?rect.y+beat.position.y:top,...size});rect.width=Math.max(rect.width,(beat.position?.x??6)+size.width+12);rect.height=Math.max(rect.height,(beat.position?.y??top-rect.y)+size.height+12);top+=size.height+4;} }
     }
@@ -287,7 +287,7 @@ function render() {
   $('layers').replaceChildren(); $('blocks').replaceChildren(); $('links').replaceChildren(); if(!editingSide)$('snippet-list').replaceChildren(); $('issues').replaceChildren();
   for (const layer of board().layers) {
     const rect = g.layers.get(layer.id), node = element('div', undefined, 'layer'); position(node, { x: 0, y: rect.y, width: g.width, height: rect.height });
-    const label = element('button', `${layer.collapsed ? '▸' : '▾'} ${layer.name}`, 'layer-label'); label.onclick = () => edit(() => { layer.collapsed = !layer.collapsed; }); node.append(label); $('layers').append(node);
+    const label = element('button', `${layer.collapsed ? '▸' : '▾'} ${layer.name}`, 'layer-label'); label.onclick = () => edit(() => { layer.collapsed = !layer.collapsed; }); node.append(label);const policy=element('button',usesBlocks(board(),layer.id)?'Blocks: On':'Blocks: Off','layer-block-policy');policy.setAttribute('aria-label',layer.name+' Use Blocks');policy.onclick=()=>edit(()=>{if(layer.locked)throw Error('Unlock the layer first.');layer.useBlocks=!usesBlocks(board(),layer.id);});node.append(policy); $('layers').append(node);
   }
   const blockOrder = [...board().blocks].sort((a, b) => { const x = g.blocks.get(a.id), y = g.blocks.get(b.id); return (y ? y.width * y.height : 0) - (x ? x.width * x.height : 0); });
   for (const block of blockOrder) {
@@ -314,6 +314,7 @@ function render() {
       title.onpointercancel = () => { title.onpointermove = null; title.onpointerup = null; render(); };
     };
     node.ondragover = e => e.preventDefault(); node.ondrop = e => {
+      if(paletteDrop(e))return;
       e.preventDefault(); e.stopPropagation(); const id = e.dataTransfer.getData('text/frontstage-beat'), moving = board().beats.find(b => b.id === id); if (!moving || locked(moving) || locked({ blockID: block.id })) return;
       const targetBeat=e.target.closest('[data-beat-id]');
       if(block.standalone && (!targetBeat || moving.blockID === block.id)){dropStandaloneBeats(e);return;}
@@ -570,6 +571,7 @@ function addBeat(standalone = false, afterID = null, asGroup = false) {
       const right = Math.max(-244, ...board().blocks.map(b => b.position.x + b.width));
       board().blocks.push({ standalone, id: blockID, name: asGroup?'Beat Group':'Untitled Block', ...(asGroup?{containerKind:'beatGroup'}:{}), layerID: previousBlock?.layerID??board().layers[0].id, position: previousBlock ? {x:previousBlock.position.x,y:previousBlock.position.y+beatSize(previous.title,previousBlock.width-12).height+12} : { x: Math.max(40, right + 60), y: 70 }, width: 224, collapsed: false, locked: false });
     }
+    const destination=board().blocks.find(b=>b.id===blockID);if(owner&&destination.standalone){destination.standalone=false;destination.containerKind='beatGroup';destination.name='Beat Group';}
     const beat = { id: uuid(), sceneID, blockID, title: 'Untitled Beat', synopsis: '', html: '', kind: 'story', color: '#a34eae', characters: [], tags: [], mustBeCaused: false, omitted: false, locked: false, order: Math.max(-1, ...board().beats.map(b => b.order)) + 1, start: Math.max(0, ...board().beats.map(b => b.start + b.duration)), duration: 1.5 };
     if(previous){const ordered=[...board().beats].sort((a,b)=>a.order-b.order),index=ordered.findIndex(b=>b.id===previous.id);beat.order=(previous.order+(ordered[index+1]?.order??previous.order+2))/2;}
     board().beats.push(beat); selected = beat.id; selectedBeats=new Set([beat.id]);
@@ -578,6 +580,7 @@ function addBeat(standalone = false, afterID = null, asGroup = false) {
 $('canvas').ondragover = e => e.preventDefault();
 $('canvas').ondrop = dropStandaloneBeats;
 function dropStandaloneBeats(e) {
+  if(paletteDrop(e))return;
   e.preventDefault();
   const id = e.dataTransfer.getData('text/frontstage-beat'), beat = board().beats.find(b => b.id === id);
   const block = board().blocks.find(b => b.id === beat?.blockID);
@@ -597,6 +600,28 @@ function dropStandaloneBeats(e) {
     doc.project.frontstageWhiteboard=spatialOrder(board());
   });
 }
+function createPalette(kind,layerID,position,parentID=null){
+  let created=null;edit(()=>{
+    const layer=board().layers.find(l=>l.id===layerID);if(!layer||layer.locked)throw Error('Unlock the destination layer.');
+    if(kind==='lane'){const index=board().layers.indexOf(layer);board().layers.splice(index+1,0,{id:uuid(),name:'New Layer',height:300,collapsed:false,locked:false,unused:false,useBlocks:false});return;}
+    const parent=board().blocks.find(b=>b.id===parentID);
+    if(parent&&(parent.layerID!==layerID||parent.standalone||locked({blockID:parentID})))throw Error('Choose an unlocked block or group.');
+    if(kind==='block'&&!usesBlocks(board(),layerID))throw Error('Enable Use Blocks on this layer before adding a block.');
+    if(kind!=='block'&&usesBlocks(board(),layerID)&&!parent)throw Error('Drop inside a block on this layer.');
+    if(kind!=='beat'){board().blocks.push({id:uuid(),name:kind==='group'?'Beat Group':'Untitled Block',...(kind==='group'?{containerKind:'beatGroup'}:{}),...(parent?{parentID:parent.id}:{}),layerID,position,width:kind==='block'?500:224,collapsed:false,locked:false});return;}
+    let blockID=parent?.id;if(!blockID){blockID=uuid();board().blocks.push({id:blockID,name:'Beat',standalone:true,layerID,position,width:224,collapsed:false,locked:false});}
+    const sceneID=Math.max(0,...doc.project.beats.map(b=>Number(b.id)))+1;doc.project.beats.push({id:sceneID,title:'Untitled Scene',content:'',slug:{prefix:'INT.',location:'',time:'DAY'},boardId:0});doc.project.nextId=sceneID+1;
+    created=uuid();board().beats.push({id:created,sceneID,blockID,title:'Untitled Beat',synopsis:'',html:'',kind:'story',color:'#a34eae',characters:[],tags:[],mustBeCaused:false,omitted:false,locked:false,order:Math.max(-1,...board().beats.map(b=>b.order))+1,start:Math.max(0,...board().beats.map(b=>b.start+b.duration)),duration:1.5,...(parent?{position:{x:Math.max(6,position.x-parent.position.x),y:Math.max(24,position.y-parent.position.y)}}:{})});selected=created;selectedBeats=new Set([created]);
+  });if(created&&board().beats.some(b=>b.id===created))openEditor(created);
+}
+function paletteDrop(e){
+  const kind=e.dataTransfer?.getData('text/frontstage-create');if(!['lane','block','group','beat'].includes(kind))return false;
+  e.preventDefault();e.stopPropagation();const frame=$('canvas').getBoundingClientRect(),g=geometry(),x=e.clientX-frame.left+$('canvas').scrollLeft,y=e.clientY-frame.top+$('canvas').scrollTop;
+  const layer=board().layers.find(l=>{const r=g.layers.get(l.id);return y>=r.y&&y<r.y+r.height;});if(!layer)return true;
+  const parent=board().blocks.find(b=>b.id===e.target.closest('[data-block-id]')?.dataset.blockId&&!b.standalone);
+  createPalette(kind,layer.id,{x:Math.max(0,x-110),y:Math.max(32,y-g.layers.get(layer.id).y)},['block','lane'].includes(kind)?null:parent?.id);return true;
+}
+for(const [id,kind]of [['add-layer','lane'],['add-block','block'],['add-group','group'],['add-beat','beat']]){const button=$(id);button.draggable=true;button.title='Drag onto the whiteboard to create a '+kind;button.ondragstart=e=>{if(current.access==='reader'){e.preventDefault();return;}e.dataTransfer.setData('text/frontstage-create',kind);e.dataTransfer.effectAllowed='copy';};}
 function download() { if (!doc) return; const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' }); const link = element('a'); link.href = URL.createObjectURL(blob); link.download = `${doc.name || 'Story'}.frontstage`; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 1000); }
 async function authenticate(signup = false) {
   const form = new FormData($('login')); $('auth-error').textContent = '';
@@ -627,8 +652,8 @@ $('timeline-toggle').onclick = () => { $('timeline').hidden = !$('timeline').hid
 $('properties-toggle').onclick = () => { $('properties').hidden = !$('properties').hidden; };
 $('script-toggle').onclick = () => { $('script').hidden = !$('script').hidden; highlightScript(true); };
 $('add-group').onclick=()=>{const ids=selectedBeats.size?selectedBeats:new Set(selected?[selected]:[]);if(!ids.size){selected=null;addBeat(false,null,true);}else edit(()=>{doc.project.frontstageWhiteboard=groupBeats(board(),ids,uuid());});};
-$('add-beat').onclick = () => addBeat(true); $('add-to-block').onclick = () => addBeat(); $('add-block').onclick = () => { selected = null; addBeat(); };
-$('add-layer').onclick = () => { const name = prompt('Layer name', 'New Layer'); if (name) edit(() => board().layers.push({ id: uuid(), name, height: 300, collapsed: false, locked: false, unused: false })); };
+$('add-beat').onclick = () => addBeat(true); $('add-to-block').onclick = () => addBeat(); $('add-block').onclick = () => {const owner=board().blocks.find(b=>b.id===board().beats.find(b=>b.id===selected)?.blockID);createPalette('block',owner?.layerID??board().layers[0].id,{x:Math.max(60,...board().blocks.map(b=>b.position.x+b.width+40)),y:70});};
+$('add-layer').onclick = () => { const name = prompt('Layer name', 'New Layer'); if (name) edit(() => board().layers.push({ id: uuid(), name, height: 300, collapsed: false, locked: false, unused: false, useBlocks:false })); };
 $('cause').onclick = () => { if (selected) { source = selected; status('Select the effect beat'); } };
 $('resolve').onclick = () => edit(resolve);
 $('fit').onclick = () => { if (!doc) return; const rect = geometry().beats.get(selected); $('canvas').scrollTo({ left: Math.max(0, (rect?.x || 110) - 100), top: Math.max(0, (rect?.y || 60) - 80), behavior: 'smooth' }); };

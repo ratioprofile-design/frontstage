@@ -94,6 +94,26 @@ try{
  assert.deepEqual(moved.dependencies,hierarchy.dependencies);
  assert.equal(await page.locator('#snippet-list .script-heading .scene-number').first().innerText(),'1');
  await page.locator('#undo').click();assert.equal(await page.locator('#blocks [data-container-kind="beatGroup"] [data-beat-id="beat-2"]').count(),1);
+ // All four creation tools support drop placement and block-only layers reject loose beats.
+ const paletteDrop=async(kind,target,x,y)=>target.evaluate((node,{kind,x,y})=>{const transfer=new DataTransfer();transfer.setData('text/frontstage-create',kind);node.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,clientX:x,clientY:y,dataTransfer:transfer}));},{kind,x,y});
+ const mainLane=page.locator('.layer').first();await mainLane.scrollIntoViewIfNeeded();let creationBox=await mainLane.boundingBox();
+ await paletteDrop('lane',page.locator('#canvas'),creationBox.x+160,creationBox.y+70);
+ const policy=page.getByRole('button',{name:'New Layer Use Blocks',exact:true});await policy.click();
+ const creationLane=policy.locator('..');await creationLane.scrollIntoViewIfNeeded();creationBox=await creationLane.boundingBox();
+ const countBefore=await page.locator('#blocks [data-beat-id]').count();await paletteDrop('beat',page.locator('#canvas'),creationBox.x+600,creationBox.y+50);assert.equal(await page.locator('#blocks [data-beat-id]').count(),countBefore);
+ const blockIDs=await page.locator('#blocks [data-block-id]').evaluateAll(nodes=>nodes.map(n=>n.dataset.blockId));
+ await paletteDrop('block',page.locator('#canvas'),creationBox.x+150,creationBox.y+70);
+ const newBlockID=await page.locator('#blocks [data-block-id]').evaluateAll((nodes,old)=>nodes.map(n=>n.dataset.blockId).find(id=>!old.includes(id)),blockIDs);
+ const newBlock=page.locator(`[data-block-id="${newBlockID}"]`);await newBlock.scrollIntoViewIfNeeded();let containerBox=await newBlock.boundingBox();
+ await paletteDrop('group',newBlock,containerBox.x+25,containerBox.y+45);
+ const newGroup=page.locator('#blocks [data-container-kind="beatGroup"]').last();containerBox=await newGroup.boundingBox();
+ await paletteDrop('beat',newGroup,containerBox.x+12,containerBox.y+30);await page.locator('.beat-popup.active [data-field="close-editor"]').click();
+ assert.equal(await page.locator('#blocks [data-beat-id]').count(),countBefore+1);
+ const paletteDownload=page.waitForEvent('download');await page.locator('#download').click();await(await paletteDownload).saveAs(path.join(output,'palette-edited.frontstage'));
+ const paletteBoard=JSON.parse(await readFile(path.join(output,'palette-edited.frontstage'),'utf8')).project.frontstageWhiteboard;
+ const blockLane=paletteBoard.layers.find(l=>l.name==='New Layer');assert.equal(blockLane.useBlocks,true);
+ const placedGroup=paletteBoard.blocks.find(b=>b.layerID===blockLane.id&&b.containerKind==='beatGroup');assert.equal(placedGroup.parentID,newBlockID);assert.equal(paletteBoard.beats.filter(b=>b.blockID===placedGroup.id).length,1);
+ await page.screenshot({path:path.join(output,'browser-block-layer-palette.png')});
  // Navigation and new workspaces remain available after a cold offline launch.
  await page.evaluate(()=>navigator.serviceWorker.ready.then(()=>new Promise(resolve=>navigator.serviceWorker.controller?resolve():navigator.serviceWorker.addEventListener('controllerchange',resolve,{once:true}))));await context.setOffline(true);await page.reload();await page.locator('#local-mode').click();await page.getByRole('button',{name:'The Invitation · on this device',exact:true}).click();await view('people');await page.getByRole('button',{name:'LENA',exact:true}).click();assert.equal(await page.getByLabel('Backstory',{exact:true}).inputValue(),'Knows the station.');
  assert.deepEqual(errors,[]);await writeFile(path.join(output,'index.html'),'<!doctype html><meta charset="utf-8"><title>Frontstage page parity</title><style>body{font:14px system-ui;background:#303133;color:white}section{margin:24px}article{display:flex;gap:16px}figure{margin:0;width:50%}img{width:100%}h2{margin-bottom:8px}</style><h1>Same project · 1440 × 950 · Mac and browser</h1>'+[...design.pages,{id:'board-script',title:'Whiteboard side screenplay'},{id:'popup',title:'Beat popup'}].map(p=>`<section><h2>${p.title}</h2><article><figure><figcaption>Mac</figcaption><img src="mac-${p.id}.png"></figure><figure><figcaption>Browser</figcaption><img src="browser-${p.id}.png"></figure></article></section>`).join(''));

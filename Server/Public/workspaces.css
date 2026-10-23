@@ -113,3 +113,5 @@
 .autofill-list{position:fixed;z-index:2147483647;background:#303030;color:white;border:1px solid #777;max-height:180px;overflow:auto;min-width:180px;box-shadow:0 4px 12px #0008;}
 .autofill-list button{display:block;width:100%;text-align:left;border:0;}.autofill-list button[aria-selected=true]{background:#2466a2;}
 input::-webkit-calendar-picker-indicator{display:none!important;}
+
+.layer-block-policy{position:sticky;left:160px;top:6px;pointer-events:auto;font-size:10px;margin-left:12px;padding:2px 5px;background:#4449;}

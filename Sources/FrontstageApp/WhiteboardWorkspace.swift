@@ -70,13 +70,16 @@ struct WhiteboardWorkspace: View {
             Text("\(Int(board.viewport.zoom * 100))%").monospacedDigit().frame(width: 36)
             Button { changeZoom(1.25) } label: { Image(systemName: "plus.magnifyingglass") }
             Spacer()
-            Menu("+ Layer") {
-                Button("Story Layer") { addLayer(unused: false) }
-                Button("Unused Layer") { addLayer(unused: true) }
+            ForEach(BoardPaletteItem.allCases, id: \.rawValue) { kind in
+                Button(kind == .lane ? "Lane" : kind.rawValue.capitalized) { createPaletteItem(kind) }
+                    .onDrag { NSItemProvider(object: ("frontstage-palette:" + kind.rawValue) as NSString) }
+                    .help("Drag onto the whiteboard to create a \(kind.rawValue)")
             }
-            Button("+ Block") { workspace.addWhiteboardBeat(standalone: false) }
-            Button("+ Beat Group") { workspace.createBeatGroup(selection.isEmpty ? Set([workspace.selectedBoardBeatID].compactMap { $0 }) : selection) }
-            Button("+ Beat") { workspace.addWhiteboardBeat() }
+            Menu("Layer Settings") {
+                ForEach(board.layers) { layer in
+                    Toggle("\(layer.name): Use Blocks", isOn: Binding(get: { board.usesBlocks(layer.id) }, set: { enabled in workspace.edit("Layer Block Policy") { try $0.setLayerUsesBlocks(layer.id, enabled: enabled) } }))
+                }
+            }
             Button("Add to Block") { workspace.addWhiteboardBeat(blockID: workspace.selectedBoardBeat?.blockID) }
                 .disabled(workspace.selectedBoardBeat == nil)
             Menu {
@@ -327,6 +330,14 @@ struct WhiteboardWorkspace: View {
     }
     private func changeZoom(_ factor: Double) {
         workspace.edit("Whiteboard View", key: "whiteboard-viewport") { try $0.editWhiteboard { $0.viewport.zoom = max(0.15, min(3, $0.viewport.zoom * factor)) } }
+    }
+    private func createPaletteItem(_ kind: BoardPaletteItem) {
+        let parent = board.blocks.first { $0.id == workspace.selectedBoardBeat?.blockID }
+        let layerID = parent?.layerID ?? board.layers.first?.id ?? "main"
+        let position = parent.map { BoardPoint(x: $0.position.x + 12, y: $0.position.y + 35) } ?? BoardPoint(x: board.viewport.origin.x + 70, y: 70)
+        var created: String?
+        workspace.edit("Create \(kind.rawValue.capitalized)") { created = try $0.createBoardItem(kind, layerID: layerID, position: position, parentID: kind == .block || kind == .lane || parent?.standalone == true ? nil : parent?.id) }
+        if let created, kind == .beat { workspace.selectBoardBeat(created); workspace.popup.open(created, workspace: workspace) }
     }
     private func addLayer(unused: Bool) {
         workspace.edit("Add Layer") { try $0.editWhiteboard { $0.layers.append(BoardLayer(name: unused ? "Unused" : "New Layer", unused: unused)) } }
