@@ -142,6 +142,19 @@ try{
  await page.locator('#blocks .beat').filter({hasText:'Untitled Beat'}).first().dispatchEvent('dblclick');
  assert.equal(await page.locator('.beat-popup.active [data-field="beat-title"]').evaluate(n=>n===document.activeElement),true);
  await page.keyboard.press('Escape');
+ // The full timeline uses serialized beat order, with independent primary/secondary counters.
+ await page.getByRole('button',{name:'Expand Timeline',exact:true}).click();
+ assert.equal(await page.locator('#canvas').isVisible(),false);
+ await page.getByLabel('Primary time base',{exact:true}).selectOption('time');
+ assert.equal(await page.getByLabel('Secondary time base',{exact:true}).inputValue(),'beats');
+ await page.getByLabel('Primary time base',{exact:true}).selectOption('pages');
+ await page.getByLabel('Primary time base',{exact:true}).selectOption('beats');
+ await page.getByLabel('Beat title lines',{exact:true}).selectOption('3');
+ await page.locator('.timeline-item.beats').first().dblclick();await page.locator('.beat-popup.active').waitFor();await page.locator('.beat-popup.active [data-field="beat-tags"]').fill('Danger');await page.keyboard.press('Escape');
+ const emotionPoint=page.locator('.timeline-item.tags').first();
+ let dialogs=0;const answer=d=>d.accept(dialogs++===0?'=80':'3');page.on('dialog',answer);await emotionPoint.click({button:'right'});await page.locator('.timeline-item.heat').first().waitFor();page.off('dialog',answer);
+ await page.screenshot({path:path.join(output,'browser-full-timeline.png')});
+ await page.getByRole('button',{name:'Restore Board',exact:true}).click();assert.equal(await page.locator('#canvas').isVisible(),true);
  // Navigation and new workspaces remain available after a cold offline launch.
  await page.evaluate(()=>navigator.serviceWorker.ready.then(()=>new Promise(resolve=>navigator.serviceWorker.controller?resolve():navigator.serviceWorker.addEventListener('controllerchange',resolve,{once:true}))));await context.setOffline(true);await page.reload();await page.locator('#local-mode').click();await page.getByRole('button',{name:'The Invitation · on this device',exact:true}).click();await view('people');await page.getByRole('button',{name:'LENA',exact:true}).click();assert.equal(await page.getByLabel('Backstory',{exact:true}).inputValue(),'Knows the station.');
  assert.deepEqual(errors,[]);await writeFile(path.join(output,'index.html'),'<!doctype html><meta charset="utf-8"><title>Frontstage page parity</title><style>body{font:14px system-ui;background:#303133;color:white}section{margin:24px}article{display:flex;gap:16px}figure{margin:0;width:50%}img{width:100%}h2{margin-bottom:8px}</style><h1>Same project · 1440 × 950 · Mac and browser</h1>'+[...design.pages,{id:'board-script',title:'Whiteboard side screenplay'},{id:'popup',title:'Beat popup'}].map(p=>`<section><h2>${p.title}</h2><article><figure><figcaption>Mac</figcaption><img src="mac-${p.id}.png"></figure><figure><figcaption>Browser</figcaption><img src="browser-${p.id}.png"></figure></article></section>`).join(''));

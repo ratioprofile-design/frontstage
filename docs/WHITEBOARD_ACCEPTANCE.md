@@ -92,3 +92,7 @@ The Mac board reserves bottom space for its horizontally scrollable creation/act
 ### Inline beat creation and popup focus
 
 Double-click empty board space (or empty space inside a block/group) to enter a beat name on the board. Enter commits a nonempty name and starts another draft below it; Escape cancels the current draft without adding an empty beat. Clicking away commits a nonempty draft. Layer and container locks and block-only rules still apply. Double-clicking an existing beat opens its popup: unnamed/Untitled Beat entries focus Beat Name, named entries focus the screenplay editor. Escape closes the active popup. Browser interaction checks cover consecutive commits, cancellation and both focus paths; Mac acceptance covers inline commit/cancel, named-popup focus and Escape.
+
+### PDF-based timeline and whiteboard pass
+
+The uploaded Causality 4.0 PDF is now the reference for printed pages 155–187. See [the implementation audit](CAUSALITY_MANUAL_IMPLEMENTATION.md) for implemented behavior, regression coverage and the remaining gaps. The earlier website-access limitation no longer prevents reading the reference. This pass does not claim complete manual parity.

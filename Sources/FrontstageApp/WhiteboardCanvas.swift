@@ -7,6 +7,7 @@ struct WhiteboardCanvas: NSViewRepresentable {
     @ObservedObject var workspace: Workspace
     @Binding var selection: Set<String>
     @Binding var blockSelection: Set<String>
+    var pushing: Bool = false
     var drawing: Bool
     var fitRequest: Int
 
@@ -18,7 +19,7 @@ struct WhiteboardCanvas: NSViewRepresentable {
     }
     func updateNSView(_ view: NativeWhiteboard, context: Context) {
         view.workspace = workspace; view.board = workspace.whiteboard
-        view.selection = selection; view.blockSelection = blockSelection; view.drawingMode = drawing
+        view.selection = selection; view.blockSelection = blockSelection; view.drawingMode = drawing; view.pushingMode = pushing
         view.selected = { ids, blocks in selection = ids; blockSelection = blocks }
         if view.fitRequest != fitRequest { view.fitRequest = fitRequest; view.fitSelection() }
         view.needsDisplay = true
@@ -34,6 +35,9 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
     var blockSelection = Set<String>()
     var selected: ((Set<String>, Set<String>) -> Void)?
     var drawingMode = false
+    var pushingMode = false
+    private var pushOrigin: BoardPoint?
+    private var dependencyOrigin: String?
     var fitRequest = 0
     private var dragStart: BoardPoint?
     private var viewStart = NSPoint.zero
@@ -252,6 +256,8 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
         window?.makeFirstResponder(self)
         let point = convert(event.locationInWindow, from: nil), worldPoint = world(point)
         viewStart = point; dragStart = worldPoint; dragDelta = .init()
+        if event.modifierFlags.contains(.option), let beat = geometry.hitBeat(worldPoint) { dependencyOrigin = beat; return }
+        if pushingMode || event.modifierFlags.contains(.command) { pushOrigin = worldPoint; return }
         if spaceHeld || event.modifierFlags.contains(.option) { panStart = board.viewport.origin; return }
         if drawingMode { stroke = [worldPoint]; return }
         if event.clickCount == 2, geometry.hitBeat(worldPoint) == nil {
@@ -310,6 +316,8 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if dependencyOrigin != nil { return }
+        if pushOrigin != nil { NSCursor.resizeLeftRight.set(); return }
         let point = convert(event.locationInWindow, from: nil), current = world(point)
         if let panStart {
             board.viewport.origin = BoardPoint(x: panStart.x - (point.x - viewStart.x) / zoom, y: panStart.y - (point.y - viewStart.y) / zoom)
@@ -328,6 +336,17 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
     }
 
     override func mouseUp(with event: NSEvent) {
+        if let cause = dependencyOrigin {
+            dependencyOrigin = nil; dragStart = nil
+            if let effect = geometry.hitBeat(world(convert(event.locationInWindow, from: nil))), effect != cause { workspace?.edit("Create Dependency") { try $0.connectBoardBeats(cause: cause, effect: effect) } }
+            return
+        }
+        if let origin = pushOrigin {
+            pushOrigin = nil; NSCursor.arrow.set()
+            let delta = world(convert(event.locationInWindow, from: nil)).x - origin.x
+            workspace?.edit("Push Whiteboard") { try $0.pushWhiteboard(from: origin.x - 110, by: delta); try $0.applyWhiteboardSpatialOrder() }
+            dragStart = nil; return
+        }
         defer { dragStart = nil; panStart = nil; movingBlocks = false; movingBeat = nil; resizingBlock = nil; marquee = nil; dragDelta = .init(); stroke = []; needsDisplay = true }
         if panStart != nil { persistViewport(); return }
         if let id = resizingBlock {
@@ -443,6 +462,10 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
     }
 
     override func keyDown(with event: NSEvent) {
+        if event.modifierFlags.contains(.command), let id = selection.first {
+            if event.charactersIgnoringModifiers == "i" { workspace?.pendingBoardCauseID = id; return }
+            if event.charactersIgnoringModifiers == "o", let cause = workspace?.pendingBoardCauseID { workspace?.edit("Create Dependency") { try $0.connectBoardBeats(cause: cause, effect: id) }; workspace?.pendingBoardCauseID = nil; return }
+        }
         if event.keyCode == 49 { spaceHeld = true; return }
         if event.keyCode == 36 {
             if let beat = board.orderedBeats.first(where: { selection.contains($0.id) }), let owner = board.blocks.first(where: { $0.id == beat.blockID }) {
@@ -507,18 +530,30 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
             item("Must Be Caused", #selector(toggleRequired)); item("Split Beat at Cursor…", #selector(splitContext))
             item("Insert Beat Before", #selector(insertBeforeContext)); item("Insert Beat After", #selector(insertAfterContext))
             item("Characters & Tags…", #selector(editContextBeat)); menu.addItem(.separator())
+            item("Split Group Here", #selector(splitGroupContext))
             item("Omit / Include Beat", #selector(toggleOmitted)); item("Delete Beat", #selector(deleteContext))
         } else if contextBlock != nil {
             item("Add Beat", #selector(insertContext)); item("Collapse / Expand Block", #selector(collapseContext))
+            item("Container Synopsis…", #selector(synopsisContext))
+            item("Split Block Here", #selector(splitBlockContext))
             item("Lock / Unlock Block", #selector(lockContext))
             if board.blocks.contains(where: { $0.parentID == contextBlock || ($0.id == contextBlock && $0.containerKind == "beatGroup") }) { item("Ungroup", #selector(ungroupContext)) }
             item("Delete Block and Contents", #selector(deleteBlockContext))
         } else { item("Add Beat Here", #selector(insertContext)) }
         menu.addItem(.separator())
         item(board.usesBlocks(layerAt(contextPoint).id) ? "Disable Use Blocks" : "Enable Use Blocks", #selector(toggleLayerBlocks))
-        if blockSelection.count > 1 { item("Group Selected Blocks", #selector(groupContext)) }
+        if blockSelection.count > 1 { item("Group Selected Blocks", #selector(groupContext)); item("Merge Groups / Blocks", #selector(mergeContext)) }
         NSMenu.popUpContextMenu(menu, with: event, for: self)
     }
+    @objc private func splitBlockContext() { if let id = contextBlock { workspace?.edit("Split Block") { try $0.splitBoardBlock(id, at: contextPoint.x - 110) } } }
+    @objc private func synopsisContext() {
+        guard let id = contextBlock, let block = board.blocks.first(where: { $0.id == id }), !board.isBlockLocked(id) else { return }
+        let alert = NSAlert(); alert.messageText = "Container Synopsis"; alert.addButton(withTitle: "Save"); alert.addButton(withTitle: "Cancel")
+        let field = NSTextField(string: block.synopsis ?? ""); field.frame = NSRect(x: 0, y: 0, width: 360, height: 80); alert.accessoryView = field
+        if alert.runModal() == .alertFirstButtonReturn { workspace?.edit("Container Synopsis") { try $0.editWhiteboard { board in if let i = board.blocks.firstIndex(where: { $0.id == id }) { board.blocks[i].synopsis = field.stringValue } } } }
+    }
+    @objc private func splitGroupContext() { if let id = contextBeat { workspace?.edit("Split Group") { try $0.splitBoardGroup(at: id) } } }
+    @objc private func mergeContext() { workspace?.edit("Merge Containers") { try $0.mergeBoardContainers(blockSelection) } }
     @objc private func toggleLayerBlocks() {
         let layer = layerAt(contextPoint), enabled = !board.usesBlocks(layer.id)
         workspace?.edit("Layer Block Policy") { try $0.setLayerUsesBlocks(layer.id, enabled: enabled) }

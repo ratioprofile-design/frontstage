@@ -9,8 +9,10 @@ struct WhiteboardWorkspace: View {
     @State private var blockSelection = Set<String>()
     @State private var showProperties = true
     @State private var showTimeline = true
-    @State private var showCharacters = false
+    @State private var expandedTimeline = false
+    @State private var scriptBeforeTimeline = true
     @State private var drawing = false
+    @State private var pushing = false
     @State private var fitRequest = 0
     @State private var linkReason = ""
     @State private var showMarkerEditor = false
@@ -34,18 +36,18 @@ struct WhiteboardWorkspace: View {
                 .background(Color(white: 0.24))
             HSplitView {
                 VStack(spacing: 0) {
-                    if showTimeline { timeline.frame(height: (showCharacters ? 150 : 88) + (markers.isEmpty ? 0 : 20)) }
+                    if showTimeline { StoryTimelineView(workspace: workspace, expanded: $expandedTimeline).frame(minHeight: expandedTimeline ? 250 : 210, maxHeight: expandedTimeline ? .infinity : 210) }
                     if let cause = workspace.pendingBoardCauseID {
                         HStack {
                             Text("Choose an effect for “\(board.beats.first { $0.id == cause }?.title ?? "Cause")”")
                             Spacer(); Button("Cancel") { workspace.pendingBoardCauseID = nil }
                         }.font(.caption).padding(6).background(.cyan.opacity(0.18))
                     }
-                    WhiteboardCanvas(workspace: workspace, selection: $selection, blockSelection: $blockSelection, drawing: drawing, fitRequest: fitRequest)
-                        .frame(minHeight: 100, maxHeight: .infinity)
+                    if !expandedTimeline { WhiteboardCanvas(workspace: workspace, selection: $selection, blockSelection: $blockSelection, pushing: pushing, drawing: drawing, fitRequest: fitRequest)
+                        .frame(minHeight: 100, maxHeight: .infinity) }
                 }.frame(minWidth: 240, maxWidth: .infinity, maxHeight: .infinity)
-                    .safeAreaInset(edge: .bottom, spacing: 0) { bottomTools }
-                if showProperties { properties.frame(minWidth: 210, idealWidth: 240, maxWidth: 300) }
+                    .safeAreaInset(edge: .bottom, spacing: 0) { if !expandedTimeline { bottomTools } }
+                if showProperties && !expandedTimeline { properties.frame(minWidth: 210, idealWidth: 240, maxWidth: 300) }
             }
         }
         .frame(width: viewport.size.width, height: viewport.size.height, alignment: .topLeading)
@@ -53,6 +55,10 @@ struct WhiteboardWorkspace: View {
         .environment(\.colorScheme, .dark)
         .sheet(isPresented: $showMarkerEditor) { markerEditor }
         .onAppear { initializeSelection() }
+        .onChange(of: expandedTimeline) { _, expanded in
+            if expanded { scriptBeforeTimeline = workspace.showBoardScript; workspace.showBoardScript = false }
+            else { workspace.showBoardScript = scriptBeforeTimeline }
+        }
         .onChange(of: workspace.selectedSceneID) { _, id in
             if workspace.selectedBoardBeat?.sceneID != id, let beat = board.orderedBeats.first(where: { $0.sceneID == id }) { workspace.selectBoardBeat(beat.id); selection = [beat.id] }
         }
@@ -70,6 +76,7 @@ struct WhiteboardWorkspace: View {
             Button { drawing.toggle() } label: { Image(systemName: "pencil.tip") }.tint(drawing ? .cyan : .gray)
                 .help("Draw board annotations")
             Button { fitRequest += 1 } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }.help("Fit selection or board")
+            Toggle("Push", isOn: $pushing).toggleStyle(.button).help("Push space open or closed; also Command-drag on the board")
             Toggle("Ripple", isOn: $workspace.whiteboardRipple).toggleStyle(.button)
             Button { changeZoom(0.8) } label: { Image(systemName: "minus.magnifyingglass") }
             Text("\(Int(board.viewport.zoom * 100))%").monospacedDigit().frame(width: 36)
@@ -103,72 +110,6 @@ struct WhiteboardWorkspace: View {
             Text("\(board.beats.count) beats").foregroundStyle(.secondary)
         }.font(.system(size: 11)).buttonStyle(.bordered).fixedSize(horizontal: true, vertical: false).padding(7)
         }.frame(height: 48).background(Color(white: 0.2)).accessibilityIdentifier("whiteboard-bottom-tools")
-    }
-
-    private var timeline: some View {
-        GeometryReader { proxy in
-            let end = timelineEnd
-            let scale = max(12, (proxy.size.width - 90) / end)
-            ScrollView(.horizontal) {
-                VStack(alignment: .leading, spacing: 2) {
-                    ZStack(alignment: .topLeading) {
-                        ForEach(Array(stride(from: 0.0, through: end, by: max(5, (end / 100).rounded(.up)))), id: \.self) { mark in
-                            Text("\(Int(mark))").font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary)
-                                .offset(x: 90 + mark * scale, y: 3)
-                        }
-                    }.frame(height: 20)
-                    if !markers.isEmpty {
-                        HStack(spacing: 0) {
-                            Text("Acts / Markers").font(.system(size: 9)).frame(width: 90, alignment: .leading)
-                            ZStack(alignment: .leading) {
-                                ForEach(markers) { marker in
-                                    Button(marker.title) { editMarker(marker) }.font(.system(size: 9)).buttonStyle(.borderless)
-                                        .padding(.horizontal, 5).frame(height: 17).background(Color.blue.opacity(0.6))
-                                        .offset(x: marker.x / StorySequencer.pointsPerPage * scale)
-                                        .contextMenu {
-                                            Button("Edit Marker…") { editMarker(marker) }
-                                            Button("Remove Marker") { workspace.edit("Remove Marker") { $0.removeStoryMilestone(marker.id) } }
-                                        }
-                                }
-                            }.frame(width: end * scale, height: 18)
-                        }
-                    }
-                    timelineRow("Scenes", scale: scale, snippets: false)
-                    timelineRow("Snippets", scale: scale, snippets: true)
-                    if showCharacters {
-                        let names = Array(Set(board.beats.flatMap(\.characters))).sorted()
-                        ForEach(Array(names.prefix(3)), id: \.self) { name in
-                            HStack(spacing: 0) {
-                                Text(name).font(.system(size: 9)).lineLimit(1).frame(width: 90, alignment: .leading)
-                                ZStack(alignment: .leading) {
-                                    ForEach(board.beats.filter { $0.characters.contains(name) }) { beat in
-                                        Circle().fill(Color(boardHex: beat.color)).frame(width: 5, height: 5).offset(x: beat.start * scale)
-                                    }
-                                }.frame(width: end * scale, height: 12)
-                            }
-                        }
-                    }
-                    Button(showCharacters ? "Hide character tracks" : "Character tracks") { showCharacters.toggle() }
-                        .font(.system(size: 9)).buttonStyle(.borderless).foregroundStyle(.secondary)
-                }.frame(width: end * scale + 100, alignment: .leading)
-            }.padding(.horizontal, 6)
-        }.background(Color(white: 0.19)).overlay(alignment: .bottom) { Divider() }
-    }
-
-    private func timelineRow(_ label: String, scale: Double, snippets: Bool) -> some View {
-        HStack(spacing: 0) {
-            Text(label).font(.system(size: 9)).frame(width: 90, alignment: .leading)
-            ZStack(alignment: .leading) {
-                ForEach(board.orderedBeats) { beat in
-                    Button { workspace.selectBoardBeat(beat.id); selection = [beat.id] } label: {
-                        Text(snippets ? "" : (workspace.project.scenes.first { $0.id == beat.sceneID }?.heading.location ?? beat.title))
-                            .font(.system(size: 8)).lineLimit(1).frame(width: max(8, beat.duration * scale - 1), height: 19)
-                            .background(snippets ? Color(boardHex: beat.color) : Color(red: 0.23, green: 0.4, blue: 0.66))
-                            .overlay(Rectangle().stroke(workspace.selectedBoardBeatID == beat.id ? .white : .black.opacity(0.3), lineWidth: 1))
-                    }.buttonStyle(.plain).offset(x: beat.start * scale)
-                }
-            }.frame(width: timelineEnd * scale, height: 20)
-        }
     }
 
     private func editMarker(_ marker: StoryMilestone? = nil) {

@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {timelineModel,timelineClock} from '../Public/story-timeline.js';
+const board={layers:[{id:'main'}],blocks:[{id:'a',layerID:'main'}],beats:[{id:'one',sceneID:1,blockID:'a',order:0,start:20,duration:1,title:'One',color:'#ffffff',tags:['Danger'],characters:['VENBA'],html:'',timelineDuration:4,emotionChanges:{Danger:20},tensions:{Danger:3}},{id:'two',sceneID:1,blockID:'a',order:1,start:100,duration:1,title:'Two',color:'#ffffff',tags:['Danger'],characters:[],html:'',emotionChanges:{Danger:80},emotionAbsoluteTags:['Danger']}]};
+const model=timelineModel(board,[{id:1,title:'Classroom',slug:{time:'DAY'}}]);
+assert.deepEqual(model.tracks.find(t=>t.kind==='beats').items.map(i=>i.start),[0,1]);
+assert.deepEqual(model.tracks.find(t=>t.kind==='tags').items.map(i=>i.value),[20,80]);
+assert.equal(model.tracks.find(t=>t.kind==='heat').items.length,1);
+assert.equal(timelineModel(board,[] ,[],'time').beats[1].start,4);
+assert.equal(timelineClock(12.5),'00:12:30');
+console.log('PASS: serialized beat/time/page projections, emotion checkpoints and tension heat map');

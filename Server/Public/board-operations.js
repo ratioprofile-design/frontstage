@@ -16,6 +16,11 @@ export function validateBoard(board, sceneIDs) {
     const seen = new Set([block.id]);
     for (let parent = block.parentID; parent != null; parent = blocks.get(parent)?.parentID) { if (seen.has(parent)) fail(); seen.add(parent); }
   }
+  for(const b of board.beats){
+    if(b.timelineDuration!=null&&(!Number.isFinite(b.timelineDuration)||b.timelineDuration<=0||b.timelineDuration>1000))fail();
+    for(const [key,max]of [['emotionChanges',100],['tensions',5]])if(b[key]!=null&&(typeof b[key]!=='object'||Array.isArray(b[key])||Object.values(b[key]).some(v=>!Number.isFinite(v)||Math.abs(v)>max)))fail();
+    if(b.emotionAbsoluteTags!=null&&!strings(b.emotionAbsoluteTags))fail();
+  }
   for (const beat of board.beats) if ((beat.position != null && (!coordinate(beat.position.x)||!coordinate(beat.position.y)||beat.position.x<0||beat.position.y<24)) || !sceneIDs.has(beat.sceneID) || !blocks.has(beat.blockID) || !coordinate(beat.order) || !coordinate(beat.start) || beat.start < 0 || !Number.isFinite(beat.duration) || beat.duration < .05 || beat.duration > 1000 || !['title', 'synopsis', 'html', 'color'].every(k => typeof beat[k] === 'string') || !['story', 'subtext'].includes(beat.kind) || !strings(beat.characters) || !strings(beat.tags) || !['mustBeCaused', 'omitted', 'locked'].every(k => typeof beat[k] === 'boolean')) fail();
   for (const edge of board.dependencies) if (!beats.has(edge.cause) || !beats.has(edge.effect) || edge.cause === edge.effect || typeof edge.reference !== 'boolean' || typeof edge.reason !== 'string') fail();
   for (const stroke of board.strokes) if (!Array.isArray(stroke.points) || stroke.points.length > 10000 || !stroke.points.every(p => coordinate(p?.x) && coordinate(p?.y)) || !Number.isFinite(stroke.width) || stroke.width < .5 || stroke.width > 30 || typeof stroke.color !== 'string') fail();
@@ -208,4 +213,43 @@ export function nestGroups(source,ids,targetID,dx,dy){
   if(!ids.size||!target||target.standalone||target.containerKind==='beatGroup'||blockLocked(board,targetID)||moving.has(targetID)||[...ids].some(id=>board.blocks.find(b=>b.id===id)?.containerKind!=='beatGroup')||[...moving].some(id=>blockLocked(board,id)))throw Error('Drop unlocked groups into a block without creating a container loop.');
   for(const block of board.blocks)if(moving.has(block.id)){if(ids.has(block.id)&&!moving.has(block.parentID))block.parentID=targetID;block.layerID=target.layerID;}
   return moveBlocks(board,ids,dx,dy,{layerID:target.layerID,ripple:false});
+}
+
+export function splitGroupAt(source,beatID){
+ const board=copy(source),beat=board.beats.find(b=>b.id===beatID),group=board.blocks.find(b=>b.id===beat?.blockID);
+ if(!group||group.containerKind!=='beatGroup'||lockedBlockIDs(board).has(group.id))throw Error('Choose an unlocked group member.');
+ const members=board.beats.filter(b=>b.blockID===group.id).sort((a,b)=>a.order-b.order),index=members.findIndex(b=>b.id===beatID);
+ if(index<=0||members.slice(index).some(b=>b.locked))throw Error('Split after the first beat and unlock group members.');
+ const next={...copy(group),id:crypto.randomUUID(),name:group.name+' (2)',position:{x:group.position.x+group.width+24,y:group.position.y}};board.blocks.push(next);
+ for(const b of members.slice(index)){b.blockID=next.id;delete b.position;}return board;
+}
+export function mergeContainers(source,ids){
+ const board=copy(source),items=board.blocks.filter(b=>ids.has(b.id)).sort((a,b)=>a.position.x-b.position.x),target=items[0],locked=lockedBlockIDs(board);
+ if(items.length<2||items.length!==ids.size||items.some(b=>b.layerID!==target.layerID||b.parentID!==target.parentID||b.containerKind!==target.containerKind||b.standalone||locked.has(b.id))||board.beats.some(b=>ids.has(b.blockID)&&b.locked))throw Error('Select unlocked sibling groups or blocks of the same kind.');
+ for(const beat of board.beats.filter(b=>ids.has(b.blockID))){const source=items.find(b=>b.id===beat.blockID),p=beat.position??{x:6,y:24};if(target.containerKind==='beatGroup')delete beat.position;else beat.position={x:Math.max(6,source.position.x+p.x-target.position.x),y:Math.max(24,source.position.y+p.y-target.position.y)};beat.blockID=target.id;}
+ for(const b of board.blocks)if(ids.has(b.parentID))b.parentID=target.id;
+ target.width=Math.min(2000,Math.max(...items.map(b=>b.position.x+b.width-target.position.x)));target.synopsis=items.map(b=>b.synopsis).filter(Boolean).join('\n');board.blocks=board.blocks.filter(b=>!ids.has(b.id)||b.id===target.id);return board;
+}
+export function pushBoard(source,x,distance){
+ const roots=source.blocks.filter(b=>!b.parentID&&b.position.x>=x);if(!roots.length)return copy(source);let delta=distance;
+ if(delta<0)for(const root of roots){const edge=Math.max(0,...source.blocks.filter(b=>!b.parentID&&b.layerID===root.layerID&&b.position.x<x).map(b=>b.position.x+b.width+12));delta=Math.max(delta,Math.min(0,edge-root.position.x));}
+ return moveBlocks(source,new Set(roots.map(b=>b.id)),delta,0,{ripple:false});
+}
+export function splitBlockAt(source,id,x){
+ const board=copy(source),block=board.blocks.find(b=>b.id===id),locked=lockedBlockIDs(board);
+ if(!block||block.containerKind==='beatGroup'||block.standalone||locked.has(id)||x<=block.position.x+12)throw Error('Split inside an unlocked block.');
+ const children=board.blocks.filter(b=>b.parentID===id&&b.position.x>=x),beats=board.beats.filter(b=>b.blockID===id&&block.position.x+(b.position?.x??6)>=x);
+ if(!children.length&&!beats.length)throw Error('Choose a split point with content to its right.');if(children.some(b=>locked.has(b.id))||beats.some(b=>b.locked))throw Error('Unlock the content before splitting.');
+ const next={...copy(block),id:crypto.randomUUID(),name:block.name+' (2)',position:{...block.position,x},width:Math.max(140,block.position.x+block.width-x)};
+ for(const child of children)child.parentID=next.id;for(const beat of beats){const p=beat.position??{x:6,y:24};beat.blockID=next.id;beat.position={x:Math.max(6,block.position.x+p.x-x),y:p.y};}block.width=Math.max(140,x-block.position.x-12);board.blocks.push(next);return board;
+}
+export function reorderTimelineBeats(source,ids,targetID){
+ const board=copy(source),ordered=[...board.beats].sort((a,b)=>a.order-b.order),moving=ordered.filter(b=>ids.has(b.id)),locked=lockedBlockIDs(board);
+ if(!moving.length||moving.length!==ids.size||ids.has(targetID)||!ordered.some(b=>b.id===targetID)||moving.some(b=>b.locked||locked.has(b.blockID)))throw Error('Choose unlocked beats and a different insertion point.');
+ const sequence=ordered.filter(b=>!ids.has(b.id));sequence.splice(sequence.findIndex(b=>b.id===targetID),0,...moving);
+ for(const group of board.blocks.filter(b=>b.containerKind==='beatGroup')){const indices=sequence.flatMap((b,i)=>b.blockID===group.id?[i]:[]);if(indices.length&&indices.at(-1)-indices[0]+1!==indices.length)throw Error("Keep a group's beats together, or convert it to free beats before intercutting.");}
+ sequence.forEach((b,i)=>{if(b.order!==i&&(b.locked||locked.has(b.blockID)))throw Error('This reorder would move a locked beat.');b.order=i;});
+ for(const block of board.blocks){const descendants=descendantBlocks(board,new Set([block.id])),members=board.beats.filter(b=>descendants.has(b.blockID));if(!members.length)continue;const first=Math.min(...members.map(b=>b.order)),x=40+first*60;if(x!==block.position.x&&locked.has(block.id))throw Error('This reorder would move a locked container.');block.position.x=x;
+ for(const b of board.beats.filter(b=>b.blockID===block.id)){if(block.containerKind==='beatGroup')delete b.position;else if(!block.standalone)b.position={x:6+(b.order-first)*60,y:b.position?.y??24};}}
+ return board;
 }

@@ -45,6 +45,13 @@ final class WorkspaceParityAcceptanceTests: XCTestCase {
             sideView.layoutSubtreeIfNeeded()
             RunLoop.main.run(until: Date().addingTimeInterval(0.25))
             try capture(sideView, name: "board-script")
+            let timelineView = NSHostingView(rootView: StoryTimelineView(workspace: workspace, expanded: .constant(true)))
+            timelineView.frame = NSRect(x: 0, y: 0, width: 1440, height: 950)
+            let timelineWindow = NSWindow(contentRect: timelineView.frame, styleMask: [.titled], backing: .buffered, defer: false)
+            timelineWindow.isReleasedWhenClosed = false; timelineWindow.contentView = timelineView
+            timelineView.layoutSubtreeIfNeeded(); RunLoop.main.run(until: Date().addingTimeInterval(0.15))
+            try capture(timelineView, name: "full-timeline")
+            timelineWindow.contentView = nil; timelineWindow.close()
             let sideText = try XCTUnwrap(workspace.scriptController("reader-beat-1").textView)
             XCTAssertTrue(sideText.string.contains("invitation arrives"))
             sideText.insertText("Side paper. ", replacementRange: NSRange(location: 0, length: 0))

@@ -28,6 +28,7 @@ public struct BoardLayer: Codable, Identifiable, Equatable, Sendable {
 }
 
 public struct BoardBlock: Codable, Identifiable, Equatable, Sendable {
+    public var synopsis: String?
     /// A loose beat retains its container identity for links and movement, without block chrome.
     public var standalone: Bool?
     /// Explicit beat groups contain beats; ordinary blocks may also contain groups.
@@ -49,6 +50,10 @@ public struct BoardBlock: Codable, Identifiable, Equatable, Sendable {
 public enum BoardBeatKind: String, Codable, CaseIterable, Sendable { case story, subtext }
 
 public struct BoardBeat: Codable, Identifiable, Equatable, Sendable {
+    public var timelineDuration: Double?
+    public var emotionChanges: [String: Double]?
+    public var emotionAbsoluteTags: [String]?
+    public var tensions: [String: Double]?
     /// Optional local position allows staggered beats inside a group or block.
     public var position: BoardPoint?
     public var id: String
@@ -211,6 +216,11 @@ public struct Whiteboard: Codable, Equatable, Sendable {
                 guard seen.insert(id).inserted else { throw ProjectError.invalidProject("nested block loop") }
                 parent = blocks.first { $0.id == id }?.parentID
             }
+        }
+        for beat in beats {
+            if let duration = beat.timelineDuration, !duration.isFinite || duration <= 0 || duration > 1000 { throw ProjectError.invalidProject("Invalid timeline duration") }
+            if let values = beat.emotionChanges, values.values.contains(where: { !$0.isFinite || abs($0) > 100 }) { throw ProjectError.invalidProject("Invalid emotion value") }
+            if let values = beat.tensions, values.values.contains(where: { !$0.isFinite || abs($0) > 5 }) { throw ProjectError.invalidProject("Invalid tension value") }
         }
         guard beats.allSatisfy({ sceneIDs.contains($0.sceneID) && blockIDs.contains($0.blockID) && ($0.position.map { coordinate($0.x) && coordinate($0.y) && $0.x >= 0 && $0.y >= 24 } ?? true) && coordinate($0.order) && coordinate($0.start) && $0.start >= 0 && $0.duration.isFinite && (0.05...1000).contains($0.duration) }),
               dependencies.allSatisfy({ beatIDs.contains($0.cause) && beatIDs.contains($0.effect) && $0.cause != $0.effect }),
