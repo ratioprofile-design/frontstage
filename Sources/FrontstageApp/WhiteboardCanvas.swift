@@ -315,7 +315,12 @@ final class NativeWhiteboard: NSView {
     }
 
     private func hitBlock(_ point: BoardPoint) -> String? {
-        geometry.blockRects.filter { $0.value.contains(point) || BoardRect(x: $0.value.x, y: $0.value.y - 18, width: $0.value.width, height: 20).contains(point) }
+        geometry.blockRects.filter { entry in
+            if board.blocks.first(where: { $0.id == entry.key })?.standalone == true {
+                return board.beats.contains { $0.blockID == entry.key && geometry.beatRects[$0.id]?.contains(point) == true }
+            }
+            return entry.value.contains(point) || BoardRect(x: entry.value.x, y: entry.value.y - 18, width: entry.value.width, height: 20).contains(point)
+        }
             .min { $0.value.width * $0.value.height < $1.value.width * $1.value.height }?.key
     }
     private func layerAt(_ point: BoardPoint) -> BoardLayer {

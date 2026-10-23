@@ -246,12 +246,12 @@ struct ScreenplayEditor: NSViewRepresentable {
             }
         }
 
-        func textView(_ textView: NSTextView, completions words: [String], forPartialWordRange range: NSRange, indexOfSelectedItem index: UnsafeMutablePointer<Int>) -> [String] {
+        func textView(_ textView: NSTextView, completions words: [String], forPartialWordRange range: NSRange, indexOfSelectedItem index: UnsafeMutablePointer<Int>?) -> [String] {
             let source = textView.string as NSString
             let paragraph = source.paragraphRange(for: range)
             let prefix = source.substring(with: NSRange(location: paragraph.location, length: NSMaxRange(range) - paragraph.location))
             let before = source.substring(with: NSRange(location: paragraph.location, length: range.location - paragraph.location))
-            index.pointee = -1
+            index?.pointee = -1
             guard !prefix.isEmpty else { return [] }
             return (suggestions[controller.activeElement] ?? []).filter { $0.lowercased().hasPrefix(prefix.lowercased()) && $0.lowercased() != prefix.lowercased() }.map { String($0.dropFirst(before.count)) }
         }

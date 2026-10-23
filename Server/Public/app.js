@@ -315,7 +315,9 @@ function render() {
     };
     node.ondragover = e => e.preventDefault(); node.ondrop = e => {
       e.preventDefault(); e.stopPropagation(); const id = e.dataTransfer.getData('text/frontstage-beat'), moving = board().beats.find(b => b.id === id); if (!moving || locked(moving) || locked({ blockID: block.id })) return;
-      if (moving.blockID === block.id && block.standalone) { dropStandaloneBeats(e); return; }
+      const targetBeat=e.target.closest('[data-beat-id]');
+      if(block.standalone && (!targetBeat || moving.blockID === block.id)){dropStandaloneBeats(e);return;}
+      if(targetBeat?.dataset.beatId===id)return;
       edit(() => { moving.blockID = block.id; moving.order = Math.max(-1, ...board().beats.filter(b => b.blockID === block.id && b.id !== id).map(b => b.order)) + 1;
         const hit=e.target.closest('[data-beat-id]');if(hit&&hit.dataset.beatId!==id){doc.project.frontstageWhiteboard=spatialOrder(dropBeats(board(),new Set([id]),hit.dataset.beatId));return;}if(!hit){const frame=node.getBoundingClientRect();moving.position={x:Math.max(6,e.clientX-frame.left),y:Math.max(24,e.clientY-frame.top)};}else delete moving.position; doc.project.frontstageWhiteboard=spatialOrder(pruneEmptyBeatContainers(board())); });
     };
