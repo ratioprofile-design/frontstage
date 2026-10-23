@@ -138,6 +138,9 @@ try{
  await page.keyboard.press('Escape');assert.equal(await page.locator('.beat-popup').count(),0);
  await page.locator('#blocks .beat').filter({hasText:'Untitled Beat'}).first().dblclick();
  await page.locator('.beat-popup.active').waitFor();assert.equal(await page.locator('.beat-popup.active [data-field="beat-title"]').evaluate(n=>n===document.activeElement),true);
+ await page.locator('.beat-popup.active [data-field="snippet-editor"]').focus();
+ await page.locator('#blocks .beat').filter({hasText:'Untitled Beat'}).first().dispatchEvent('dblclick');
+ assert.equal(await page.locator('.beat-popup.active [data-field="beat-title"]').evaluate(n=>n===document.activeElement),true);
  await page.keyboard.press('Escape');
  // Navigation and new workspaces remain available after a cold offline launch.
  await page.evaluate(()=>navigator.serviceWorker.ready.then(()=>new Promise(resolve=>navigator.serviceWorker.controller?resolve():navigator.serviceWorker.addEventListener('controllerchange',resolve,{once:true}))));await context.setOffline(true);await page.reload();await page.locator('#local-mode').click();await page.getByRole('button',{name:'The Invitation · on this device',exact:true}).click();await view('people');await page.getByRole('button',{name:'LENA',exact:true}).click();assert.equal(await page.getByLabel('Backstory',{exact:true}).inputValue(),'Knows the station.');

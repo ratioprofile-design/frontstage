@@ -37,6 +37,13 @@ final class BeatPopupPresenter: NSObject, NSWindowDelegate {
         if let panel = panels[id] {
             panel.makeKeyAndOrderFront(nil)
             if !beat.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, beat.title != "Untitled Beat", let text = controllers[id]?.textView { panel.makeFirstResponder(text) }
+            else if let content = panel.contentView {
+                @MainActor func nameField(_ view: NSView) -> NSTextField? {
+                    if let field = view as? NSTextField, field.placeholderString == "Beat Name" { return field }
+                    return view.subviews.lazy.compactMap { nameField($0) }.first
+                }
+                nameField(content)?.selectText(nil)
+            }
             return
         }
         let editor = ScreenplayEditorController()
@@ -59,6 +66,14 @@ final class BeatPopupPresenter: NSObject, NSWindowDelegate {
         self.panel = panel; beatID = id; controller = editor
         panels[id] = panel; controllers[id] = editor
         panel.makeKeyAndOrderFront(nil)
+        panel.contentView?.layoutSubtreeIfNeeded()
+        if !beat.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, beat.title != "Untitled Beat" {
+            panel.initialFirstResponder = editor.textView
+            if let text = editor.textView { panel.makeFirstResponder(text) }
+            DispatchQueue.main.async { [weak panel, weak editor] in
+                if let text = editor?.textView { panel?.makeFirstResponder(text) }
+            }
+        }
     }
 
     func close() {
@@ -177,7 +192,7 @@ struct BeatPopupView: View {
         }.padding(18).textFieldStyle(.roundedBorder).background(Color(white: 0.267))
         .onAppear {
             if beat?.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false || beat?.title == "Untitled Beat" { nameFocused = true }
-            else { DispatchQueue.main.async { if let view = controller.textView { view.window?.makeFirstResponder(view) } } }
+
         }
         .onExitCommand(perform: dismiss)
     }

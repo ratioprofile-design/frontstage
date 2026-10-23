@@ -517,7 +517,7 @@ function activateEditor(id) {
 }
 function openEditor(id) {
   const beat = board().beats.find(b => b.id === id); if (!beat) return;
-  if (editors.has(id)) { activateEditor(id); editors.get(id).querySelector('[data-field="snippet-editor"]').focus(); return; }
+  if (editors.has(id)) { activateEditor(id); const name = !beat.title.trim() || beat.title === 'Untitled Beat'; editors.get(id).querySelector(name ? '[data-field="beat-title"]' : '[data-field="snippet-editor"]').focus(); return; }
   const panel = $('editor').cloneNode(true); panel.hidden = false;
   panel.classList.add('beat-popup'); panel.dataset.beatId = id;
   for (const field of [panel, ...panel.querySelectorAll('[id]')]) { field.dataset.field = field.id; field.id = `${id}-${field.id}`; }
