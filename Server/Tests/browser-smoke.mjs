@@ -24,7 +24,7 @@ async function wait(check, message) { for (let i = 0; i < 100; i++) { if (server
 try {
   await wait(async () => (await fetch(address + '/health')).ok, 'Server startup');
   if (staticMode) {
-    const types = { 'index.html': 'text/html', 'style.css': 'text/css', 'app.js': 'application/javascript', 'merge.js': 'application/javascript', 'board-operations.js': 'application/javascript', 'config.js': 'application/javascript', 'sw.js': 'application/javascript', 'workspace-design.js': 'application/javascript', 'workspace-design.css': 'text/css', 'workspace-model.js': 'application/javascript', 'workspaces.js': 'application/javascript', 'pagination.js': 'application/javascript', 'workspaces.css': 'text/css', 'screenplay-editor.js': 'application/javascript', 'bamini.js': 'application/javascript' };
+    const types = { 'index.html': 'text/html', 'style.css': 'text/css', 'app.js': 'application/javascript', 'merge.js': 'application/javascript', 'board-operations.js': 'application/javascript', 'story-timeline.js': 'application/javascript', 'config.js': 'application/javascript', 'sw.js': 'application/javascript', 'workspace-design.js': 'application/javascript', 'workspace-design.css': 'text/css', 'workspace-model.js': 'application/javascript', 'workspaces.js': 'application/javascript', 'pagination.js': 'application/javascript', 'workspaces.css': 'text/css', 'screenplay-editor.js': 'application/javascript', 'bamini.js': 'application/javascript' };
     staticServer = createServer(async (request, response) => {
       const file = request.url === '/' ? 'index.html' : request.url.slice(1);
       if (!types[file]) { response.writeHead(404); response.end(); return; }
@@ -168,7 +168,7 @@ try {
   const markerDialog = dialog => dialog.accept(dialog.message().includes('name') ? 'Act I: Local story' : '0');
   localPage.on('dialog', markerDialog);
   await localPage.locator('#board-actions').selectOption('marker');
-  await localPage.locator('#timeline .act-marker').getByText('Act I: Local story', { exact: true }).waitFor();
+  await localPage.locator('#timeline .timeline-item.acts').getByText('Act I: Local story', { exact: true }).waitFor();
   localPage.off('dialog', markerDialog);
   await localPage.locator('#board-actions').selectOption('compact');
   await localPage.screenshot({ path: path.join(artifact, `browser-${staticMode ? 'static-' : ''}group-markers.png`) });

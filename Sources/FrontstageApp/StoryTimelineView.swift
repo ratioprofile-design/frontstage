@@ -24,10 +24,13 @@ struct StoryTimelineView: View {
     private var current: StoryTimeline.Item? { beatItems.first { time >= $0.start && time < $0.start + $0.duration } }
     private func counter(_ base: TimelineTimeBase) -> String {
         guard let current else { return "–" }
+        let fraction = max(0, (time - current.start) / current.duration)
+        let beat = workspace.whiteboard.beats.first { $0.id == current.id }
+        let pages = StoryTimeline.estimatedPages(beat?.html ?? "")
         switch base {
         case .beats: return String((beatItems.firstIndex { $0.id == current.id } ?? 0) + 1)
-        case .time: return StoryTimeline.clock(model?.beatTimes[current.id] ?? 0)
-        case .pages: return String(format: "%.2f", (model?.beatPages[current.id] ?? 0) + 1)
+        case .time: return StoryTimeline.clock((model?.beatTimes[current.id] ?? 0) + (beat?.timelineDuration ?? pages) * fraction)
+        case .pages: return String(format: "%.2f", (model?.beatPages[current.id] ?? 0) + 1 + pages * fraction)
         }
     }
     var body: some View {
@@ -48,7 +51,7 @@ struct StoryTimelineView: View {
                 }
             }
         }.background(Color(white: 0.20))
-        .onChange(of: workspace.selectedBoardBeatID) { _, id in if let item = beatItems.first(where: { $0.id == id }) { time = item.start } }
+        .onChange(of: workspace.selectedBoardBeatID) { _, id in if current?.id != id, let item = beatItems.first(where: { $0.id == id }) { time = item.start } }
         .onChange(of: primary) { old, value in if secondary == value { secondary = old }; time = 0 }
         .onChange(of: secondary) { old, value in if primary == value { primary = old } }
         .sheet(isPresented: Binding(get: { editingBeat != nil }, set: { if !$0 { editingBeat = nil } })) { valueEditor }
