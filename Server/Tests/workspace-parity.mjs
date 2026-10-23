@@ -17,7 +17,7 @@ try{
  const design=JSON.parse(await readFile(path.join(root,'Design/workspaces.json'),'utf8'));
  assert.deepEqual(await page.locator('#view-mode option').allTextContents(),design.pages.map(p=>p.title));
  for(const entry of design.pages){await page.locator('#view-mode').selectOption(entry.id);await page.waitForTimeout(80);assert.equal(await page.locator('#workspace').getAttribute('data-page'),entry.id);assert.equal(await page.getByText('This page could not be opened',{exact:true}).count(),0);await page.screenshot({path:path.join(output,`browser-${entry.id}.png`)});}
- await page.locator('#view-mode').selectOption('board');await page.locator('#script-toggle').click();await page.screenshot({path:path.join(output,'browser-board-script.png')});await page.locator('#script-toggle').click();await page.locator('#blocks [data-beat-id="beat-1"]').dblclick();
+ await page.locator('#view-mode').selectOption('board');if(await page.locator('#script').isHidden())await page.locator('#script-toggle').click();await page.screenshot({path:path.join(output,'browser-board-script.png')});if(await page.locator('#script').isHidden())await page.locator('#script-toggle').click();await page.locator('#blocks [data-beat-id="beat-1"]').dblclick();
  const popupFrame=await page.locator('.beat-popup.active').boundingBox(),splitFrame=await page.locator('.beat-popup.active [data-field="split-beat"]').boundingBox();assert.equal(Math.round(popupFrame.height),design.metrics.popupHeight);assert.ok(splitFrame.y+splitFrame.height<=popupFrame.y+popupFrame.height);
  await page.locator('.beat-popup.active').screenshot({path:path.join(output,'browser-popup.png')});await page.locator('.beat-popup.active [data-field="close-editor"]').click();
  const view=async id=>page.locator('#view-mode').selectOption(id);
@@ -40,13 +40,13 @@ try{
  await view('board');await page.locator('#blocks [data-beat-id="beat-1"]').dblclick();await page.locator('#blocks [data-beat-id="beat-2"]').dblclick();
  const popup1=page.locator('.beat-popup[data-beat-id="beat-1"]'),popup2=page.locator('.beat-popup[data-beat-id="beat-2"]');
  const otherLocation=await popup2.getByLabel('Location',{exact:true}).inputValue();
- await popup1.getByLabel('INT. / EXT. options',{exact:true}).selectOption('EXT.');
+ await popup1.getByLabel('INT. / EXT.',{exact:true}).fill('EXT.');await popup1.getByLabel('INT. / EXT.',{exact:true}).blur();
  await popup1.getByLabel('Location',{exact:true}).fill('ROOFTOP');await popup1.getByLabel('Location',{exact:true}).blur();
- await popup1.getByLabel('DAY / NIGHT options',{exact:true}).selectOption('NIGHT');
+ await popup1.getByLabel('DAY / NIGHT',{exact:true}).fill('NIGHT');await popup1.getByLabel('DAY / NIGHT',{exact:true}).blur();
  assert.equal(await popup1.locator('.popup-slugline').innerText(),'EXT. ROOFTOP - NIGHT');assert.equal(await popup2.getByLabel('Location',{exact:true}).inputValue(),otherLocation);
  assert.ok(await popup1.locator('datalist option[value="CONTINUOUS"]').count());
  const popupText=popup1.locator('[data-field="snippet-editor"]');await popupText.click();await popupText.press('ControlOrMeta+End');
- await popup1.getByLabel('Formatting options',{exact:true}).click();await popup1.getByLabel('Character',{exact:true}).selectOption('LENA');assert.equal(await popupText.locator('.sc-character').last().innerText(),'LENA');
+ await popup1.getByLabel('Formatting options',{exact:true}).click();await popup1.getByLabel('Character',{exact:true}).selectOption('LENA');assert.equal(await popupText.locator('.sc-character').last().innerText(),'LENA');await popupText.locator('.sc-character').last().click();await page.keyboard.press('Home');await page.keyboard.press('Shift+End');await page.keyboard.type('LE');await page.getByRole('listbox',{name:'Screenplay suggestions'}).waitFor();await page.keyboard.press('Enter');assert.equal(await popupText.locator('.sc-character').last().innerText(),'LENA');
  await popup1.getByLabel('Transition',{exact:true}).selectOption('CUT TO:');assert.equal(await popupText.locator('.sc-transition').last().innerText(),'CUT TO:');assert.ok((await popupText.innerText()).includes('Browser screenplay text.'));
  await popup1.locator('[data-field="beat-visibility"]').selectOption('hidden');assert.equal(await popup1.locator('[data-field="beat-visibility"]').inputValue(),'hidden');await popup1.locator('[data-field="beat-visibility"]').selectOption('visible');
  page.once('dialog',d=>d.accept('Popup saved version'));await popup1.locator('[data-field="version-save"]').click();
@@ -58,7 +58,7 @@ try{
  const overflows=await page.locator('.page-content').evaluateAll(nodes=>nodes.filter(n=>n.scrollHeight>n.clientHeight+2).length);assert.equal(overflows,0);
  await page.screenshot({path:path.join(output,'browser-long-pages.png')});
  // Three distinct hierarchy levels, text-sized cards, Enter insertion, and continuous side paper.
- await view('board');await page.locator('#script-toggle').click();assert.equal(await page.locator('#snippet-list .snippet-card').count(),0);assert.ok(await page.locator('#snippet-list .script-heading').count()>0);
+ await view('board');if(await page.locator('#script').isHidden())await page.locator('#script-toggle').click();assert.equal(await page.locator('#snippet-list .snippet-card').count(),0);assert.ok(await page.locator('#snippet-list .script-heading').count()>0);
  const side=page.locator('[data-script-beat="beat-1"]');await side.fill('Side paper edit.');const beforeTyping=await page.locator('#blocks [data-beat-id]').count();await side.press('Enter');assert.equal(await page.locator('#blocks [data-beat-id]').count(),beforeTyping);
  await page.locator('#blocks [data-beat-id="beat-2"]').click();await page.locator('#canvas').press('Enter');await page.locator('.beat-popup.active').waitFor();const created=await page.locator('.beat-popup.active').getAttribute('data-beat-id');assert.equal(await page.locator('#blocks [data-beat-id]').count(),beforeTyping+1);
  await page.locator('.beat-popup.active [data-field="beat-title"]').fill('This long beat needs several wrapped lines and should never be clipped to a fixed size');await page.locator('.beat-popup.active [data-field="close-editor"]').click();
@@ -74,6 +74,13 @@ try{
  const placed=JSON.parse(await readFile(path.join(output,'placed-edited.frontstage'),'utf8')).project.frontstageWhiteboard;
  assert.deepEqual(placed.beats.find(b=>b.id==='beat-2').position,{x:130,y:160});
  await page.locator('#undo').click();
+ // Reader stays in the app sidebar, starts at the top, and supports reading modes.
+ assert.equal(await page.locator('#script').evaluate(n=>n.parentElement.id),'workspace');
+ await page.locator('#reader-tools summary').filter({hasText:'Display'}).click();await page.getByRole('button',{name:'Collapse All',exact:true}).click();
+ assert.equal(await page.locator('#snippet-list .script-beat-body:visible').count(),0);
+ await page.locator('#reader-tools summary').filter({hasText:'Display'}).click();await page.getByRole('button',{name:'Final Script',exact:true}).click();
+ assert.equal(await page.locator('#snippet-list .script-beat-title').count(),0);assert.ok(await page.locator('#snippet-list .script-beat-body:visible').count()>0);
+ await page.locator('#reader-tools summary').filter({hasText:'Display'}).click();await page.getByRole('button',{name:'Expand All',exact:true}).click();
  // A grouped beat can leave its container for an empty lane; selection follows into the paper.
  page.once('dialog',d=>d.accept('New story lane'));await page.locator('#add-layer').click();
  await page.locator('#blocks [data-beat-id="beat-2"]').click();

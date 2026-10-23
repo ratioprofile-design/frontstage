@@ -21,17 +21,15 @@ export function mountWorkspaces(api) {
   const columns=()=>{const layout=el('div',null,'workspace-columns'),list=el('aside',null,'workspace-list'),detail=el('div',null,'workspace-detail');layout.append(list,detail);root.append(layout);return[list,detail];};
   function navigate(id){if(!design.pages.some(p=>p.id===id))return;mode=id;selector.value=id;render();}
   selector.onchange=()=>navigate(selector.value);
-  $('scenes-toggle').onclick=()=>{$('scene-sidebar').hidden=!$('scene-sidebar').hidden;};
+  $('scenes-toggle').textContent='Script';$('scenes-toggle').onclick=()=>{$('script').hidden=!$('script').hidden;};
   $('paper-mode').onchange=()=>{paper=$('paper-mode').value;let style=$('print-paper-size');if(!style){style=document.createElement('style');style.id='print-paper-size';document.head.append(style);}style.textContent=`@page { size: ${paper==='a4'?'A4':'letter'}; margin: 0; }`;render();};
   $('print-script').onclick=()=>{navigate('pages');requestAnimationFrame(()=>window.print());};
   $('add-scene').onclick=()=>{api.addScene();sceneID=api.selectedScene();render();};
   $('page-projects').onclick=()=>api.projects();
   function renderSidebar(){
-    const sidebar=$('scene-sidebar');sidebar.replaceChildren();
-    sidebar.append(field('Project name',doc().name,(name,d)=>{d.name=name;}));
-    for(const s of scenes()){const b=button(s.title||'Untitled Scene',()=>{sceneID=s.id;api.selectScene(s.id);render();});b.classList.toggle('selected',s.id===sceneID);sidebar.append(b);}
-    sidebar.append(el('p',`${scenes().length} scenes`),button('Add Scene',()=>{api.addScene();sceneID=api.selectedScene();render();},true));
+    $('scene-sidebar').hidden=true;
   }
+
   function render(){
     if(!doc())return;
     if(projectID!==api.current()?.id){projectID=api.current()?.id;sceneID=api.selectedScene()??scenes()[0]?.id;roleID=actorID=revisionID=dayID=recordID=null;mode='board';selector.value=mode;}

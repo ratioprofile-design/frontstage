@@ -2,6 +2,28 @@ import XCTest
 @testable import FrontstageCore
 
 final class BeatHierarchyTests: XCTestCase {
+    func testDropCreatesOnlyGroupAndRemovesEmptyLooseOwners() throws {
+        var project = Project()
+        let a = try project.addBoardBeat(title: "A"), b = try project.addBoardBeat(title: "B")
+        try project.editWhiteboard { board in for i in board.blocks.indices { board.blocks[i].standalone = true } }
+        try project.dropBoardBeats([a], onto: b)
+        var board = try project.whiteboard()
+        XCTAssertEqual(board.blocks.count, 1)
+        XCTAssertEqual(board.blocks[0].containerKind, "beatGroup")
+        XCTAssertEqual(Set(board.beats.map(\.blockID)).count, 1)
+        let old = project
+        try project.editWhiteboard { $0.layers[0].locked = true }
+        let locked = project
+        XCTAssertThrowsError(try project.dropBoardBeats([a], onto: b))
+        XCTAssertEqual(project, locked)
+        project = old
+        try project.moveBoardBeatsToLayer([a, b], layerID: "main", position: .init(x: 500, y: 80))
+        board = try project.whiteboard()
+        XCTAssertEqual(board.blocks.count, 2)
+        XCTAssertTrue(board.blocks.allSatisfy { $0.standalone == true })
+        XCTAssertEqual(try Project(data: project.encoded()), project)
+    }
+
     func testFreeBeatPlacementInsideGroupExpandsBoundsAndSurvivesUngroup() throws {
         var project = Project()
         let a = try project.addBoardBeat(title: "First"), b = try project.addBoardBeat(title: "Second")

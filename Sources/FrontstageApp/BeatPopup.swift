@@ -151,7 +151,7 @@ struct BeatPopupView: View {
                 if scriptExpanded {
                     scriptControls.disabled(scene?.isTextLocked == true)
                     ScreenplayEditor(html: text(\.html, label: "Snippet Text"), controller: controller, width: 532, typography: workspace.project.scriptLayout,
-                        onError: { workspace.errorMessage = $0 }, editable: scene?.isTextLocked != true, paper: true, paperTopInset: 16).id(beatID)
+                        onError: { workspace.errorMessage = $0 }, editable: scene?.isTextLocked != true, paper: true, paperTopInset: 16, suggestions: workspace.screenplayCompletions).id(beatID)
                         .frame(maxWidth: .infinity, minHeight: 220).environment(\.colorScheme, .light)
                 }
                 HStack {

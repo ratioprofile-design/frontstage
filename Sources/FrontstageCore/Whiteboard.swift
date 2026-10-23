@@ -477,7 +477,7 @@ extension Project {
             }
             let parents = Set(board.blocks.compactMap(\.parentID))
             board.blocks.removeAll { block in
-                oldOwners.contains(block.id) && block.standalone == true &&
+                oldOwners.contains(block.id) && (block.standalone == true || block.containerKind == "beatGroup") &&
                 !board.beats.contains { $0.blockID == block.id } && !parents.contains(block.id)
             }
         }
@@ -527,7 +527,31 @@ extension Project {
                 board.beats[i].order = ranks[board.beats[i].id]!
                 if ids.contains(board.beats[i].id) { board.beats[i].blockID = toBlock; board.beats[i].position = nil }
             }
+            let occupied = Set(board.beats.map(\.blockID)), parents = Set(board.blocks.compactMap(\.parentID))
+            board.blocks.removeAll { ($0.standalone == true || $0.containerKind == "beatGroup") && !occupied.contains($0.id) && !parents.contains($0.id) }
         }
+    }
+
+    /// Dropping onto a beat creates a group, never an enclosing block.
+    public mutating func dropBoardBeats(_ ids: Set<String>, onto targetID: String) throws {
+        var candidate = self
+        let board = try candidate.whiteboard()
+        guard !ids.contains(targetID), let target = board.beats.first(where: { $0.id == targetID }),
+              !board.isLocked(target), let owner = board.blocks.first(where: { $0.id == target.blockID }) else {
+            throw ProjectError.invalidProject("invalid beat drop")
+        }
+        try candidate.moveBoardBeats(ids, toBlock: owner.id)
+        if owner.standalone == true {
+            try candidate.editWhiteboard { board in
+                guard let i = board.blocks.firstIndex(where: { $0.id == owner.id }) else { return }
+                board.blocks[i].standalone = false
+                board.blocks[i].containerKind = "beatGroup"
+                board.blocks[i].name = "Beat Group"
+            }
+        } else if owner.containerKind != "beatGroup" {
+            try candidate.groupBoardBeats(ids.union([targetID]))
+        }
+        self = candidate
     }
 
     public mutating func placeBoardBeats(_ ids: Set<String>, inBlock blockID: String, position: BoardPoint) throws {
@@ -591,7 +615,7 @@ extension Project {
                 group.position.x = max(0, frame.x - 116)
                 group.position.y = max(32, frame.y - (layout.layerRects[first.layerID]?.y ?? 0) - 24)
             }
-            for i in board.beats.indices where ids.contains(board.beats[i].id) { board.beats[i].blockID = group.id }
+            for i in board.beats.indices where ids.contains(board.beats[i].id) { board.beats[i].blockID = group.id; board.beats[i].position = nil }
             let occupied = Set(board.beats.map(\.blockID)), parents = Set(board.blocks.compactMap(\.parentID))
             board.blocks.removeAll { $0.standalone == true && !occupied.contains($0.id) && !parents.contains($0.id) }
             board.blocks.append(group)

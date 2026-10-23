@@ -143,7 +143,7 @@ export function groupBeats(source, ids, id) {
   const first=owners[0],group={id,name:'Beat Group',containerKind:'beatGroup',layerID:first.layerID,position:copy(first.position),width:224,collapsed:false,locked:false};
   if(owners.length===1&&!first.standalone&&first.containerKind!=='beatGroup'){group.parentID=first.id;group.position.y+=60;}
   else if(owners.every(b=>b.parentID===first.parentID)&&first.parentID)group.parentID=first.parentID;
-  for(const beat of members)beat.blockID=id;
+  for(const beat of members){beat.blockID=id;delete beat.position;}
   const occupied=new Set(board.beats.map(b=>b.blockID)),parents=new Set(board.blocks.map(b=>b.parentID));
   board.blocks=board.blocks.filter(b=>!b.standalone||occupied.has(b.id)||parents.has(b.id));board.blocks.push(group);return board;
 }
@@ -161,7 +161,7 @@ export function moveBeatsToLayer(source, ids, layerID, position) {
     const block = {id:crypto.randomUUID(),name:'Beat',layerID,position:{x:Math.max(0,position.x),y},width:224,standalone:true,collapsed:false,locked:false};
     board.blocks.push(block); beat.blockID=block.id;delete beat.position; y+=beatSize(beat.title,212).height+28;
   }
-  board.blocks=board.blocks.filter(b=>!owners.has(b.id)||!b.standalone||board.beats.some(x=>x.blockID===b.id)||board.blocks.some(x=>x.parentID===b.id));
+  board.blocks=board.blocks.filter(b=>!owners.has(b.id)||(!b.standalone&&b.containerKind!=='beatGroup')||board.beats.some(x=>x.blockID===b.id)||board.blocks.some(x=>x.parentID===b.id));
   return board;
 }
 export function spatialOrder(source) {
@@ -182,4 +182,18 @@ export function resolveCausalTime(source) {
     if(beat.start<required){if(beat.locked||locked.has(beat.blockID))throw Error(`${beat.title} is locked and blocks ripple`);beat.start=required;}
   }
   return board;
+}
+
+export function dropBeats(source, ids, targetID) {
+  let board=copy(source);const target=board.beats.find(b=>b.id===targetID),members=board.beats.filter(b=>ids.has(b.id));
+  if(!target||ids.has(targetID)||!members.length||members.length!==ids.size||[target,...members].some(b=>b.locked||blockLocked(board,b.blockID)))throw Error('Select unlocked beats and a different target.');
+  const owner=board.blocks.find(b=>b.id===target.blockID);
+  for(const beat of members){beat.blockID=owner.id;delete beat.position;beat.order=Math.max(...board.beats.map(b=>b.order))+1;}
+  if(owner.standalone){owner.standalone=false;owner.containerKind='beatGroup';owner.name='Beat Group';}
+  else if(owner.containerKind!=='beatGroup')board=groupBeats(board,new Set([...ids,targetID]),crypto.randomUUID());
+  return pruneEmptyBeatContainers(board);
+}
+export function pruneEmptyBeatContainers(board) {
+  const occupied=new Set(board.beats.map(b=>b.blockID)),parents=new Set(board.blocks.map(b=>b.parentID));
+  board.blocks=board.blocks.filter(b=>(!b.standalone&&b.containerKind!=='beatGroup')||occupied.has(b.id)||parents.has(b.id));return board;
 }

@@ -88,7 +88,8 @@ final class Workspace: ObservableObject {
     @Published var errorMessage: String?
     @Published var selectedBoardBeatID: String?
     @Published var pendingBoardCauseID: String?
-    @Published var showBoardScript = false
+    @Published var showBoardScript = true
+    @Published var reader = ScriptReaderSettings()
     @Published var whiteboardRipple = true
     @Published var selectedResearchID: String?
     @Published var mode = Mode.board {
@@ -391,28 +392,12 @@ final class Workspace: ObservableObject {
 
 struct WorkspaceView: View {
     @ObservedObject var workspace: Workspace
-    @State private var columns = NavigationSplitViewVisibility.detailOnly
+    @State private var columns = NavigationSplitViewVisibility.all
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columns) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("FRONTSTAGE").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    .padding(.horizontal)
-                TextField("Project name", text: Binding(
-                    get: { workspace.project.name }, set: { workspace.rename($0) }))
-                    .font(.title3.weight(.semibold)).textFieldStyle(.plain).padding(.horizontal)
-                List(workspace.project.scenes, selection: $workspace.selectedSceneID) { scene in
-                    Label(scene.title.isEmpty ? "Untitled Scene" : scene.title, systemImage: "doc.text")
-                        .tag(scene.id)
-                }
-                HStack {
-                    Text("\(workspace.project.scenes.count) scenes").foregroundStyle(.secondary)
-                    Spacer()
-                    Button(action: workspace.addScene) { Image(systemName: "plus") }
-                        .help("Add Scene")
-                }.padding()
-            }.padding(.top)
-            .navigationSplitViewColumnWidth(min: 220, ideal: WorkspaceDesign.sidebar)
+            ScriptSidePaper(workspace: workspace)
+                .navigationSplitViewColumnWidth(min: 360, ideal: 560, max: 800)
         } detail: {
             Group {
             if workspace.mode == .shared {
@@ -447,6 +432,7 @@ struct WorkspaceView: View {
             }
             }.background(Color(boardHex: WorkspaceDesign.panelColor))
         }
+        .onChange(of: workspace.showBoardScript) { visible in columns = visible ? .all : .detailOnly }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             HStack {
                 Text(workspace.hasChanges ? "Unsaved project changes" : "No pending changes")
@@ -529,17 +515,40 @@ struct SceneWritingView: View {
     }
 }
 
-struct ScriptSuggestionField: View {
+struct ScriptSuggestionField: NSViewRepresentable {
     let label: String
     @Binding var text: String
     let options: [String]
-    var body: some View {
-        HStack(spacing: 2) {
-            TextField(label, text: $text).accessibilityLabel(label)
-            Menu { ForEach(options, id: \.self) { value in Button(value) { text = value } } }
-                label: { Image(systemName: "chevron.down") }
-                .menuStyle(.borderlessButton).fixedSize().accessibilityLabel("\(label) options")
-        }.textFieldStyle(.roundedBorder)
+    @Environment(\.isEnabled) private var enabled
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    func makeNSView(context: Context) -> NSTextField {
+        let field = NSTextField(string: text)
+        field.placeholderString = label; field.setAccessibilityLabel(label)
+        field.isBezeled = true; field.bezelStyle = .roundedBezel
+        field.delegate = context.coordinator
+        return field
+    }
+    func updateNSView(_ field: NSTextField, context: Context) {
+        context.coordinator.parent = self; field.isEnabled = enabled
+        if field.currentEditor() == nil { field.stringValue = text }
+    }
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var parent: ScriptSuggestionField
+        var completing = false
+        init(_ parent: ScriptSuggestionField) { self.parent = parent }
+        func controlTextDidChange(_ notification: Notification) {
+            guard let field = notification.object as? NSTextField else { return }
+            parent.text = field.stringValue
+            guard !completing, let editor = field.currentEditor() as? NSTextView, !editor.hasMarkedText(), !field.stringValue.isEmpty else { return }
+            completing = true; editor.complete(nil); completing = false
+        }
+        func control(_ control: NSControl, textView: NSTextView, completions words: [String], forPartialWordRange range: NSRange, indexOfSelectedItem index: UnsafeMutablePointer<Int>) -> [String] {
+            let source = textView.string as NSString
+            let prefix = source.substring(to: NSMaxRange(range))
+            let before = source.substring(to: range.location)
+            index.pointee = -1
+            return parent.options.filter { $0.lowercased().hasPrefix(prefix.lowercased()) && $0.lowercased() != prefix.lowercased() }.map { String($0.dropFirst(before.count)) }
+        }
     }
 }
 
@@ -569,6 +578,15 @@ struct SceneHeadingFields: View {
     }
 }
 
+extension Workspace {
+    var screenplayCompletions: [ScreenplayElement: [String]] {
+        [.character: Array(Set(project.characters.map(\.name) + whiteboard.beats.flatMap(\.characters))).filter { !$0.isEmpty }.sorted(),
+         .transition: ["CUT TO:", "DISSOLVE TO:", "FADE IN:", "FADE OUT.", "FADE TO BLACK.", "SMASH CUT TO:", "MATCH CUT TO:"],
+         .parenthetical: ["(beat)", "(quietly)", "(into phone)"],
+         .shot: ["CLOSE ON", "ANGLE ON", "INSERT", "POV"]]
+    }
+}
+
 struct ScreenplaySuggestions: View {
     @ObservedObject var workspace: Workspace
     @ObservedObject var controller: ScreenplayEditorController
@@ -576,22 +594,8 @@ struct ScreenplaySuggestions: View {
         Array(Set(workspace.project.characters.map(\.name) + workspace.whiteboard.beats.flatMap(\.characters))).filter { !$0.isEmpty }.sorted()
     }
     var body: some View {
-        HStack {
-            Menu("Character") {
-                if names.isEmpty { Text("Add characters in People or type a new name") }
-                ForEach(names, id: \.self) { name in Button(name) { controller.insertCue(name, element: .character) } }
-            }
-            Menu("Transition") {
-                ForEach(["CUT TO:", "DISSOLVE TO:", "FADE IN:", "FADE OUT.", "FADE TO BLACK.", "SMASH CUT TO:", "MATCH CUT TO:"], id: \.self) { value in
-                    Button(value) { controller.insertCue(value, element: .transition) }
-                }
-            }
-            Menu("More") {
-                ForEach(["(beat)", "(quietly)", "(into phone)"], id: \.self) { value in Button(value) { controller.insertCue(value, element: .parenthetical) } }
-                Divider()
-                ForEach(["CLOSE ON", "ANGLE ON", "INSERT", "POV"], id: \.self) { value in Button(value) { controller.insertCue(value, element: .shot) } }
-            }
-        }.font(.caption)
+        Text("Type for suggestions · Tab changes screenplay element")
+            .font(.caption).foregroundStyle(.secondary)
     }
 }
 

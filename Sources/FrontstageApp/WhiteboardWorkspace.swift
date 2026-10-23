@@ -32,9 +32,6 @@ struct WhiteboardWorkspace: View {
             }.font(.caption).buttonStyle(.borderless).padding(.horizontal, 10).padding(.vertical, 5)
                 .background(Color(white: 0.24))
             HSplitView {
-                if workspace.showBoardScript {
-                    snippetPanel.frame(minWidth: 360, idealWidth: 560, maxWidth: 620)
-                }
                 VStack(spacing: 0) {
                     if showTimeline { timeline.frame(height: (showCharacters ? 150 : 88) + (markers.isEmpty ? 0 : 20)) }
                     if let cause = workspace.pendingBoardCauseID {

@@ -146,6 +146,7 @@ struct ScreenplayEditor: NSViewRepresentable {
     var paper = false
     var paperTopInset: CGFloat = 72
     var continuous = false
+    var suggestions: [ScreenplayElement: [String]] = [:]
 
     func makeCoordinator() -> Coordinator { Coordinator(html: $html, controller: controller, onError: onError) }
 
@@ -177,6 +178,7 @@ struct ScreenplayEditor: NSViewRepresentable {
         text.textContainer?.widthTracksTextView = false
         text.textContainer?.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
         text.textContainer?.lineFragmentPadding = 0
+        context.coordinator.suggestions = suggestions
         text.delegate = context.coordinator
         controller.textView = text
         controller.contentWidth = width
@@ -187,6 +189,7 @@ struct ScreenplayEditor: NSViewRepresentable {
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
+        context.coordinator.suggestions = suggestions
         context.coordinator.html = $html
         context.coordinator.onError = onError
         guard let text = scroll.documentView as? NSTextView else { return }
@@ -207,6 +210,8 @@ struct ScreenplayEditor: NSViewRepresentable {
         let controller: ScreenplayEditorController
         var onError: (String) -> Void
         private(set) var lastHTML: String?
+        var suggestions: [ScreenplayElement: [String]] = [:]
+        private var completing = false
         private var loading = false
         private var pendingElement: ScreenplayElement?
         init(html: Binding<String>, controller: ScreenplayEditorController, onError: @escaping (String) -> Void) {
@@ -241,6 +246,16 @@ struct ScreenplayEditor: NSViewRepresentable {
             }
         }
 
+        func textView(_ textView: NSTextView, completions words: [String], forPartialWordRange range: NSRange, indexOfSelectedItem index: UnsafeMutablePointer<Int>) -> [String] {
+            let source = textView.string as NSString
+            let paragraph = source.paragraphRange(for: range)
+            let prefix = source.substring(with: NSRange(location: paragraph.location, length: NSMaxRange(range) - paragraph.location))
+            let before = source.substring(with: NSRange(location: paragraph.location, length: range.location - paragraph.location))
+            index.pointee = -1
+            guard !prefix.isEmpty else { return [] }
+            return (suggestions[controller.activeElement] ?? []).filter { $0.lowercased().hasPrefix(prefix.lowercased()) && $0.lowercased() != prefix.lowercased() }.map { String($0.dropFirst(before.count)) }
+        }
+
         func textDidChange(_ notification: Notification) {
             guard !loading, let text = notification.object as? NSTextView, !text.hasMarkedText() else { return }
             // Rich clipboard data lacks our paragraph metadata. Keep the destination element
@@ -264,6 +279,9 @@ struct ScreenplayEditor: NSViewRepresentable {
             html.wrappedValue = result
             controller.selectionChanged()
             controller.measure()
+            if !completing, !(suggestions[controller.activeElement] ?? []).isEmpty {
+                completing = true; text.complete(nil); completing = false
+            }
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {

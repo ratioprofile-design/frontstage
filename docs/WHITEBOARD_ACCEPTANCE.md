@@ -60,3 +60,11 @@ The Mac and browser popup use a two-column metadata area, visibility selector, c
 The board-side script now separates scene sluglines (number on the right), collapsible tinted beat headers, metadata and white screenplay passages. Heading editing is in the popup and Write workspace. Groups and blocks support freely positioned beats as well as stacked beats; local offsets persist through save/reopen and ungrouping preserves their canvas positions.
 
 Automated checks cover model persistence, hierarchy, scene order, browser editing and locks. Screenshot captures support visual review; exact Causality interaction equivalence and hands-on Mac acceptance remain open.
+
+### Application script sidebar and beat drops
+
+The application sidebar now contains the top-aligned script reader across workspaces instead of the scene-title list. Display supports expanded/collapsed beats, index cards, content-only and final-script reading, character/tag/synopsis and container details, margins, zoom, search/filter and presets. Following board selection is optional so independent reading does not jump. The sidebar uses a larger reading font without altering document typography or exports. Episode organization and production-location overlays are not included in these controls.
+
+Slugline fields offer typing completions without adjacent arrow menus. Character, transition, parenthetical and shot paragraphs suggest matching entries while typing; accept with Enter/Tab and dismiss with Escape. Custom values and IME composition remain supported.
+
+Dropping onto another beat creates or joins a beat group. Moving loose beats or detaching group members does not create visible blocks; empty loose-beat and automatic group containers are cleaned up. Explicitly created blocks are retained, including empty ones.

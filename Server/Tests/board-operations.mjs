@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 globalThis.crypto ||= webcrypto;
-import { resolveCausalTime, moveBeatsToLayer, spatialOrder, groupBlocks, groupBeats, beatSize, ungroupBlocks, moveBlocks, moveStandaloneBeats, compactCausalTime, deleteBlocks, validateBoard } from '../Public/board-operations.js';
+import { dropBeats, resolveCausalTime, moveBeatsToLayer, spatialOrder, groupBlocks, groupBeats, beatSize, ungroupBlocks, moveBlocks, moveStandaloneBeats, compactCausalTime, deleteBlocks, validateBoard } from '../Public/board-operations.js';
 const board = { version: 1, layers: [{ id: 'main', unused: false }], blocks: [
   { id: 'a', layerID: 'main', position: { x: 40, y: 50 }, width: 224 }, { id: 'b', layerID: 'main', position: { x: 280, y: 90 }, width: 224 }
 ], beats: [
@@ -85,3 +85,10 @@ const crossed=moveStandaloneBeats(cross,new Set(['first','second']),40,70,{layer
 assert.ok(crossed.blocks.every(b=>b.layerID==='second-lane'));assert.equal(crossed.blocks[1].position.x-crossed.blocks[0].position.x,240);
 const loop=structuredClone(rippleSource);loop.dependencies.push({id:'loop',cause:'second',effect:'first'});assert.throws(()=>resolveCausalTime(loop));
 console.log('PASS: forward ripple, locked rollback, cycle rejection and rigid cross-lane movement');
+
+const dropped=dropBeats(loose,new Set(['first']),'second');
+assert.equal(dropped.blocks.length,1);assert.equal(dropped.blocks[0].containerKind,'beatGroup');assert.equal(dropped.blocks[0].standalone,false);
+assert.deepEqual(dropped.dependencies,loose.dependencies);
+const detached=moveBeatsToLayer(dropped,new Set(['first','second']),'main',{x:600,y:60});
+assert.equal(detached.blocks.length,2);assert.ok(detached.blocks.every(b=>b.standalone));
+console.log('PASS: beat drops create groups and clean empty loose/group containers without creating blocks');
