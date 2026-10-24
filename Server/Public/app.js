@@ -805,3 +805,6 @@ const workspaces = mountWorkspaces({
   connect: () => { download(); $('logout').click(); },
   share: async (username, access) => { if (!username.trim()) throw Error('Enter a registered username.'); await api(`/api/projects/${current.id}/members`, 'POST', {username, access: access === 'remove' ? null : access}); status(`Access updated for ${username}`); }
 });
+
+// Re-measure cards if a fallback/web font finishes loading after the first render.
+document.fonts?.addEventListener('loadingdone', () => { if (doc) render(); });

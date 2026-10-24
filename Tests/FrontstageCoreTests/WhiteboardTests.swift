@@ -3,6 +3,24 @@ import XCTest
 @testable import FrontstageCore
 
 final class WhiteboardTests: XCTestCase {
+    func testMeasuredTextDrivesCardContainerAndHitTesting() throws {
+        var project = Project()
+        let id = try project.addBoardBeat(title: "காகித கப்பல்")
+        let board = try project.whiteboard()
+        var measurements = 0
+        let layout = WhiteboardLayout(board, measureBeat: { _, _ in
+            measurements += 1
+            return (180, 160)
+        })
+        let card = try XCTUnwrap(layout.beatRects[id])
+        let owner = try XCTUnwrap(board.beats.first { $0.id == id }?.blockID)
+        let container = try XCTUnwrap(layout.blockRects[owner])
+        XCTAssertEqual(card.height, 160)
+        XCTAssertGreaterThanOrEqual(container.maxY, card.maxY)
+        XCTAssertEqual(layout.hitBeat(.init(x: card.x + 10, y: card.maxY - 2)), id)
+        XCTAssertEqual(measurements, 1)
+    }
+
     func testStandaloneSelectionMovesRigidlyAndRejectsLockedMembersAtomically() throws {
         var project = Project()
         let a = try project.addBoardBeat(position: .init(x: 50, y: 70))

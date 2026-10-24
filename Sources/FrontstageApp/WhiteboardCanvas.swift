@@ -29,8 +29,8 @@ struct WhiteboardCanvas: NSViewRepresentable {
 @MainActor
 final class NativeWhiteboard: NSView, NSTextFieldDelegate {
     weak var workspace: Workspace?
-    var board = Whiteboard() { didSet { geometry = WhiteboardLayout(board) } }
-    private var geometry = WhiteboardLayout(Whiteboard())
+    var board = Whiteboard() { didSet { geometry = WhiteboardLayout(board, measureBeat: WhiteboardBeatText.size) } }
+    private var geometry = WhiteboardLayout(Whiteboard(), measureBeat: WhiteboardBeatText.size)
     var selection = Set<String>()
     var blockSelection = Set<String>()
     var selected: ((Set<String>, Set<String>) -> Void)?
@@ -222,9 +222,7 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
             let path = NSBezierPath(roundedRect: frame, xRadius: 4, yRadius: 4); path.fill()
             (selection.contains(id) ? NSColor.white : NSColor(calibratedWhite: 1, alpha: 0.3)).setStroke()
             path.lineWidth = selection.contains(id) ? 2 / zoom : 1; path.stroke()
-            let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byCharWrapping
-            paragraph.minimumLineHeight = 14; paragraph.maximumLineHeight = 14
-            (beat.title as NSString).draw(in: frame.insetBy(dx: 7, dy: 5), withAttributes: [.font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular), .foregroundColor: NSColor.white, .paragraphStyle: paragraph])
+            (beat.title as NSString).draw(with: frame.insetBy(dx: 7, dy: 5), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: WhiteboardBeatText.attributes, context: nil)
             if issueBeats.contains(id) {
                 NSColor.systemRed.setFill()
                 NSBezierPath(ovalIn: NSRect(x: frame.maxX - 11, y: frame.minY - 7, width: 16, height: 16)).fill()

@@ -30,7 +30,14 @@ public struct WhiteboardLayout: Sendable {
         return (max(32, Double(columns) * 6.7 + 18), max(26, Double(rows) * 14 + 12))
     }
 
-    public init(_ board: Whiteboard) {
+    public init(_ board: Whiteboard, measureBeat: (String, Double) -> (width: Double, height: Double) = { Self.beatSize($0, maximumWidth: $1) }) {
+        var measured = [String: [Double: (width: Double, height: Double)]]()
+        func size(_ title: String, maximumWidth: Double) -> (width: Double, height: Double) {
+            if let cached = measured[title]?[maximumWidth] { return cached }
+            let result = measureBeat(title, maximumWidth)
+            measured[title, default: [:]][maximumWidth] = result
+            return result
+        }
         var layers = [String: BoardRect](), blocks = [String: BoardRect](), beats = [String: BoardRect]()
         let blockByID = Dictionary(uniqueKeysWithValues: board.blocks.map { ($0.id, $0) })
         let byBlock = Dictionary(grouping: board.orderedBeats, by: \.blockID)
@@ -46,8 +53,8 @@ public struct WhiteboardLayout: Sendable {
             let items = board.blocks.filter { $0.layerID == layer.id && !hidden($0) }
             let contentHeight = items.map { block in
                 let members = byBlock[block.id] ?? []
-                let stacked = members.reduce(42.0) { $0 + Self.beatSize($1.title, maximumWidth: block.width - 12).height + 4 }
-                let placed = members.map { ($0.position?.y ?? 24) + Self.beatSize($0.title, maximumWidth: block.width - 12).height + 12 }.max() ?? 0
+                let stacked = members.reduce(42.0) { $0 + size($1.title, maximumWidth: block.width - 12).height + 4 }
+                let placed = members.map { ($0.position?.y ?? 24) + size($0.title, maximumWidth: block.width - 12).height + 12 }.max() ?? 0
                 return block.position.y + (block.collapsed ? 32 : max(stacked, placed, layer.useBlocks == true && block.standalone != true && block.containerKind != "beatGroup" ? 180 : 60))
             }.max() ?? 0
             let layerHeight = layer.collapsed ? 38 : max(layer.height, contentHeight + 45)
@@ -56,13 +63,13 @@ public struct WhiteboardLayout: Sendable {
                 for block in items {
                     let members = byBlock[block.id] ?? []
                     let rect = BoardRect(x: 110 + block.position.x, y: offset + block.position.y,
-                        width: max(block.width, members.map { ($0.position?.x ?? 6) + Self.beatSize($0.title, maximumWidth: block.width - 12).width + 12 }.max() ?? 0),
-                        height: block.collapsed ? 28 : max(layer.useBlocks == true && block.standalone != true && block.containerKind != "beatGroup" ? 180 : 60, members.reduce(32.0) { $0 + Self.beatSize($1.title, maximumWidth: block.width - 12).height + 4 }, members.map { ($0.position?.y ?? 24) + Self.beatSize($0.title, maximumWidth: block.width - 12).height + 12 }.max() ?? 0))
+                        width: max(block.width, members.map { ($0.position?.x ?? 6) + size($0.title, maximumWidth: block.width - 12).width + 12 }.max() ?? 0),
+                        height: block.collapsed ? 28 : max(layer.useBlocks == true && block.standalone != true && block.containerKind != "beatGroup" ? 180 : 60, members.reduce(32.0) { $0 + size($1.title, maximumWidth: block.width - 12).height + 4 }, members.map { ($0.position?.y ?? 24) + size($0.title, maximumWidth: block.width - 12).height + 12 }.max() ?? 0))
                     blocks[block.id] = rect; maximumX = max(maximumX, rect.maxX + 120)
                     if !block.collapsed {
                         var top = rect.y + 24
                         for beat in members {
-                            let size = Self.beatSize(beat.title, maximumWidth: block.width - 12)
+                            let size = size(beat.title, maximumWidth: block.width - 12)
                             beats[beat.id] = BoardRect(x: rect.x + (beat.position?.x ?? 6), y: beat.position.map { rect.y + $0.y } ?? top, width: size.width, height: size.height)
                             top += size.height + 4
                         }

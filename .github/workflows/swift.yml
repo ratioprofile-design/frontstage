@@ -24,6 +24,7 @@ jobs:
           node Server/Tests/workspace-model.mjs
           node Server/Tests/workspace-parity.mjs
           node Server/Tests/timeline-layout.mjs
+          node Server/Tests/whiteboard-text-layout.mjs
       - name: Test project model and persistence
         env:
           FRONTSTAGE_PARITY_OUTPUT: ${{ github.workspace }}/build/parity

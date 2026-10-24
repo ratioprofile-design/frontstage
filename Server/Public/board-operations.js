@@ -155,7 +155,27 @@ export function groupBeats(source, ids, id) {
   const occupied=new Set(board.beats.map(b=>b.blockID)),parents=new Set(board.blocks.map(b=>b.parentID));
   board.blocks=board.blocks.filter(b=>(!b.standalone&&b.containerKind!=='beatGroup')||occupied.has(b.id)||parents.has(b.id));board.blocks.push(group);return board;
 }
+// Measure the same styled text used by cards, including fallback fonts and shaping.
+let beatMeasure;
+const beatMeasurements = new Map();
+if (typeof document !== 'undefined') document.fonts?.addEventListener('loadingdone', () => beatMeasurements.clear());
 export function beatSize(text,maximumWidth) {
+  if (typeof document !== 'undefined' && document.body) {
+    const key=JSON.stringify([text,maximumWidth]);
+    if(beatMeasurements.has(key))return {...beatMeasurements.get(key)};
+    if(!beatMeasure?.isConnected){
+      beatMeasure=document.createElement('div');beatMeasure.className='beat beat-size-measure';
+      const label=document.createElement('div');label.className='beat-text';beatMeasure.append(label);document.body.append(beatMeasure);
+    }
+    beatMeasure.firstChild.textContent=text || ' ';
+    beatMeasure.style.width='max-content';beatMeasure.style.maxWidth=Math.max(32,maximumWidth)+'px';
+    const width=Math.ceil(beatMeasure.getBoundingClientRect().width);
+    beatMeasure.style.width=width+'px';
+    const result={width,height:Math.max(26,Math.ceil(beatMeasure.getBoundingClientRect().height))};
+    if(beatMeasurements.size>4096)beatMeasurements.clear();
+    beatMeasurements.set(key,result);return {...result};
+  }
+  // Headless model operations have no font renderer; the UI measures again on display.
   const segmenter=new Intl.Segmenter(undefined,{granularity:'grapheme'}),limit=Math.max(1,Math.floor((maximumWidth-18)/6.7)),lines=text.split('\n').map(s=>Math.max(1,[...segmenter.segment(s)].length));
   return {width:Math.max(32,Math.min(limit,Math.max(...lines))*6.7+18),height:Math.max(26,lines.reduce((n,l)=>n+Math.ceil(l/limit),0)*14+12)};
 }

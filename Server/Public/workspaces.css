@@ -142,3 +142,8 @@ input::-webkit-calendar-picker-indicator{display:none!important;}
 .timeline-item.title-narrow{padding:0;background-image:repeating-linear-gradient(135deg,transparent 0 3px,#ffffff65 3px 4px)!important}
 .timeline-title-preview{position:fixed;z-index:2147483647;max-width:min(380px,calc(100vw - 8px));max-height:calc(100vh - 8px);overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;padding:8px 10px;background:#1e1e1e;color:#fff;border:1px solid #777;border-radius:4px;box-shadow:0 4px 12px #0006;font:12px/18px system-ui;pointer-events:none;box-sizing:border-box}
 .timeline-titled>.timeline-title-text{position:absolute;left:4px;right:4px;top:3px}
+
+/* Cards and their measurement probe share shaping, wrapping and line metrics. */
+.beat { box-sizing:border-box; font:11px/1.5 monospace; }
+.beat-text { display:block; white-space:pre-wrap; overflow-wrap:anywhere; word-break:normal; }
+.beat-size-measure { position:fixed!important; left:-100000px!important; top:0!important; height:auto!important; min-width:32px; visibility:hidden; pointer-events:none; transform:none!important; }
