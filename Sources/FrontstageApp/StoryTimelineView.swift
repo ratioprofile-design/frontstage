@@ -65,7 +65,7 @@ struct StoryTimelineView: View {
             if expanded { fullPreferences = text } else { compactPreferences = text }
         }
         .onChange(of: workspace.selectedBoardBeatID) { _, id in if current?.id != id, let item = beatItems.first(where: { $0.id == id }) { time = item.start } }
-        .onChange(of: preferences.primary) { old, value in if preferences.secondary == value { preferences.secondary = old }; time = 0 }
+        .onChange(of: preferences.primary) { old, value in if preferences.secondary == value { preferences.secondary = old }; time = beatItems.first { $0.id == workspace.selectedBoardBeatID }?.start ?? 0 }
         .onChange(of: preferences.secondary) { old, value in if preferences.primary == value { preferences.primary = old } }
         .sheet(isPresented: $showingTiming) { timingEditor }
         .sheet(isPresented: $showingMarker) { structuralEditor }
