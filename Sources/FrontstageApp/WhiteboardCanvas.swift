@@ -30,7 +30,7 @@ struct WhiteboardCanvas: NSViewRepresentable {
 final class NativeWhiteboard: NSView, NSTextFieldDelegate {
     weak var workspace: Workspace?
     var board = Whiteboard() { didSet { geometry = WhiteboardLayout(board, measureBeat: WhiteboardBeatText.size) } }
-    private var geometry = WhiteboardLayout(Whiteboard(), measureBeat: WhiteboardBeatText.size)
+    private var geometry = WhiteboardLayout(Whiteboard())
     var selection = Set<String>()
     var blockSelection = Set<String>()
     var selected: ((Set<String>, Set<String>) -> Void)?

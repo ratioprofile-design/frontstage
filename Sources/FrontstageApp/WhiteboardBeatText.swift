@@ -6,7 +6,7 @@ import AppKit
 enum WhiteboardBeatText {
     static var attributes: [NSAttributedString.Key: Any] {
         let paragraph = NSMutableParagraphStyle()
-        paragraph.lineBreakMode = .byCharWrapping
+        paragraph.lineBreakMode = .byWordWrapping
         paragraph.minimumLineHeight = 16.5
         return [.font: NSFont.monospacedSystemFont(ofSize: 11, weight: .regular),
                 .foregroundColor: NSColor.white, .paragraphStyle: paragraph]
@@ -16,7 +16,9 @@ enum WhiteboardBeatText {
         let text = (title.isEmpty ? " " : title) as NSString
         let options: NSString.DrawingOptions = [.usesLineFragmentOrigin, .usesFontLeading]
         let natural = text.boundingRect(with: NSSize(width: 1_000_000, height: 1_000_000), options: options, attributes: attributes)
-        let width = max(32, min(maximumWidth, ceil(natural.width) + 18))
+        let available = max(32, min(maximumWidth, ceil(natural.width) + 18))
+        let lines = text.boundingRect(with: NSSize(width: available - 14, height: 1_000_000), options: options, attributes: attributes)
+        let width = min(available, max(32, ceil(lines.width) + 14))
         let wrapped = text.boundingRect(with: NSSize(width: width - 14, height: 1_000_000), options: options, attributes: attributes)
         return (width, max(26, ceil(wrapped.height) + 12))
     }

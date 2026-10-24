@@ -169,7 +169,20 @@ export function beatSize(text,maximumWidth) {
     }
     beatMeasure.firstChild.textContent=text || ' ';
     beatMeasure.style.width='max-content';beatMeasure.style.maxWidth=Math.max(32,maximumWidth)+'px';
-    const width=Math.ceil(beatMeasure.getBoundingClientRect().width);
+    const available=Math.ceil(beatMeasure.getBoundingClientRect().width);
+    beatMeasure.style.width=available+'px';
+    // Word wrapping can leave a large unused strip. Fit the widest shaped line,
+    // rather than keeping the container's maximum width after wrapping.
+    const range=document.createRange(),textNode=beatMeasure.firstChild.firstChild;
+    const lines=new Map();
+    for(const word of (textNode.textContent.matchAll(/\S+/gu))){
+      range.setStart(textNode,word.index);range.setEnd(textNode,word.index+word[0].length);
+      for(const rect of range.getClientRects()){
+      const key=Math.round(rect.top*2),line=lines.get(key);
+      lines.set(key,{left:Math.min(line?.left??rect.left,rect.left),right:Math.max(line?.right??rect.right,rect.right)});
+      }
+    }
+    const width=Math.min(available,Math.max(32,Math.ceil(Math.max(0,...[...lines.values()].map(r=>r.right-r.left)))+16));
     beatMeasure.style.width=width+'px';
     const result={width,height:Math.max(26,Math.ceil(beatMeasure.getBoundingClientRect().height))};
     if(beatMeasurements.size>4096)beatMeasurements.clear();

@@ -115,7 +115,7 @@ struct ScriptWritingWorkspace: View {
         return VStack(alignment: .leading, spacing: 0) {
             if !plain {
                 Button { if !toggled.insert(beat.id).inserted { toggled.remove(beat.id) } } label: {
-                    Text((expanded ? "▾ " : "▸ ") + beat.title).frame(maxWidth: .infinity, alignment: .leading).padding(6)
+                    Text((expanded ? "▾ " : "▸ ") + beat.title).lineLimit(nil).fixedSize(horizontal: false, vertical: true).multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading).padding(6)
                 }.buttonStyle(.plain).background(Color(boardHex: beat.color).opacity(0.2))
                 if display != "Index Cards" { BeatReferenceChips(characters: showCharacters ? beat.characters : [], tags: showTags ? beat.tags : []) }
                 if showSynopsis || display == "Index Cards" { Text(beat.synopsis).font(.caption).padding(6) }
@@ -217,7 +217,7 @@ struct SideScriptBeat: View {
         VStack(alignment: .leading, spacing: 0) {
             if !plain {
                 Button { expanded.toggle(); workspace.selectBoardBeat(beat.id) } label: {
-                    Text((expanded ? "▼ " : "▶ ") + beat.title).font(.system(size: 16)).frame(maxWidth: .infinity, alignment: .leading).padding(9)
+                    Text((expanded ? "▼ " : "▶ ") + beat.title).font(.system(size: 16)).lineLimit(nil).fixedSize(horizontal: false, vertical: true).multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading).padding(9)
                 }.buttonStyle(.plain).background(Color(boardHex: beat.color).opacity(0.2))
                 if (settings.characters && !beat.characters.isEmpty) || (settings.tags && !beat.tags.isEmpty) {
                     BeatReferenceChips(characters: settings.characters ? beat.characters : [], tags: settings.tags ? beat.tags : []).padding(8).frame(maxWidth: .infinity, alignment: .leading).background(Color(white: 0.94))

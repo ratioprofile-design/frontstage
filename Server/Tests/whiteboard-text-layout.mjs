@@ -15,13 +15,19 @@ try{
  await page.evaluate(async()=>{
   await document.fonts.ready;
   const {beatSize}=await import('/board-operations.js');
-  const titles=['Untitled Beat','Hhoogi','காகித கப்பல் கடலுல க வந்துடுச்சா?', 'தமிழ் English கலந்த தலைப்பு 👨‍👩‍👧‍👦', 'கப்பல்'.repeat(30), 'First line\nஇரண்டாவது வரி\n', 'A long English title '.repeat(10)];
+  const titles=['Untitled Beat','Hhoogi','காகித கப்பல் கடலுல கவுந்துடுச்சா?', 'தமிழ் English கலந்த தலைப்பு 👨‍👩‍👧‍👦', 'கப்பல்'.repeat(30), 'First line\nஇரண்டாவது வரி\n', 'A long English title '.repeat(10)];
   window.results=[];
   for(const width of [80,140,212,360])for(const title of titles){
     const size=beatSize(title,width),card=document.createElement('div');card.className='beat';
     card.style.cssText=`width:${size.width}px;height:${size.height}px;background:purple;position:relative`;
     const label=document.createElement('div');label.className='beat-text';label.textContent=title;card.append(label);document.body.append(card);
     const bounds=card.getBoundingClientRect(),text=label.getBoundingClientRect();
+    const range=document.createRange();range.selectNodeContents(label);
+    const longest=Math.max(...[...range.getClientRects()].map(r=>r.width));
+    if(size.width>32)results.push({title,width,size,contained:size.width-longest<=17,overflow:false});
+    const panel=document.createElement('section');panel.style.width=width+'px';
+    const heading=document.createElement('button');heading.className='script-beat-title';heading.textContent='▼ '+title;panel.append(heading);document.body.append(panel);
+    results.push({title:'Script heading: '+title,width,size,contained:heading.getBoundingClientRect().width<=width,overflow:heading.scrollWidth>heading.clientWidth+1||heading.scrollHeight>heading.clientHeight+1});
     results.push({title,width,size,contained:text.bottom<=bounds.bottom-4&&text.right<=bounds.right,overflow:label.scrollHeight>label.clientHeight+1||label.scrollWidth>label.clientWidth+1});
   }
  });
