@@ -1,14 +1,20 @@
 import { workspaceDesign as design } from './workspace-design.js';
 import * as model from './workspace-model.js';
 import { baminiPairs } from './bamini.js';
+import { blockLocked } from './board-operations.js';
 import { paginateParagraphs } from './pagination.js';
-import { screenplayToolbar, sluglineFields, characterNames } from './screenplay-editor.js';
+import { screenplayToolbar, sluglineFields, characterNames, elements, splitAtCaret } from './screenplay-editor.js';
 const el=(tag,text,className)=>{const e=document.createElement(tag);if(text!=null)e.textContent=text;if(className)e.className=className;return e;};
 const $=id=>document.getElementById(id);
 const download=(name,data,type='text/plain')=>{const url=URL.createObjectURL(new Blob([data],{type})),a=el('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 export function mountWorkspaces(api) {
   let mode='board',sceneID=null,roleID=null,actorID=null,revisionID=null,dayID=null,recordID=null,kind='research',search='',writing=false,projectID=null,paper='letter';
   const root=$('workspace-page'),selector=$('view-mode');
+  const scriptDefaults={display:'Final Script',margin:'Full Margins',zoom:1,characters:true,tags:true,synopsis:false,boundaries:false,filter:''};
+  let scriptView={...scriptDefaults},headingScene=null,activeEditor=null;const expandedBeats=new Set();
+  try{const saved=JSON.parse(localStorage.getItem('frontstage-script-dedicated'));if(saved&&['Final Script','Content Only','Expand All','Collapse All','Index Cards'].includes(saved.display))scriptView={...scriptDefaults,...saved};}catch{}
+  const scriptPreference=(key,value)=>{scriptView[key]=value;try{localStorage.setItem('frontstage-script-dedicated',JSON.stringify(scriptView));}catch{}render();};
+
   for(const p of design.pages){const o=el('option',p.title);o.value=p.id;selector.append(o);}
   const doc=()=>api.document(),state=()=>doc().project,scenes=()=>state().beats,currentScene=()=>scenes().find(s=>s.id===sceneID),readonly=()=>api.current()?.access==='reader';
   const change=(action,refresh=false)=>{writing=true;try{api.edit(()=>action(doc()));}finally{writing=false;}if(refresh)render();};
@@ -42,24 +48,54 @@ export function mountWorkspaces(api) {
     catch(e){root.replaceChildren(empty('This page could not be opened',e.message));api.status(e.message);}
   }
   function writePage(){
+    activeEditor=null;
     const wrap=el('div',null,'writing-workspace');root.append(wrap);
-    const top=el('div',null,'page-heading');top.append(el('h1','Write'),el('span','Continuous screenplay · linked to your whiteboard'));wrap.append(top);
-    const current=currentScene();
-    if(current){const fields=el('div',null,'writing-scene-fields');
-      fields.append(field('Scene title',current.title,(v,d)=>model.scene(d,current.id).title=v),field('Synopsis',current.summary,(v,d)=>model.scene(d,current.id).summary=v));
-      fields.append(sluglineFields(()=>model.scene(doc(),current.id),()=>scenes(),action=>change(()=>action(),true),!readonly()));
-      fields.append(field('Scene number',current.sceneNumber,(v,d)=>{const s=model.scene(d,current.id);if(s.frontstageTextLocked)throw Error('Unlock the scene heading before changing it.');s.sceneNumber=v;}));wrap.append(fields);
-    }
+    const tools=el('nav',null,'dedicated-script-tools');tools.setAttribute('aria-label','Script toolbar');wrap.append(tools);
+    const menu=title=>{const detail=el('details'),summary=el('summary',title);detail.append(summary);tools.append(detail);detail.append(el('div',null,'script-menu-items'));return detail;};
+    const option=(menu,title,run)=>{const b=button(title,()=>{run();menu.open=false;});b.onpointerdown=e=>e.preventDefault();menu.querySelector('.script-menu-items').append(b);return b;};
+    const display=menu('Display');
+    for(const value of ['Expand All','Index Cards','Collapse All','Content Only','Final Script'])option(display,value,()=>{expandedBeats.clear();scriptPreference('display',value);});
+    for(const [key,label]of [['characters','Show Characters'],['tags','Show Tags'],['synopsis','Show Synopsis'],['boundaries','Show Block/Group Beginnings']])option(display,(scriptView[key]?'✓ ':'')+label,()=>scriptPreference(key,!scriptView[key]));
+    for(const margin of ['Full Margins','Compact Margins','Squeezed','Super Squeezed'])option(display,margin,()=>scriptPreference('margin',margin));
+    option(display,'Zoom In',()=>scriptPreference('zoom',Math.min(2,scriptView.zoom+.1)));option(display,'Zoom Out',()=>scriptPreference('zoom',Math.max(.5,scriptView.zoom-.1)));option(display,'100%',()=>scriptPreference('zoom',1));
+    const styling=menu('Styling'),formatButtons=[];
+    for(const kind of elements)formatButtons.push(option(styling,kind[0].toUpperCase()+kind.slice(1),()=>activeEditor?.format(kind)));
+    for(const command of ['bold','italic','underline','strikeThrough'])formatButtons.push(option(styling,command,()=>activeEditor?.inline(command)));
+    formatButtons.push(option(styling,'Split at Cursor',()=>activeEditor?.split()),option(styling,'Open Beat Editor',()=>activeEditor?.open()));
+    const enableFormatting=enabled=>formatButtons.forEach(b=>b.disabled=!enabled);enableFormatting(false);
+    const filter=menu('Filter'),query=el('input');query.type='search';query.placeholder='Script, characters or tags';query.setAttribute('aria-label','Filter dedicated script');query.value=scriptView.filter;query.onchange=()=>scriptPreference('filter',query.value);filter.querySelector('.script-menu-items').append(query);option(filter,'Reset Filter',()=>scriptPreference('filter',''));
+    const presets=menu('Presets');option(presets,'Reading',()=>{scriptView={...scriptDefaults};scriptPreference('display','Final Script');});option(presets,'Story Review',()=>scriptPreference('display','Expand All'));option(presets,'Index Cards',()=>scriptPreference('display','Index Cards'));
+    const options=menu('Options');option(options,'Full Screen',()=>{if(document.fullscreenElement)document.exitFullscreen?.();else root.requestFullscreen?.();});option(options,'Writing Settings',()=>navigate('writingTools'));
+    tools.append(el('span',scriptView.display,'script-mode-label'));
     const segments=model.scriptSegments(doc());if(!segments.length){wrap.append(empty('Your next story starts here','Add a scene or a beat to begin.'),button('Add Scene',()=>api.addScene(),true));return;}
-    const desk=el('div',null,'continuous-desk'),sheet=el('div',null,'continuous-paper');desk.append(sheet);wrap.append(desk);applyTypography(sheet);
+    const desk=el('div',null,'continuous-desk'),sheet=el('div',null,'continuous-paper');desk.append(sheet);wrap.append(desk);applyTypography(sheet);sheet.dataset.display=scriptView.display;sheet.dataset.margin=scriptView.margin;sheet.style.zoom=scriptView.zoom;
+    const plain=['Final Script','Content Only'].includes(scriptView.display);
     for(const segment of segments){
-      const s=segment.scene,heading=el('h3',`${segment.number}  ${model.heading(s)}${segment.continuation?' (CONTINUED)':''}`,'script-heading');sheet.append(heading);
-      heading.onclick=()=>{sceneID=s.id;api.selectScene(s.id);render();};
-      for(const id of segment.beatIDs){const beat=model.board(doc()).beats.find(b=>b.id===id),block=el('section',null,'script-snippet'),name=el('button',beat.title,'snippet-heading');name.onclick=()=>api.openBeat(id);block.append(name);
-        const text=el('div',null,'script-text');text.contentEditable=!(readonly()||s.frontstageTextLocked);text.setAttribute('role','textbox');text.setAttribute('aria-label',`Script: ${beat.title}`);text.innerHTML=api.cleanHTML(beat.html);text.dataset.beatId=id;
-        const changed=()=>{if(text.isComposing)return;change(d=>{const target=model.board(d).beats.find(b=>b.id===id);if(target)target.html=api.cleanHTML(text.innerHTML);});};
-        text.oncompositionstart=()=>text.isComposing=true;text.oncompositionend=()=>{text.isComposing=false;changed();};text.oninput=changed;
-        block.append(screenplayToolbar(text,changed,text.contentEditable==='true',()=>characterNames(doc())),text);sheet.append(block);
+      const s=segment.scene,beats=segment.beatIDs.map(id=>model.board(doc()).beats.find(b=>b.id===id)).filter(Boolean).filter(b=>!scriptView.filter||[b.title,b.synopsis,b.html,...b.characters,...b.tags].join(' ').toLowerCase().includes(scriptView.filter.toLowerCase()));
+      if(segment.beatIDs.length&&!beats.length)continue;
+      if(scriptView.display!=='Index Cards'){
+        const heading=el('button',`${segment.number}  ${model.heading(s)}${segment.continuation?' (CONTINUED)':''}`,'script-heading');heading.setAttribute('aria-label','Edit scene heading: '+model.heading(s));sheet.append(heading);
+        heading.onclick=()=>{headingScene=headingScene===s.id?null:s.id;sceneID=s.id;render();};
+        if(headingScene===s.id){const fields=el('div',null,'writing-scene-fields');fields.append(field('Scene title',s.title,(v,d)=>model.scene(d,s.id).title=v),field('Synopsis',s.summary,(v,d)=>model.scene(d,s.id).summary=v),sluglineFields(()=>model.scene(doc(),s.id),()=>scenes(),action=>change(()=>action(),true),!readonly()),button('Done',()=>{headingScene=null;render();}));sheet.append(fields);}
+      }
+      for(const beat of beats){
+        const id=beat.id,block=el('section',null,'script-snippet');block.dataset.scriptBeatID=id;
+        if(!plain){const isExpanded=(scriptView.display!=='Collapse All')!==expandedBeats.has(id),name=button((isExpanded?'▾ ':'▸ ')+beat.title,()=>{if(expandedBeats.has(id))expandedBeats.delete(id);else expandedBeats.add(id);const text=block.querySelector('.script-text');if(text){text.hidden=!text.hidden;name.textContent=(text.hidden?'▸ ':'▾ ')+beat.title;}});name.className='snippet-heading';name.ondblclick=()=>api.openBeat(id);block.append(name);
+          if(scriptView.display!=='Index Cards'){if(scriptView.characters&&beat.characters.length)block.append(el('div',beat.characters.join(' · '),'script-beat-details'));if(scriptView.tags&&beat.tags.length)block.append(el('div',beat.tags.join(' · '),'script-beat-details'));}
+          if(scriptView.synopsis||scriptView.display==='Index Cards')block.append(el('div',beat.synopsis||'','script-beat-details'));
+          if(scriptView.boundaries){const owner=model.board(doc()).blocks.find(b=>b.id===beat.blockID);if(owner&&!owner.standalone&&model.board(doc()).beats.filter(b=>b.blockID===owner.id).sort((a,b)=>a.order-b.order)[0]?.id===id)block.prepend(el('div',owner.name,'script-beat-details'));}
+        }
+        if(scriptView.display!=='Index Cards'){
+          const text=el('div',null,'script-text');text.contentEditable=!(readonly()||s.frontstageTextLocked||beat.locked||blockLocked(model.board(doc()),beat.blockID));text.setAttribute('role','textbox');text.setAttribute('aria-label',`Script: ${beat.title}`);text.innerHTML=api.cleanHTML(beat.html);text.dataset.beatId=id;text.hidden=!plain&&((scriptView.display==='Collapse All')!==expandedBeats.has(id));
+          const changed=()=>{if(text.isComposing)return;change(d=>{const target=model.board(d).beats.find(b=>b.id===id);if(target)target.html=api.cleanHTML(text.innerHTML);});};
+          text.oncompositionstart=()=>text.isComposing=true;text.oncompositionend=()=>{text.isComposing=false;changed();};text.oninput=changed;
+          const behavior=screenplayToolbar(text,changed,text.contentEditable==='true',()=>characterNames(doc())).editor;
+          behavior.split=()=>{const [first,last]=splitAtCaret(text);change(d=>model.splitBeat(d,id,first,last),true);};behavior.open=()=>api.openBeat(id);
+          text.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'&&!e.isComposing){e.preventDefault();try{behavior.split();}catch(error){api.status(error.message);}}});
+          text.onfocus=()=>{activeEditor=behavior;enableFormatting(text.isContentEditable);};
+          text.oncontextmenu=e=>{e.preventDefault();activeEditor=behavior;enableFormatting(text.isContentEditable);behavior.remember();styling.open=true;};
+          block.append(text);
+        }sheet.append(block);
       }
       if(!segment.beatIDs.length){const p=el('div',null,'script-text');p.innerHTML=api.cleanHTML(segment.html);sheet.append(p);}
     }

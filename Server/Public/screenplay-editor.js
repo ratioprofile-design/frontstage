@@ -32,11 +32,12 @@ export function screenplayToolbar(text, changed, editable=true, characters=()=>[
   text.addEventListener('keyup',()=>{const node=paragraph();if(node)select.value=elements.find(e=>node.classList.contains('sc-'+e))||'action';});
   text.addEventListener('keydown',event=>{
     if(event.isComposing||!text.isContentEditable)return;
-    if(event.key==='Tab'){event.preventDefault();format(elements[(elements.indexOf(select.value)+(event.shiftKey?6:1))%7]);}
-    if(event.altKey&&/^[1-7]$/.test(event.key)){event.preventDefault();format(elements[Number(event.key)-1]);}
-    if(event.key==='Enter'&&!event.shiftKey){const node=paragraph(),kind=elements.find(e=>node?.classList.contains('sc-'+e))||'action',empty=!node?.textContent.trim(),next=empty?'action':kind==='character'||kind==='parenthetical'?'dialogue':kind==='dialogue'?'character':kind==='lyrics'?'lyrics':'action';event.preventDefault();if(!empty||kind==='action')document.execCommand('insertParagraph');format(next);}
+    if(event.key==='Tab'){event.preventDefault();const node=paragraph(),kind=elements.find(e=>node?.classList.contains('sc-'+e))||'action',empty=!node?.textContent.trim();if(event.shiftKey){format(elements[(elements.indexOf(kind)+elements.length-1)%elements.length]);return;}if(kind==='character')return;const next=kind==='dialogue'?'parenthetical':kind==='parenthetical'?'dialogue':'character';if(!empty||kind==='action')document.execCommand('insertParagraph');format(next);}
+    if((event.altKey||event.ctrlKey||event.metaKey)&&/^[1-7]$/.test(event.key)){event.preventDefault();format(elements[Number(event.key)-1]);}
+    if(event.key==='Enter'&&!event.shiftKey){const node=paragraph(),kind=elements.find(e=>node?.classList.contains('sc-'+e))||'action',empty=!node?.textContent.trim(),next=kind==='character'||kind==='parenthetical'?'dialogue':kind==='lyrics'?'lyrics':'action';event.preventDefault();if(!empty||['action','character','dialogue'].includes(kind))document.execCommand('insertParagraph');format(next);}
   });
   attachCompletions(text,paragraph,characters,changed);
+  bar.editor={format:kind=>{text.focus();if(savedRange&&text.contains(savedRange.startContainer)){const selection=window.getSelection();selection.removeAllRanges();selection.addRange(savedRange);}format(kind);},inline:command=>{text.focus();if(savedRange&&text.contains(savedRange.startContainer)){const selection=window.getSelection();selection.removeAllRanges();selection.addRange(savedRange);}document.execCommand(command);changed();},remember};
   return bar;
 }
 export function splitAtCaret(text) {
@@ -69,7 +70,7 @@ export function sluglineFields(getScene, getScenes, commit, editable=true) {
 function attachCompletions(text,paragraph,characters,changed) {
   let popup=null,values=[],index=0,line=null;
   const close=()=>{popup?.remove();popup=null;values=[];};
-  const choose=()=>{if(!line||!values[index])return;const value=values[index];close();text.focus();const range=document.createRange();range.selectNodeContents(line);const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);document.execCommand('insertText',false,value);changed();};
+  const choose=(advance=false)=>{if(!line||!values[index])return;const value=values[index];close();text.focus();const range=document.createRange();range.selectNodeContents(line);const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);document.execCommand('insertText',false,value);if(advance&&line.classList.contains('sc-character')){document.execCommand('insertParagraph');let next=window.getSelection()?.anchorNode;if(next?.nodeType===3)next=next.parentElement;while(next&&next.parentElement!==text)next=next.parentElement;if(next)next.className='sc-line sc-dialogue';}changed();};
   const highlight=()=>popup?.querySelectorAll('button').forEach((b,i)=>b.setAttribute('aria-selected',String(i===index)));
   text.addEventListener('input',event=>{
     close();if(event.isComposing||!text.isContentEditable)return;
@@ -81,6 +82,6 @@ function attachCompletions(text,paragraph,characters,changed) {
     for(const [i,value]of values.entries()){const button=document.createElement('button');button.textContent=value;button.setAttribute('role','option');button.onpointerdown=e=>{e.preventDefault();index=i;choose();};popup.append(button);}
     const rect=window.getSelection()?.getRangeAt(0).getBoundingClientRect()||line.getBoundingClientRect();popup.style.left=Math.min(rect.left,window.innerWidth-220)+'px';popup.style.top=Math.min(rect.bottom+4,window.innerHeight-190)+'px';document.body.append(popup);highlight();
   });
-  text.addEventListener('keydown',event=>{if(!popup||event.isComposing)return;if(['ArrowDown','ArrowUp','Enter','Tab','Escape'].includes(event.key)){event.preventDefault();event.stopImmediatePropagation();if(event.key==='Escape')close();else if(['Enter','Tab'].includes(event.key))choose();else{index=(index+(event.key==='ArrowDown'?1:values.length-1))%values.length;highlight();}}},true);
+  text.addEventListener('keydown',event=>{if(!popup||event.isComposing)return;if(['ArrowDown','ArrowUp','Enter','Tab','Escape'].includes(event.key)){event.preventDefault();event.stopImmediatePropagation();if(event.key==='Escape')close();else if(['Enter','Tab'].includes(event.key))choose(event.key==='Enter');else{index=(index+(event.key==='ArrowDown'?1:values.length-1))%values.length;highlight();}}},true);
   text.addEventListener('blur',close);text.addEventListener('compositionstart',close);
 }

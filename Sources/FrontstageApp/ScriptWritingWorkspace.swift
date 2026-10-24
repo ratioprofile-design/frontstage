@@ -5,54 +5,128 @@ import FrontstageCore
 
 struct ScriptWritingWorkspace: View {
     @ObservedObject var workspace: Workspace
+    @AppStorage("frontstage-script-dedicated-display") private var display = "Final Script"
+    @AppStorage("frontstage-script-dedicated-margin") private var margin = "Full Margins"
+    @AppStorage("frontstage-script-dedicated-zoom") private var zoom = 1.0
+    @AppStorage("frontstage-script-dedicated-characters") private var showCharacters = true
+    @AppStorage("frontstage-script-dedicated-tags") private var showTags = true
+    @AppStorage("frontstage-script-dedicated-synopsis") private var showSynopsis = false
+    @AppStorage("frontstage-script-dedicated-boundaries") private var showBoundaries = false
+    @State private var filter = ""
+    @State private var activeController: ScreenplayEditorController?
+    @State private var headingID: Decimal?
+    @State private var toggled: Set<String> = []
     private var segments: [ScriptSegment] { (try? workspace.project.orderedScript()) ?? [] }
+    private var plain: Bool { display == "Final Script" || display == "Content Only" }
+    private var inset: CGFloat { margin == "Full Margins" ? workspace.paper.leftMargin : margin == "Compact Margins" ? 16 : margin == "Squeezed" ? 8 : 3 }
+    private var contentWidth: CGFloat { margin == "Squeezed" ? 404 : margin == "Super Squeezed" ? 354 : workspace.paper.contentWidth }
+    private func matches(_ beat: BoardBeat) -> Bool { filter.isEmpty || ([beat.title, beat.synopsis, beat.html] + beat.characters + beat.tags).joined(separator: " ").localizedCaseInsensitiveContains(filter) }
+    private var tools: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 16) {
+                Menu("Display") {
+                    Picker("Beat Display", selection: $display) { ForEach(["Expand All", "Index Cards", "Collapse All", "Content Only", "Final Script"], id: \.self) { Text($0) } }
+                    Divider()
+                    Toggle("Show Characters", isOn: $showCharacters); Toggle("Show Tags", isOn: $showTags)
+                    Toggle("Show Synopsis", isOn: $showSynopsis); Toggle("Show Block/Group Beginnings", isOn: $showBoundaries)
+                    Picker("Margins", selection: $margin) { ForEach(["Full Margins", "Compact Margins", "Squeezed", "Super Squeezed"], id: \.self) { Text($0) } }
+                    Button("Zoom In") { zoom = min(2, zoom + 0.1) }; Button("Zoom Out") { zoom = max(0.5, zoom - 0.1) }; Button("100%") { zoom = 1 }
+                }
+                Menu("Styling") {
+                    ForEach(ScreenplayElement.editable, id: \.self) { element in Button(element.label) { activeController?.format(element) } }
+                    Divider()
+                    ForEach(["bold", "italic", "underline"], id: \.self) { style in Button(style.capitalized) { activeController?.toggleInlineStyle(style) } }
+                }
+                .disabled(activeController?.textView?.isEditable != true)
+                Menu("Filter") {
+                    Button("Reset Filter") { filter = "" }
+                    ForEach(workspace.project.characters) { character in Button(character.name) { filter = character.name } }
+                }
+                Menu("Presets") {
+                    Button("Reading") { display = "Final Script"; margin = "Full Margins"; zoom = 1; filter = "" }
+                    Button("Story Review") { display = "Expand All" }
+                    Button("Index Cards") { display = "Index Cards" }
+                }
+                Menu("Options") {
+                    Button("Full Screen") { NSApp.keyWindow?.toggleFullScreen(nil) }
+                    Button("Writing Settings") { workspace.mode = .writingTools }
+                }
+                Text(display).foregroundStyle(.secondary)
+            }.font(.caption).padding(10).fixedSize()
+        }.frame(height: 40).background(Color(white: 0.2)).accessibilityIdentifier("dedicated-script-tools")
+    }
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("Write").font(.title2.weight(.semibold))
-                Text("Continuous screenplay · linked to your whiteboard").foregroundStyle(.secondary)
-                Spacer()
-            }.padding(.horizontal, WorkspaceDesign.padding).padding(.vertical, 16)
-            if let scene = workspace.selectedScene {
-                VStack(spacing: 8) {
-                    HStack {
-                        TextField("Scene title", text: Binding(get: { workspace.selectedScene?.title ?? "" }, set: { workspace.updateScene(id: scene.id, title: $0) }))
-                        TextField("Synopsis", text: Binding(get: { workspace.selectedScene?.summary ?? "" }, set: { workspace.updateScene(id: scene.id, summary: $0) }))
-                    }
-                    SceneHeadingFields(scene: scene, workspace: workspace)
-                }.textFieldStyle(.roundedBorder).padding(.horizontal, WorkspaceDesign.padding).padding(.bottom, 12)
-            }
+            tools
             ScrollView([.vertical, .horizontal]) {
-                if segments.isEmpty {
-                    ContentUnavailableView("Your next story starts here", systemImage: "doc.richtext", description: Text("Add a scene or a beat to begin."))
-                } else {
-                    VStack(alignment: .leading, spacing: 20) {
+                if segments.isEmpty { ContentUnavailableView("Your next story starts here", systemImage: "doc.richtext", description: Text("Add a scene or a beat to begin.")) }
+                else {
+                    VStack(alignment: .leading, spacing: 0) {
                         ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text("\(segment.number)  \(segment.scene.heading.text)\(segment.isContinuation ? " (CONTINUED)" : "")")
-                                    .font(.custom(workspace.project.scriptLayout.fontName, size: workspace.project.scriptLayout.fontSize).weight(.bold))
-                                    .foregroundStyle(.black)
+                            let beats = segment.beatIDs.compactMap { id in workspace.whiteboard.beats.first { $0.id == id } }.filter(matches)
+                            if !beats.isEmpty || segment.beatIDs.isEmpty {
+                                if display != "Index Cards" { heading(segment) }
                                 if segment.beatIDs.isEmpty {
-                                    ContinuousSnippet(workspace: workspace, sceneID: segment.scene.id, beatID: nil,
-                                        controller: workspace.scriptController("scene-\(segment.scene.id)"))
-                                } else {
-                                    ForEach(segment.beatIDs, id: \.self) { id in
-                                        ContinuousSnippet(workspace: workspace, sceneID: segment.scene.id, beatID: id,
-                                            controller: workspace.scriptController(id))
-                                    }
-                                }
+                                    snippet(sceneID: segment.scene.id, beatID: nil, key: "scene-\(segment.scene.id)")
+                                } else { ForEach(beats) { beat in beatView(beat) } }
                             }
                         }
                         Spacer(minLength: 24)
-                    }
-                    .frame(width: workspace.paper.contentWidth, alignment: .leading)
-                    .padding(.leading, workspace.paper.leftMargin).padding(.trailing, workspace.paper.rightMargin)
-                    .padding(.vertical, workspace.paper.topMargin)
-                    .frame(minHeight: workspace.paper.height, alignment: .topLeading)
-                    .background(Color.white).environment(\.colorScheme, .light)
-                    .shadow(color: .black.opacity(0.25), radius: 5, y: 3).padding(24)
+                    }.frame(width: contentWidth * zoom, alignment: .topLeading)
+                        .padding(.leading, inset * zoom).padding(.trailing, (margin == "Full Margins" ? workspace.paper.rightMargin : inset) * zoom)
+                        .padding(.vertical, workspace.paper.topMargin * zoom)
+                        .frame(minHeight: workspace.paper.height * zoom, alignment: .topLeading)
+                        .background(Color.white).environment(\.colorScheme, .light).foregroundStyle(.black)
+                        .shadow(color: .black.opacity(0.25), radius: 5, y: 3).padding(24)
                 }
-            }.frame(maxWidth: .infinity, maxHeight: .infinity).background(Color(white: 0.47))
+            }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).background(Color(white: 0.47))
+        }.onChange(of: display) { _, _ in toggled.removeAll(); activeController = nil }
+        .onReceive(NotificationCenter.default.publisher(for: NSText.didBeginEditingNotification)) { _ in
+            guard let controller = workspace.focusedScreenplayController else { return }
+            let keys = segments.flatMap { $0.beatIDs.isEmpty ? ["scene-\($0.scene.id)"] : $0.beatIDs }
+            if keys.contains(where: { workspace.scriptController($0) === controller }) { activeController = controller }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSTextView.didChangeSelectionNotification)) { _ in
+            guard let controller = workspace.focusedScreenplayController else { return }
+            let keys = segments.flatMap { $0.beatIDs.isEmpty ? ["scene-\($0.scene.id)"] : $0.beatIDs }
+            if keys.contains(where: { workspace.scriptController($0) === controller }) { activeController = controller }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSControl.textDidBeginEditingNotification)) { _ in activeController = nil }
+    }
+    private func snippet(sceneID: Decimal, beatID: String?, key: String) -> some View {
+        ContinuousSnippet(workspace: workspace, sceneID: sceneID, beatID: beatID, controller: workspace.scriptController(key), readerWidth: contentWidth * zoom, showControls: false, displayScale: zoom)
+    }
+    private func heading(_ segment: ScriptSegment) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button { headingID = headingID == segment.scene.id ? nil : segment.scene.id } label: {
+                Text("\(segment.number)  \(segment.scene.heading.text)\(segment.isContinuation ? " (CONTINUED)" : "")")
+                    .font(.custom(workspace.project.scriptLayout.fontName, size: workspace.project.scriptLayout.fontSize * zoom).weight(.bold)).frame(maxWidth: .infinity, alignment: .leading)
+            }.buttonStyle(.plain).accessibilityLabel("Edit scene heading: " + segment.scene.heading.text)
+            if headingID == segment.scene.id {
+                TextField("Scene title", text: Binding(get: { workspace.project.scenes.first { $0.id == segment.scene.id }?.title ?? "" }, set: { workspace.updateScene(id: segment.scene.id, title: $0) }))
+                TextField("Synopsis", text: Binding(get: { workspace.project.scenes.first { $0.id == segment.scene.id }?.summary ?? "" }, set: { workspace.updateScene(id: segment.scene.id, summary: $0) }))
+                SceneHeadingFields(scene: segment.scene, workspace: workspace)
+                Button("Done") { headingID = nil }
+            }
+        }.padding(.vertical, 12)
+    }
+    private func beatView(_ beat: BoardBeat) -> some View {
+        let expanded = (display != "Collapse All") != toggled.contains(beat.id)
+        return VStack(alignment: .leading, spacing: 0) {
+            if !plain {
+                Button { if !toggled.insert(beat.id).inserted { toggled.remove(beat.id) } } label: {
+                    Text((expanded ? "▾ " : "▸ ") + beat.title).frame(maxWidth: .infinity, alignment: .leading).padding(6)
+                }.buttonStyle(.plain).background(Color(boardHex: beat.color).opacity(0.2))
+                if display != "Index Cards" { BeatReferenceChips(characters: showCharacters ? beat.characters : [], tags: showTags ? beat.tags : []) }
+                if showSynopsis || display == "Index Cards" { Text(beat.synopsis).font(.caption).padding(6) }
+                if showBoundaries, let owner = workspace.whiteboard.blocks.first(where: { $0.id == beat.blockID }), owner.standalone != true, workspace.whiteboard.orderedBeats.first(where: { $0.blockID == owner.id })?.id == beat.id { Text(owner.name).font(.caption).padding(4) }
+            }
+            if display != "Index Cards", plain || expanded { snippet(sceneID: beat.sceneID, beatID: beat.id, key: beat.id) }
+            if display == "Content Only" { Color.gray.frame(height: 6).padding(.vertical, 8) }
+        }.contextMenu {
+            Button("Split at Cursor") { workspace.splitBoardBeat(beat.id, controller: workspace.scriptController(beat.id)) }.disabled(workspace.whiteboard.isLocked(beat) || activeController !== workspace.scriptController(beat.id))
+            Button("Open Beat Editor") { workspace.popup.open(beat.id, workspace: workspace) }
+            Button("Select on Whiteboard") { workspace.selectBoardBeat(beat.id); workspace.mode = .board }
         }
     }
 }
@@ -65,7 +139,9 @@ struct ContinuousSnippet: View {
     var compact = false
     var readerWidth: CGFloat = 520
     var readerZoom: Double = 1
-    private var displayTypography: ScriptLayoutSettings { var value = workspace.project.scriptLayout; if compact { value.fontSize = max(14, value.fontSize) * readerZoom; value.lineHeight = max(value.lineHeight * readerZoom, value.fontSize * 1.35) }; return value }
+    var showControls = true
+    var displayScale = 1.0
+    private var displayTypography: ScriptLayoutSettings { var value = workspace.project.scriptLayout; if compact { value.fontSize = max(14, value.fontSize) * readerZoom; value.lineHeight = max(value.lineHeight * readerZoom, value.fontSize * 1.35) }; if !showControls { value.fontSize *= displayScale; value.lineHeight *= displayScale; value.paragraphSpacing *= displayScale }; return value }
     private var beat: BoardBeat? { workspace.whiteboard.beats.first { $0.id == beatID } }
     private var scene: FrontstageCore.Scene? { workspace.project.scenes.first { $0.id == sceneID } }
     private var html: Binding<String> {
@@ -76,12 +152,12 @@ struct ContinuousSnippet: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if !compact, let beatID, let beat {
+            if !compact && showControls, let beatID, let beat {
                 Button(beat.title) { workspace.selectBoardBeat(beatID); workspace.popup.open(beatID, workspace: workspace) }
                     .font(.caption).frame(maxWidth: .infinity, alignment: .leading).buttonStyle(.plain)
                     .padding(4).background(Color(white: 0.93))
             }
-            if !compact { HStack {
+            if !compact && showControls { HStack {
                 Picker("Element", selection: Binding(get: { controller.activeElement }, set: { controller.format($0) })) {
                     ForEach(ScreenplayElement.editable, id: \.self) { Text($0.label).tag($0) }
                 }.frame(width: compact ? 120 : 180)
@@ -90,8 +166,8 @@ struct ContinuousSnippet: View {
             }.font(.caption).disabled(scene?.isTextLocked == true)
             ScreenplaySuggestions(workspace: workspace, controller: controller).disabled(scene?.isTextLocked == true)
             }
-            ScreenplayEditor(html: html, controller: controller, width: compact ? readerWidth : workspace.paper.contentWidth,
-                typography: displayTypography, onError: { workspace.errorMessage = $0 }, editable: scene?.isTextLocked != true, continuous: true, suggestions: workspace.screenplayCompletions)
+            ScreenplayEditor(html: html, controller: controller, width: compact || !showControls ? readerWidth : workspace.paper.contentWidth,
+                typography: displayTypography, onError: { workspace.errorMessage = $0 }, editable: scene?.isTextLocked != true && !(beat.map { workspace.whiteboard.isLocked($0) } ?? false), continuous: true, suggestions: workspace.screenplayCompletions)
                 .frame(height: controller.layoutHeight)
         }
     }

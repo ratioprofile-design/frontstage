@@ -39,7 +39,7 @@ struct FrontstageApp: App {
             CommandMenu("Screenplay") {
                 ForEach(Array(ScreenplayElement.editable.enumerated()), id: \.element.rawValue) { index, element in
                     Button(element.label) { workspace.focusedScreenplayController?.format(element) }
-                        .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: [.option])
+                        .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: [.command])
                         .disabled(workspace.selectedScene == nil || (workspace.mode != .edit && workspace.mode != .board))
                 }
             }

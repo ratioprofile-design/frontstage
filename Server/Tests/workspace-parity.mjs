@@ -27,15 +27,32 @@ try{
  await view('production');await fill('Shoot date','2026-10-23',page.locator('.workspace-list'));await page.getByRole('button',{name:'Add Day',exact:true}).click();await page.getByLabel('The Invitation',{exact:true}).check();await fill('Location','Old Station');await fill('On Set','08:00');
  await view('studio');await page.locator('.workspace-list').getByRole('button',{name:'Add',exact:true}).click();await fill('Title','Browser research');await fill('Notes','A portable research note.');await page.getByLabel('Attach files',{exact:true}).setInputFiles({name:'browser-note.txt',mimeType:'text/plain',buffer:Buffer.from('Portable attachment')});await page.getByText('browser-note.txt',{exact:true}).waitFor();
  await view('writingTools');await fill('Font size','14');await fill('Line height','16');await page.getByRole('button',{name:'Add Row',exact:true}).click();await page.getByLabel('Original',{exact:true}).last().fill('Hello');await page.getByLabel('Original',{exact:true}).last().blur();await page.getByLabel('Translation',{exact:true}).last().fill('வணக்கம்');await page.getByLabel('Translation',{exact:true}).last().blur();await page.getByLabel('Bamini text',{exact:true}).fill('ghh;');assert.ok((await page.locator('#workspace-page pre').innerText()).includes('பார்'));
- await view('board');await page.locator('#blocks [data-beat-id="beat-1"]').dblclick();
- await view('edit');const text=page.getByRole('textbox',{name:'Script: The Invitation',exact:true});await text.fill('Browser screenplay text.');assert.equal(await page.locator('.beat-popup.active [data-field="snippet-editor"]').innerText(),'Browser screenplay text.');await page.locator('.beat-popup.active [data-field="close-editor"]').click();
+ await view('edit');
+ const scriptTools=page.getByRole('navigation',{name:'Script toolbar'});
+ assert.equal(await page.locator('.continuous-paper').getAttribute('data-display'),'Final Script');
+ assert.equal(await page.locator('.continuous-paper .screenplay-toolbar').count(),0);
+ assert.equal(await page.locator('.continuous-paper .snippet-heading').count(),0);
+ assert.equal(await page.locator('.writing-scene-fields').count(),0);
+ const displayMode=async mode=>{await scriptTools.locator('summary').filter({hasText:/^Display$/}).click();await scriptTools.getByRole('button',{name:mode,exact:true}).click();};
+ await displayMode('Expand All');assert.ok(await page.locator('.continuous-paper .snippet-heading').count()>0);
+ await displayMode('Collapse All');assert.equal(await page.locator('.continuous-paper .script-text:visible').count(),0);
+ await page.locator('.continuous-paper .snippet-heading').first().click();assert.equal(await page.locator('.continuous-paper .script-text:visible').count(),1);
+ await page.locator('.continuous-paper .snippet-heading').first().click();assert.equal(await page.locator('.continuous-paper .script-text:visible').count(),0);
+ await displayMode('Index Cards');assert.equal(await page.locator('.continuous-paper .script-text').count(),0);assert.equal(await page.locator('.continuous-paper .script-heading').count(),0);
+ await displayMode('Content Only');assert.equal(await page.locator('.continuous-paper .snippet-heading').count(),0);assert.ok(await page.locator('.continuous-paper .script-text').count()>0);
+ await displayMode('Final Script');await page.locator('.continuous-paper .script-heading').first().click();await page.locator('.writing-scene-fields').waitFor();await page.locator('.writing-scene-fields').getByRole('button',{name:'Done',exact:true}).click();assert.equal(await page.locator('.writing-scene-fields').count(),0);
+ const formatText=page.getByRole('textbox',{name:'Script: The Invitation',exact:true});await formatText.fill('Keep selected text.');await formatText.press('ControlOrMeta+A');
+ await scriptTools.locator('summary').filter({hasText:/^Styling$/}).click();await scriptTools.getByRole('button',{name:'italic',exact:true}).click();assert.equal(await formatText.locator('i,em').innerText(),'Keep selected text.');
+ await formatText.fill('Action.');await formatText.press('End');await formatText.press('Tab');assert.ok(await formatText.locator('.sc-character').count()>0);await formatText.press('Enter');assert.ok(await formatText.locator('.sc-dialogue').count()>0);
+ await view('board');await page.locator('#blocks [data-beat-id="beat-1"]').dblclick();await view('edit');
+ const text=page.getByRole('textbox',{name:'Script: The Invitation',exact:true});await text.fill('Browser screenplay text.');assert.equal(await page.locator('.beat-popup.active [data-field="snippet-editor"]').innerText(),'Browser screenplay text.');await page.locator('.beat-popup.active [data-field="close-editor"]').click();
  await view('revisions');await fill('Revision name','Browser revision');await page.getByRole('button',{name:'Capture Revision',exact:true}).click();
  await view('edit');await page.getByRole('textbox',{name:'Script: The Invitation',exact:true}).fill('Temporary changed text.');await view('revisions');await page.getByRole('button',{name:'Browser revision',exact:true}).click();await page.getByRole('button',{name:'Restore Selected Revision',exact:true}).click();
  await view('edit');assert.equal(await page.getByRole('textbox',{name:'Script: The Invitation',exact:true}).innerText(),'Browser screenplay text.');
  await view('writingTools');await page.getByLabel('Lock script text and heading',{exact:true}).check();await view('edit');assert.equal(await page.getByRole('textbox',{name:'Script: The Invitation',exact:true}).getAttribute('contenteditable'),'false');await view('writingTools');await page.getByLabel('Lock script text and heading',{exact:true}).uncheck();
  // Export the browser-produced copy for native XCTest consumption, then verify long pagination separately.
  const pending=page.waitForEvent('download');await page.locator('#download').click();const file=await pending;await file.saveAs(path.join(output,'browser-edited.frontstage'));const saved=JSON.parse(await readFile(path.join(output,'browser-edited.frontstage'),'utf8'));
- assert.equal(saved.project.characterData.LENA.backstory,'Knows the station.');assert.equal(saved.project.beats[0].content,'<p class="sc-action">Browser screenplay text.</p>');assert.equal(saved.project.frontstageStudio.records.at(-1).body,'A portable research note.');assert.deepEqual(saved.project.customFuture,{preserve:true});
+ assert.equal(saved.project.characterData.LENA.backstory,'Knows the station.');assert.equal(saved.project.beats[0].content.replace(/<[^>]*>/g,'').trim(),'Browser screenplay text.');assert.equal(saved.project.frontstageStudio.records.at(-1).body,'A portable research note.');assert.deepEqual(saved.project.customFuture,{preserve:true});
  // Slugline controls are scene-specific across simultaneous popups and the continuous script.
  await view('board');await page.locator('#blocks [data-beat-id="beat-1"]').dblclick();await page.locator('#blocks [data-beat-id="beat-2"]').dblclick();
  const popup1=page.locator('.beat-popup[data-beat-id="beat-1"]'),popup2=page.locator('.beat-popup[data-beat-id="beat-2"]');

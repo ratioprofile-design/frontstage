@@ -9,10 +9,9 @@ public enum ScreenplayElement: String, CaseIterable, Codable, Sendable {
     public var keepsWithNext: Bool { [.sceneHeading, .character, .parenthetical].contains(self) }
 
     public func afterReturn(isEmpty: Bool) -> Self {
-        if isEmpty { return .action }
         switch self {
         case .character, .parenthetical: return .dialogue
-        case .dialogue: return .character
+        case .dialogue: return .action
         case .lyrics: return .lyrics
         default: return .action
         }

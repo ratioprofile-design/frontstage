@@ -28,9 +28,9 @@ final class ScreenplayTests: XCTestCase {
     func testReturnPolicyMatchesBackstageDialogueFlowAndBlankEscape() {
         XCTAssertEqual(ScreenplayElement.character.afterReturn(isEmpty: false), .dialogue)
         XCTAssertEqual(ScreenplayElement.parenthetical.afterReturn(isEmpty: false), .dialogue)
-        XCTAssertEqual(ScreenplayElement.dialogue.afterReturn(isEmpty: false), .character)
+        XCTAssertEqual(ScreenplayElement.dialogue.afterReturn(isEmpty: false), .action)
         XCTAssertEqual(ScreenplayElement.lyrics.afterReturn(isEmpty: false), .lyrics)
-        for type in ScreenplayElement.editable { XCTAssertEqual(type.afterReturn(isEmpty: true), .action) }
+        for type in ScreenplayElement.editable { XCTAssertEqual(type.afterReturn(isEmpty: true), type == .character || type == .parenthetical ? .dialogue : type == .lyrics ? .lyrics : .action) }
     }
 
     func testTabCycleIsReversibleAndIncludesEveryEditableElement() {

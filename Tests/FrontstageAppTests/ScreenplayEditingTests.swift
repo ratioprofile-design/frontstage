@@ -89,6 +89,27 @@ final class ScreenplayEditingTests: XCTestCase {
         }
     }
 
+    func testManualParagraphNavigation() async throws {
+        try await MainActor.run {
+            _ = NSApplication.shared
+            let controller = ScreenplayEditorController(), text = NSTextView()
+            text.isRichText = true; controller.textView = text
+            text.textStorage?.setAttributedString(try ScreenplayTextCodec.decode("<p class='sc-action'>Action text</p>"))
+            text.setSelectedRange(NSRange(location: text.string.utf16.count, length: 0)); controller.selectionChanged()
+            XCTAssertTrue(controller.handleCommand(#selector(NSResponder.insertTab(_:)), in: text))
+            XCTAssertEqual(controller.activeElement, .character)
+            XCTAssertTrue(text.string.contains("Action text"))
+            XCTAssertTrue(controller.handleCommand(#selector(NSResponder.insertNewline(_:)), in: text))
+            XCTAssertEqual(controller.activeElement, .dialogue)
+            text.insertText("Dialogue", replacementRange: text.selectedRange())
+            XCTAssertTrue(controller.handleCommand(#selector(NSResponder.insertNewline(_:)), in: text))
+            XCTAssertEqual(controller.activeElement, .action)
+            controller.format(.parenthetical)
+            XCTAssertTrue(controller.handleCommand(#selector(NSResponder.insertNewline(_:)), in: text))
+            XCTAssertEqual(controller.activeElement, .dialogue)
+        }
+    }
+
     func testReturnTabAndSaveRetainDialogueSemantics() async throws {
         try await MainActor.run {
             _ = NSApplication.shared

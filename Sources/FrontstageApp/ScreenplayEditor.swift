@@ -8,12 +8,13 @@ final class ScreenplayEditorController: ObservableObject {
     @Published private(set) var activeElement = ScreenplayElement.action
     @Published private(set) var layoutHeight: CGFloat = 80
     weak var textView: NSTextView?
+    var minimumHeight: CGFloat = 48
     var contentWidth: CGFloat = 432
     var typography = ScriptLayoutSettings()
     func measure() {
         guard let textView, let container = textView.textContainer, let manager = textView.layoutManager else { return }
         manager.ensureLayout(for: container)
-        let height = max(48, ceil(manager.usedRect(for: container).height + textView.textContainerInset.height * 2 + 8))
+        let height = max(minimumHeight, ceil(manager.usedRect(for: container).height + textView.textContainerInset.height * 2 + 8))
         if abs(layoutHeight - height) > 1 {
             DispatchQueue.main.async { [weak self] in self?.layoutHeight = height }
         }
@@ -97,7 +98,13 @@ final class ScreenplayEditorController: ObservableObject {
     func handleCommand(_ selector: Selector, in textView: NSTextView) -> Bool {
         guard textView.isEditable, !textView.hasMarkedText() else { return false }
         if selector == #selector(NSResponder.insertTab(_:)) || selector == #selector(NSResponder.insertBacktab(_:)) {
-            format(activeElement.cycled(backward: selector == #selector(NSResponder.insertBacktab(_:))))
+            if selector == #selector(NSResponder.insertBacktab(_:)) { format(activeElement.cycled(backward: true)); return true }
+            if activeElement == .character { textView.complete(nil); return true }
+            let paragraph = (textView.string as NSString).paragraphRange(for: textView.selectedRange())
+            let empty = (textView.string as NSString).substring(with: paragraph).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let next: ScreenplayElement = activeElement == .dialogue ? .parenthetical : activeElement == .parenthetical ? .dialogue : .character
+            if !empty || activeElement == .action { textView.insertText("\n", replacementRange: textView.selectedRange()) }
+            format(next)
             return true
         }
         guard selector == #selector(NSResponder.insertNewline(_:)) else { return false }
@@ -105,8 +112,8 @@ final class ScreenplayEditorController: ObservableObject {
         let paragraph = (textView.string as NSString).paragraphRange(for: selected)
         let line = (textView.string as NSString).substring(with: paragraph).trimmingCharacters(in: .whitespacesAndNewlines)
         let next = activeElement.afterReturn(isEmpty: line.isEmpty)
-        if line.isEmpty, activeElement != .action {
-            format(.action)
+        if line.isEmpty, ![.action, .character, .dialogue].contains(activeElement) {
+            format(next)
             return true
         }
         // A literal insertion bypasses command dispatch and leaves IME composition to TextKit.
@@ -128,6 +135,27 @@ final class ScreenplayEditorController: ObservableObject {
 }
 
 final class ScreenplayTextView: NSTextView {
+    weak var screenplayController: ScreenplayEditorController?
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = super.menu(for: event) ?? NSMenu()
+        let styles = NSMenuItem(title: "Paragraph Style", action: nil, keyEquivalent: "")
+        let submenu = NSMenu()
+        for element in ScreenplayElement.editable {
+            let item = NSMenuItem(title: element.label, action: #selector(applyParagraph(_:)), keyEquivalent: "")
+            item.target = self; item.representedObject = element.rawValue; item.isEnabled = isEditable; submenu.addItem(item)
+        }
+        styles.submenu = submenu; menu.addItem(.separator()); menu.addItem(styles)
+        return menu
+    }
+    @objc private func applyParagraph(_ sender: NSMenuItem) {
+        if let value = sender.representedObject as? String, let element = ScreenplayElement(rawValue: value) { screenplayController?.format(element) }
+    }
+    override func insertCompletion(_ word: String, forPartialWordRange charRange: NSRange, movement: Int, isFinal flag: Bool) {
+        super.insertCompletion(word, forPartialWordRange: charRange, movement: movement, isFinal: flag)
+        if flag && movement == NSReturnTextMovement && screenplayController?.activeElement == .character {
+            screenplayController?.handleCommand(#selector(NSResponder.insertNewline(_:)), in: self)
+        }
+    }
     var leadingAdjustment: CGFloat = 0
     override var textContainerOrigin: NSPoint {
         var origin = super.textContainerOrigin
@@ -179,8 +207,10 @@ struct ScreenplayEditor: NSViewRepresentable {
         text.textContainer?.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
         text.textContainer?.lineFragmentPadding = 0
         context.coordinator.suggestions = suggestions
+        text.screenplayController = controller
         text.delegate = context.coordinator
         controller.textView = text
+        controller.minimumHeight = continuous ? typography.lineHeight : 48
         controller.contentWidth = width
         controller.typography = typography
         context.coordinator.load(html, into: text)
@@ -196,7 +226,8 @@ struct ScreenplayEditor: NSViewRepresentable {
         text.isEditable = editable
         controller.textView = text
         if controller.contentWidth != width || controller.typography != typography {
-            controller.contentWidth = width
+            controller.minimumHeight = continuous ? typography.lineHeight : 48
+        controller.contentWidth = width
             controller.typography = typography
             text.textContainer?.containerSize.width = width
             context.coordinator.load(html, into: text)
