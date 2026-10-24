@@ -147,23 +147,20 @@ struct StoryTimelineView: View {
         }
     }
     private func title(_ kind: String) -> String { ["episodes":"Episodes", "chapters":"Chapters", "sections":"Sections", "acts":"Acts", "scenes":"Scenes", "beats":"Beats", "tags":"Tags / Emotions", "characters":"Characters", "heat":"Heat Map"][kind] ?? kind }
+    @ViewBuilder
     private func section(_ kind: String, model: StoryTimeline) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 0) {
+        if kind != "tags" && kind != "characters" {
+            ForEach(model.tracks.filter { $0.kind == kind }) { track in trackRow(track, end: model.end) }
+        } else {
+            VStack(alignment: .leading, spacing: 0) {
                 Button((preferences.collapsed.contains(kind) ? "▸ " : "▾ ") + title(kind)) {
                     if !preferences.collapsed.insert(kind).inserted { preferences.collapsed.remove(kind) }
-                }.buttonStyle(.plain).frame(width: 166, alignment: .leading).padding(4).background(Color(white: 0.28)).modifier(PinnedTimelineLabel())
-                Spacer()
-            }.frame(height: 26).contextMenu { trackOptions }
-            if !preferences.collapsed.contains(kind) {
-                if kind == "tags" || kind == "characters" {
+                }.buttonStyle(.plain).frame(width: 158, height: 26, alignment: .leading).padding(.horizontal, 8).background(Color(white: 0.28)).modifier(PinnedTimelineLabel()).contextMenu { trackOptions }
+                if !preferences.collapsed.contains(kind) {
                     ForEach(Array(Set(model.tracks.filter { $0.kind == kind }.compactMap(\.group))).sorted(), id: \.self) { group in
                         groupedTracks(kind, group: group, model: model)
                     }
-                } else {
-                    ForEach(model.tracks.filter { $0.kind == kind }) { track in trackRow(track, end: model.end) }
                 }
-                if model.tracks.filter({ $0.kind == kind }).isEmpty { Text("Assign \(kind) to beats to show tracks.").font(.caption).foregroundStyle(.secondary).padding(.leading, 180) }
             }
         }
     }
@@ -188,9 +185,15 @@ struct StoryTimelineView: View {
         }
     }
     private func trackRow(_ track: StoryTimeline.Track, end: Double) -> some View {
-        let height: Double = track.kind == "beats" ? Double(preferences.lines * 15 + 10) : track.items.contains(where: { $0.value != nil }) ? 72 : 28
+        let flat = track.kind != "tags" && track.kind != "characters"
+        let collapsed = flat && preferences.collapsed.contains(track.kind)
+        let height: Double = collapsed ? 26 : track.kind == "beats" ? Double(preferences.lines * 15 + 10) : track.items.contains(where: { $0.value != nil }) ? 72 : 28
         return HStack(spacing: 0) {
-            Text(track.title).font(.system(size: 11)).lineLimit(1).frame(width: 158, height: height, alignment: .leading).padding(.horizontal, 8).background(Color(white: 0.28)).modifier(PinnedTimelineLabel())
+            Group {
+                if flat {
+                    Button((collapsed ? "▸ " : "▾ ") + title(track.kind)) { if !preferences.collapsed.insert(track.kind).inserted { preferences.collapsed.remove(track.kind) } }.buttonStyle(.plain)
+                } else { Text(track.title) }
+            }.font(.system(size: 11)).lineLimit(1).frame(width: 158, height: height, alignment: .leading).padding(.horizontal, 8).background(Color(white: 0.28)).modifier(PinnedTimelineLabel())
                 .contextMenu {
                     if track.kind == "tags" || track.kind == "characters" {
                         Button(track.kind == "tags" ? "Set Tag Category…" : "Set Character Group…") { groupName = track.group ?? ""; groupTrack = track }
@@ -212,7 +215,7 @@ struct StoryTimelineView: View {
                         }
                     }.stroke(Color(boardHex: track.items.first?.color ?? "#467e96"), lineWidth: 2)
                 }
-                ForEach(track.items) { item in
+                if !collapsed { ForEach(track.items) { item in
                     timelineItem(item, kind: track.kind, height: height)
                         .offset(x: item.start * preferences.scale)
                         .onDrag { NSItemProvider(object: ("timeline:" + track.kind + ":" + item.id) as NSString) }
@@ -243,6 +246,7 @@ struct StoryTimelineView: View {
                             if track.kind == "beats" { Button("Duration Override…") { startEditing(item.beatID, tag: nil) } }
                             if !item.beatID.isEmpty { Button("Open Beat Editor") { workspace.popup.open(item.beatID, workspace: workspace) } }
                         }
+                }
                 }
             }.frame(width: end * preferences.scale, height: height)
         }.overlay(alignment: .bottom) { Color.black.opacity(0.15).frame(height: 1) }
