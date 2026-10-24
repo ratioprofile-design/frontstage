@@ -7,7 +7,7 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 const require=createRequire(import.meta.url),{chromium}=require(process.env.FRONTSTAGE_PLAYWRIGHT_MODULE||'playwright');
 const root=fileURLToPath(new URL('../../',import.meta.url)),publicDir=path.join(root,'Server/Public'),output=path.join(root,'build/parity');await mkdir(output,{recursive:true});
-const server=createServer(async(req,res)=>{try{if(req.url==='/'){res.setHeader('Content-Type','text/html');res.end('<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="/workspaces.css"><style>body{margin:0;color:white;font:12px system-ui}#timeline{height:700px!important}</style><div id="timeline"></div>');return;}const name=req.url.slice(1);if(name.includes('/')||name.includes('..'))throw Error();res.setHeader('Content-Type',name.endsWith('.js')?'application/javascript':'text/css');res.end(await readFile(path.join(publicDir,name)));}catch{res.writeHead(404);res.end();}});
+const server=createServer(async(req,res)=>{try{if(req.url==='/'){res.setHeader('Content-Type','text/html');res.end('<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="/workspace-design.css"><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/workspaces.css"><style>body{margin:0;color:white;font:12px system-ui}#timeline{height:700px!important}</style><div id="timeline"></div>');return;}const name=req.url.slice(1);if(name.includes('/')||name.includes('..'))throw Error();res.setHeader('Content-Type',name.endsWith('.js')?'application/javascript':'text/css');res.end(await readFile(path.join(publicDir,name)));}catch{res.writeHead(404);res.end();}});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));let browser;
 try{
  browser=await chromium.launch({executablePath:process.env.FRONTSTAGE_CHROMIUM||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':chromium.executablePath()),headless:true,args:['--no-sandbox']});
@@ -29,6 +29,7 @@ try{
  const text=longBeat.locator('.timeline-title-text');assert.ok((await text.evaluate(n=>n.scrollHeight))>(await text.evaluate(n=>n.clientHeight)));
  assert.equal(await text.evaluate(n=>n.clientHeight%16),0);
  await longBeat.focus();await page.getByRole('tooltip').waitFor();assert.ok((await page.getByRole('tooltip').innerText()).includes('மருத்துவமனையில்'));await page.keyboard.press('Escape');assert.equal(await page.getByRole('tooltip').count(),0);
+ await page.mouse.move(1430,890);await page.keyboard.press('Escape');await page.screenshot({path:path.join(output,'browser-timeline-reference-titles.png')});
  const widths=await page.locator('.timeline-item.beats').evaluateAll(nodes=>nodes.map(n=>n.getBoundingClientRect().width));
  await page.getByLabel('Title Display',{exact:true}).selectOption('full');
  assert.ok((await longBeat.boundingBox()).height>limitedHeight);
