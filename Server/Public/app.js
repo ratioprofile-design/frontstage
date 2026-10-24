@@ -1,4 +1,4 @@
-import { timelineModel, mountTimeline } from './story-timeline.js';
+import { timelineModel, mountTimeline, timelinePreferences } from './story-timeline.js';
 import { mountWorkspaces } from './workspaces.js';
 import { splitAtCaret, screenplayToolbar, sluglineFields, characterNames } from './screenplay-editor.js';
 import { splitBeat, scriptSegments, heading, captureRevision, restoreRevision } from './workspace-model.js';
@@ -18,7 +18,9 @@ let documentEpoch = 0;
 let apiOrigin = '';
 let localMode = false;
 let selectedBlocks = new Set(), selectedBeats = new Set();
-const timelineState={expanded:false,time:0,scale:60,timeBase:'beats',secondary:'time',lines:2,collapsed:new Set()};
+function loadTimelinePreferences(expanded){try{return timelinePreferences(expanded,JSON.parse(localStorage.getItem('frontstage-timeline-'+(expanded?'full':'mini'))));}catch{return timelinePreferences(expanded);}}
+const timelineState={expanded:false,time:0,...loadTimelinePreferences(false)};
+function saveTimelinePreferences(){try{localStorage.setItem('frontstage-timeline-'+(timelineState.expanded?'full':'mini'),JSON.stringify({...timelineState,collapsed:[...timelineState.collapsed],hidden:[...timelineState.hidden]}));}catch{}}
 const reader={display:'Expand All',characters:true,tags:true,synopsis:false,boundaries:false,margin:'Compact Margins',zoom:1,filter:'',follow:false};
 $('server-address').value = configuredOrigin || localStorage.getItem('frontstage-server') || '';
 function setServer() {
@@ -440,9 +442,14 @@ function renderProperties() {
   }
 }
 function renderTimeline() {
+  saveTimelinePreferences();
   $('board-area').classList.toggle('timeline-expanded',timelineState.expanded);$('workspace').classList.toggle('timeline-focus',timelineState.expanded);
-  mountTimeline($('timeline'),timelineModel(board(),doc.project.beats,storyMarkers(),timelineState.timeBase),timelineState,{
+  mountTimeline($('timeline'),timelineModel(board(),doc.project.beats,storyMarkers(),timelineState.timeBase,doc.project.frontstageTimelineOptions?.minutesPerPage),timelineState,{
     selected,choose,open:openEditor,render:renderTimeline,
+    expand:expanded=>{saveTimelinePreferences();Object.assign(timelineState,loadTimelinePreferences(expanded),{expanded,lastSelected:null});renderTimeline();},
+    addMarker:type=>editMarker(null,type),
+    markerType:id=>{if(current.access==='reader')return;const marker=storyMarkers().find(m=>m.id===id);if(!marker)return;const type=prompt('Break type: episode, act, chapter, section',marker.type==='custom'?'act':marker.type??'act');if(type===null)return;edit(()=>{if(!['episode','act','chapter','section'].includes(type))throw Error('Choose episode, act, chapter or section.');doc.project.sectionBreaks.find(m=>m.id===id).type=type;});},
+    timing:()=>{if(current.access==='reader')return;const raw=prompt('Estimated minutes per screenplay page (0.1–10). Explicit beat durations stay unchanged.',String(doc.project.frontstageTimelineOptions?.minutesPerPage??1));if(raw===null)return;edit(()=>{const value=Number(raw);if(!Number.isFinite(value)||value<.1||value>10)throw Error('Choose 0.1 to 10 minutes per page.');doc.project.frontstageTimelineOptions??={};doc.project.frontstageTimelineOptions.minutesPerPage=value;});},
     reorder:(ids,target)=>edit(()=>{doc.project.frontstageWhiteboard=reorderTimelineBeats(board(),new Set(ids),target);}),
     moveMarker:(id,unit)=>edit(()=>{const marker=doc.project.sectionBreaks.find(m=>m.id===id);if(marker)marker.unit=Math.max(0,unit);}),
     marker:id=>editMarker(storyMarkers().find(m=>m.id===id)),
@@ -455,9 +462,9 @@ function storyMarkers() {
   const seen = new Set();
   return (Array.isArray(doc.project.sectionBreaks) ? doc.project.sectionBreaks : []).filter(m => m && typeof m.id === 'string' && Number.isFinite(m.unit) && m.unit >= 0 && m.unit <= 1000000 / 120 && !seen.has(m.id) && seen.add(m.id)).sort((a, b) => a.unit - b.unit || a.id.localeCompare(b.id));
 }
-function editMarker(marker = null) {
+function editMarker(marker = null, kind = 'act') {
   if (current.access === 'reader') return;
-  const title = prompt('Act / marker name', marker?.title || `Act ${storyMarkers().length + 1}`); if (!title?.trim()) return;
+  const title = prompt('Structural break name', marker?.title || `${kind[0].toUpperCase()+kind.slice(1)} ${storyMarkers().length + 1}`); if (!title?.trim()) return;
   const raw = prompt('Estimated story time', String(marker?.unit ?? board().beats.find(b => b.id === selected)?.start ?? 0)); if (raw === null) return;
   const unit = Number(raw);
   edit(() => {
@@ -465,7 +472,7 @@ function editMarker(marker = null) {
     if (doc.project.sectionBreaks !== undefined && !Array.isArray(doc.project.sectionBreaks)) throw Error('Existing marker data has an unsupported format.');
     doc.project.sectionBreaks ||= [];
     if (marker) { const stored = doc.project.sectionBreaks.find(m => m.id === marker.id); if (stored) { stored.title = title; stored.unit = unit; } }
-    else doc.project.sectionBreaks.push({ id: uuid(), title, unit, type: 'custom' });
+    else doc.project.sectionBreaks.push({ id: uuid(), title, unit, type: kind });
   });
 }
 const editors = new Map();

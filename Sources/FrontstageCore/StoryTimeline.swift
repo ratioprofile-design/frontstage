@@ -1,7 +1,7 @@
 import Foundation
 
 /// A read-only projection of estimated story time. Board coordinates are independent.
-public enum TimelineTimeBase: String, CaseIterable, Sendable { case beats = "Beat Number", time = "Time", pages = "Pages" }
+public enum TimelineTimeBase: String, CaseIterable, Codable, Sendable { case beats = "Beat Number", time = "Time", pages = "Pages" }
 public struct StoryTimeline: Sendable {
     public struct Item: Identifiable, Equatable, Sendable {
         public var id: String
@@ -31,7 +31,7 @@ public struct StoryTimeline: Sendable {
         var time = 0.0, pages = 0.0
         for (index, beat) in beats.enumerated() {
             let pageCount = Self.estimatedPages(beat.html)
-            let duration = beat.timelineDuration ?? pageCount
+            let duration = beat.timelineDuration ?? (pageCount * project.timelineMinutesPerPage)
             beatTimes[beat.id] = time; beatPages[beat.id] = pages
             let start = timeBase == .beats ? Double(index) : timeBase == .time ? time : pages
             let length = timeBase == .beats ? 1 : timeBase == .time ? duration : pageCount
@@ -53,13 +53,18 @@ public struct StoryTimeline: Sendable {
             lastScene = beat.sceneID
         }
         let markers = project.storyMilestones
-        let markerPositions = markers.map { marker in beats.firstIndex { $0.start >= marker.x / StorySequencer.pointsPerPage }.map { items[$0].start } ?? end }
-        let acts = markers.enumerated().map { index, marker in
-            let start = markerPositions[index]
-            let next = index + 1 < markers.count ? markerPositions[index + 1] : end
-            return Item(id: marker.id, title: marker.title, start: start, duration: max(0.1, next - start), color: "#476b9c", beatID: "")
+        for (trackID, title) in [("episodes", "Episodes"), ("acts", "Acts"), ("chapters", "Chapters"), ("sections", "Sections")] {
+            let matching = markers.filter { $0.kind.trackID == trackID }
+            let positions = matching.map { marker in beats.firstIndex { $0.start >= marker.x / StorySequencer.pointsPerPage }.map { items[$0].start } ?? end }
+            let intervals = matching.enumerated().map { index, marker in
+                let start = positions[index]
+                let next = index + 1 < matching.count ? positions[index + 1] : end
+                return Item(id: marker.id, title: marker.title, start: start, duration: max(0.1, next - start), color: "#476b9c", beatID: "")
+            }
+            tracks.append(.init(id: trackID, title: title, kind: trackID, items: intervals))
         }
-        tracks = [.init(id: "acts", title: "Acts", kind: "acts", items: acts), .init(id: "scenes", title: "Scenes", kind: "scenes", items: scenes), .init(id: "beats", title: "Beats", kind: "beats", items: items)]
+        tracks.append(.init(id: "scenes", title: "Scenes", kind: "scenes", items: scenes))
+        tracks.append(.init(id: "beats", title: "Beats", kind: "beats", items: items))
         for kind in ["tags", "characters"] {
             let names = Set(beats.flatMap { kind == "tags" ? $0.tags : $0.characters }).sorted()
             for name in names {

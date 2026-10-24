@@ -31,6 +31,7 @@ public struct StoryMilestone: Identifiable, Equatable, Sendable {
     public let id: String
     public let title: String
     public let x: Double
+    public var kind: StructuralBreakKind = .custom
 }
 
 public struct StorySequenceGroup: Identifiable, Equatable, Sendable {
@@ -97,7 +98,7 @@ extension Project {
             guard let item = value.object, let id = item["id"]?.string, !id.isEmpty,
                   let unit = item["unit"]?.double, unit.isFinite, unit >= 0,
                   unit <= 1_000_000 / StorySequencer.pointsPerPage, seen.insert(id).inserted else { return nil }
-            return StoryMilestone(id: id, title: item["title"]?.string ?? "Milestone", x: unit * StorySequencer.pointsPerPage)
+            return StoryMilestone(id: id, title: item["title"]?.string ?? "Milestone", x: unit * StorySequencer.pointsPerPage, kind: StructuralBreakKind(rawValue: item["type"]?.string ?? "custom") ?? .custom)
         }.sorted { $0.x == $1.x ? $0.id < $1.id : $0.x < $1.x }
     }
 
@@ -347,12 +348,12 @@ extension Project {
     }
 
     @discardableResult
-    public mutating func addStoryMilestone(title: String, page: Double) throws -> String {
+    public mutating func addStoryMilestone(title: String, page: Double, kind: StructuralBreakKind = .custom) throws -> String {
         guard page.isFinite, page >= 0, page <= 1_000_000 / StorySequencer.pointsPerPage,
               state["sectionBreaks"] == nil || state["sectionBreaks"]?.array != nil else { throw ProjectError.invalidProject("invalid milestone position") }
         var items = state["sectionBreaks"]?.array ?? []
         let id = UUID().uuidString
-        items.append(.object(["id": .string(id), "title": .string(title), "unit": .number(Decimal(page)), "type": .string("custom")]))
+        items.append(.object(["id": .string(id), "title": .string(title), "unit": .number(Decimal(page)), "type": .string(kind.rawValue)]))
         state["sectionBreaks"] = .array(items)
         return id
     }
@@ -361,13 +362,14 @@ extension Project {
         state["sectionBreaks"] = .array((state["sectionBreaks"]?.array ?? []).filter { $0.object?["id"]?.string != id })
     }
 
-    public mutating func updateStoryMilestone(_ id: String, title: String, page: Double) throws {
+    public mutating func updateStoryMilestone(_ id: String, title: String, page: Double, kind: StructuralBreakKind? = nil) throws {
         guard page.isFinite, page >= 0, page <= 1_000_000 / StorySequencer.pointsPerPage,
               var items = state["sectionBreaks"]?.array,
               let index = items.firstIndex(where: { $0.object?["id"]?.string == id }), var fields = items[index].object else {
             throw ProjectError.invalidProject("choose an existing marker and a valid story time")
         }
         fields["title"] = .string(title); fields["unit"] = .number(Decimal(page))
+        if let kind { fields["type"] = .string(kind.rawValue) }
         items[index] = .object(fields); state["sectionBreaks"] = .array(items)
     }
 

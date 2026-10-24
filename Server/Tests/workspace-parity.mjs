@@ -154,7 +154,17 @@ try{
  const emotionPoint=page.locator('.timeline-item.tags').first();
  let dialogs=0;const answer=d=>d.accept(dialogs++===0?'=80':'3');page.on('dialog',answer);await emotionPoint.click({button:'right'});await page.locator('.timeline-item.heat').first().waitFor();page.off('dialog',answer);
  await page.screenshot({path:path.join(output,'browser-full-timeline.png')});
+ let breakAnswers=['Episode One','0'];const addBreakAnswer=d=>d.accept(breakAnswers.shift());page.on('dialog',addBreakAnswer);
+ await page.getByLabel('Add structural break',{exact:true}).selectOption('episode');await page.locator('.timeline-item.episodes').first().waitFor();page.off('dialog',addBreakAnswer);
+ page.once('dialog',d=>d.accept('2'));await page.getByRole('button',{name:'Timing…',exact:true}).click();
+ const timelineDownload=page.waitForEvent('download');await page.locator('#download').click();await(await timelineDownload).saveAs(path.join(output,'timeline-edited.frontstage'));
+ const timelineSaved=JSON.parse(await readFile(path.join(output,'timeline-edited.frontstage'),'utf8'));assert.equal(timelineSaved.project.frontstageTimelineOptions.minutesPerPage,2);assert.ok(timelineSaved.project.sectionBreaks.some(b=>b.type==='episode'));
  await page.getByRole('button',{name:'Restore Board',exact:true}).click();assert.equal(await page.locator('#canvas').isVisible(),true);
+ assert.equal(await page.getByLabel('Beat title lines',{exact:true}).inputValue(),'2');
+ await page.getByRole('button',{name:'Expand Timeline',exact:true}).click();assert.equal(await page.getByLabel('Beat title lines',{exact:true}).inputValue(),'3');
+ await page.locator('.timeline-track-menu summary').click();await page.getByLabel('Show Episodes track',{exact:true}).uncheck();assert.equal(await page.locator('.timeline-item.episodes').count(),0);
+ await page.getByRole('button',{name:'Restore Board',exact:true}).click();
+
  // Navigation and new workspaces remain available after a cold offline launch.
  await page.evaluate(()=>navigator.serviceWorker.ready.then(()=>new Promise(resolve=>navigator.serviceWorker.controller?resolve():navigator.serviceWorker.addEventListener('controllerchange',resolve,{once:true}))));await context.setOffline(true);await page.reload();await page.locator('#local-mode').click();await page.getByRole('button',{name:'The Invitation · on this device',exact:true}).click();await view('people');await page.getByRole('button',{name:'LENA',exact:true}).click();assert.equal(await page.getByLabel('Backstory',{exact:true}).inputValue(),'Knows the station.');
  assert.deepEqual(errors,[]);await writeFile(path.join(output,'index.html'),'<!doctype html><meta charset="utf-8"><title>Frontstage page parity</title><style>body{font:14px system-ui;background:#303133;color:white}section{margin:24px}article{display:flex;gap:16px}figure{margin:0;width:50%}img{width:100%}h2{margin-bottom:8px}</style><h1>Same project · 1440 × 950 · Mac and browser</h1>'+[...design.pages,{id:'board-script',title:'Whiteboard side screenplay'},{id:'popup',title:'Beat popup'}].map(p=>`<section><h2>${p.title}</h2><article><figure><figcaption>Mac</figcaption><img src="mac-${p.id}.png"></figure><figure><figcaption>Browser</figcaption><img src="browser-${p.id}.png"></figure></article></section>`).join(''));

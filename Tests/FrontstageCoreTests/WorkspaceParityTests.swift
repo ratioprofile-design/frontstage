@@ -3,6 +3,16 @@ import XCTest
 @testable import FrontstageCore
 
 final class WorkspaceParityTests: XCTestCase {
+    func testBrowserTimelineSettingsRoundTrip() throws {
+        guard let path = ProcessInfo.processInfo.environment["FRONTSTAGE_PARITY_DOCUMENT"] else { throw XCTSkip("Run browser parity first") }
+        let file = URL(fileURLWithPath: path).deletingLastPathComponent().appendingPathComponent("timeline-edited.frontstage")
+        guard FileManager.default.fileExists(atPath: file.path) else { throw XCTSkip("Timeline fixture is unavailable") }
+        let project = try Project(data: Data(contentsOf: file))
+        XCTAssertEqual(project.timelineMinutesPerPage, 2)
+        XCTAssertTrue(project.storyMilestones.contains { $0.kind == .episode })
+        XCTAssertEqual(try Project(data: project.encoded()), project)
+    }
+
     func testBrowserEditedDocumentRetainsAllWorkspaceChanges() throws {
         guard let path = ProcessInfo.processInfo.environment["FRONTSTAGE_PARITY_DOCUMENT"] else {
             throw XCTSkip("Run the browser parity test first and set FRONTSTAGE_PARITY_DOCUMENT")

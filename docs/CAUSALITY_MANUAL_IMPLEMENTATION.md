@@ -17,10 +17,10 @@ Reference: user-provided **Causality Story Sequencer, Version 4.0** PDF, printed
 
 ## Known gaps; not claimed complete
 
-- Page estimates currently use normalized text length, not the actual typeset page layout; time estimates assume one page per minute. Document-level minutes-per-page settings remain to be added.
+- Page estimates still use normalized text length rather than the actual typeset page layout. Time estimates now use the saved document-level minutes-per-page setting.
 - Automatic tension rules (high/low/rising/falling/before changes/still) are not implemented. Heat currently reflects manual tension only. Category/folder organization for tags and characters, category-level composite curves, readability scores and emotion controls on whiteboard/script tags remain pending.
-- Structural break tracks currently share one Acts row. Separate Episode/Act/Chapter/Section visibility settings and complete title-page semantics remain pending.
-- Compact and expanded views currently share display settings; detached timeline windows and independent mini-timeline preferences remain pending.
+- Episode/Act/Chapter/Section tracks now have independent visibility and intervals; complete episode title-page semantics remain pending.
+- Compact and expanded timelines now retain independent local display preferences. Detached timeline windows remain pending.
 - Push is applied on release rather than previewing each intermediate layout. More advanced collision packing and animation remain pending.
 - Container endpoint dependencies, dependency-line context navigation, FlowLines, tag/character-driven coloring modes and export/print of container synopsis remain pending.
 - Timeline drag preserves contiguous groups and may reposition other unlocked containers to reflect edited order. It does not claim Causality's proprietary layout/ripple behavior.
@@ -28,3 +28,10 @@ Reference: user-provided **Causality Story Sequencer, Version 4.0** PDF, printed
 ## Verification
 
 Portable Swift tests cover time-base projection, emotion checkpoints, manual heat data, persistence, group split/merge and locked Push rollback. JavaScript tests cover equivalent projection semantics. Browser acceptance exercises expansion, counter base swapping, title lines, popup navigation, emotion/tension editing and heat rendering. Existing browser acceptance continues to exercise whiteboard nesting, palette creation, screenplay editing, undo/redo and offline reload. Native acceptance renders the compact/full timeline and exercises the existing script/board interactions; macOS CI builds the native app.
+
+## Follow-up: independent structure and display settings
+
+- Episode, Act, Chapter and Section tracks are calculated independently, with custom/legacy markers retained in Acts. A boundary in one track does not truncate another. Marker type can be chosen at creation or changed afterward; moves retain it.
+- Tracks menu controls visibility independently from section collapse. Mini and expanded timelines keep separate time bases, zoom, title lines, collapsed sections and hidden tracks in local preferences. The compact view initially hides analytical tracks. Preferences do not modify shared project content.
+- Timing settings save minutes per page (0.1–10) in the project. Explicit beat duration overrides are unchanged. The script-length estimate remains approximate.
+- Regression coverage includes crossing structure boundaries, project round-trip, invalid timing rollback, preference serialization, full/compact restoration, browser break creation and exported timing values.

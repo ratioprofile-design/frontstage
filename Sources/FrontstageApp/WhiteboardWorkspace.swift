@@ -19,6 +19,7 @@ struct WhiteboardWorkspace: View {
     @State private var markerID: String?
     @State private var markerTitle = "Act I"
     @State private var markerTime = 0.0
+    @State private var markerKind: StructuralBreakKind = .act
     private var board: Whiteboard { workspace.whiteboard }
     private var markers: [StoryMilestone] { workspace.project.storyMilestones }
     private var timelineEnd: Double { max(20, board.beats.map { $0.start + $0.duration }.max() ?? 20, (markers.last?.x ?? 0) / StorySequencer.pointsPerPage + 3) }
@@ -113,6 +114,7 @@ struct WhiteboardWorkspace: View {
     }
 
     private func editMarker(_ marker: StoryMilestone? = nil) {
+        markerKind = marker?.kind ?? .act
         markerID = marker?.id; markerTitle = marker?.title ?? "Act \(markers.count + 1)"
         markerTime = marker.map { $0.x / StorySequencer.pointsPerPage } ?? workspace.selectedBoardBeat?.start ?? 0
         showMarkerEditor = true
@@ -120,6 +122,7 @@ struct WhiteboardWorkspace: View {
     private var markerEditor: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(markerID == nil ? "Add Act / Marker" : "Edit Act / Marker").font(.headline)
+            Picker("Break type", selection: $markerKind) { ForEach(StructuralBreakKind.allCases, id: \.self) { Text($0.title).tag($0) } }
             TextField("Name", text: $markerTitle)
             TextField("Estimated story time", value: $markerTime, format: .number)
             Text("A visual guide in estimated story time; it does not force beats into an act.").font(.caption).foregroundStyle(.secondary)
@@ -128,8 +131,8 @@ struct WhiteboardWorkspace: View {
                 Spacer()
                 Button("Save") {
                     workspace.edit("Story Marker") { project in
-                        if let markerID { try project.updateStoryMilestone(markerID, title: markerTitle, page: markerTime) }
-                        else { _ = try project.addStoryMilestone(title: markerTitle, page: markerTime) }
+                        if let markerID { try project.updateStoryMilestone(markerID, title: markerTitle, page: markerTime, kind: markerKind) }
+                        else { _ = try project.addStoryMilestone(title: markerTitle, page: markerTime, kind: markerKind) }
                     }
                     showMarkerEditor = false
                 }.keyboardShortcut(.defaultAction)
