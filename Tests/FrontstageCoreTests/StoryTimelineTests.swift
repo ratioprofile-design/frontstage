@@ -52,6 +52,30 @@ final class StoryTimelineTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(TimelineDisplayPreferences.self, from: JSONEncoder().encode(full)), full)
     }
 
+    func testTrackOrganizationPersistsWithoutChangingBeatAssignments() throws {
+        var p = Project()
+        let lane = try p.createBoardItem(.lane, layerID: "main", position: .init())
+        let beat = try p.createBoardItem(.beat, layerID: lane, position: .init(x: 40, y: 40))
+        try p.updateBoardBeat(beat) { $0.tags = ["Danger", "Hope"]; $0.characters = ["VENBA", "ABI"]; $0.emotionChanges = ["Hope": 50] }
+        let original = try p.whiteboard()
+        try p.setTimelineTrackGroup(kind: "tags", name: "Hope", group: "Feelings")
+        try p.setTimelineTrackGroup(kind: "characters", name: "ABI", group: "Family")
+        let restored = try Project(data: p.encoded())
+        let tracks = try StoryTimeline(project: restored).tracks
+        XCTAssertEqual(tracks.first { $0.id == "tags:Hope" }?.group, "Feelings")
+        XCTAssertEqual(tracks.first { $0.id == "tags:Danger" }?.group, "General")
+        XCTAssertEqual(tracks.first { $0.id == "characters:ABI" }?.group, "Family")
+        XCTAssertEqual(tracks.first { $0.id == "characters:VENBA" }?.group, "Main Characters")
+        XCTAssertEqual(try restored.whiteboard(), original)
+        let before = p
+        XCTAssertThrowsError(try p.setTimelineTrackGroup(kind: "tags", name: "Hope", group: " "))
+        XCTAssertEqual(p, before)
+        var preferences = TimelineDisplayPreferences()
+        preferences.colorStrength = 0.35; preferences.collapsed.insert("group:tags:Feelings")
+        XCTAssertEqual(try JSONDecoder().decode(TimelineDisplayPreferences.self, from: JSONEncoder().encode(preferences)), preferences)
+        preferences.colorStrength = .infinity; XCTAssertFalse(preferences.isValid)
+    }
+
     func testGroupSplitMergeAndLockedPushRollback() throws {
         var p = Project()
         let lane = try p.createBoardItem(.lane, layerID: "main", position: .init())

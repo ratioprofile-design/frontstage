@@ -18,9 +18,9 @@ Reference: user-provided **Causality Story Sequencer, Version 4.0** PDF, printed
 ## Known gaps; not claimed complete
 
 - Page estimates still use normalized text length rather than the actual typeset page layout. Time estimates now use the saved document-level minutes-per-page setting.
-- Automatic tension rules (high/low/rising/falling/before changes/still) are not implemented. Heat currently reflects manual tension only. Category/folder organization for tags and characters, category-level composite curves, readability scores and emotion controls on whiteboard/script tags remain pending.
+- Automatic tension rules (high/low/rising/falling/before changes/still) are not implemented. Heat currently reflects manual tension only. Tag category and character group assignment/collapse are now available in both timelines. Research-linked nested folder ordering, category-level composite curves, readability scores and emotion controls on whiteboard/script tags remain pending.
 - Episode/Act/Chapter/Section tracks now have independent visibility and intervals; complete episode title-page semantics remain pending.
-- Compact and expanded timelines now retain independent local display preferences. Detached timeline windows remain pending.
+- Compact and expanded timelines now retain independent local display preferences. Detached timeline windows now hide the mini-timeline until docked.
 - Push is applied on release rather than previewing each intermediate layout. More advanced collision packing and animation remain pending.
 - Container endpoint dependencies, dependency-line context navigation, FlowLines, tag/character-driven coloring modes and export/print of container synopsis remain pending.
 - Timeline drag preserves contiguous groups and may reposition other unlocked containers to reflect edited order. It does not claim Causality's proprietary layout/ripple behavior.
@@ -43,3 +43,22 @@ Portable Swift tests cover time-base projection, emotion checkpoints, manual hea
 - Browser Command/Ctrl-wheel zooms around the pointer; Command/Ctrl +/−/0 works with board/timeline focus. Mac supports trackpad magnification; its existing whiteboard Command-scroll gesture remains available.
 - Timeline zoom-out now continues below the previous minimum without jumping inward after Fit. Browser zoom preserves the viewed position.
 - Browser regression coverage exercises nesting and inline beat creation while zoomed, card scaling, reset and timeline zoom-out below the previous lower bound. Native build/interaction validation is a separate macOS CI gate.
+
+
+## PDF timeline follow-up (24 October 2026)
+
+Re-read printed pages 180–187, with tag category defaults on page 53 and character organization on page 146.
+
+- Right-click either counter to select Beat Number, Time or Pages. Primary and secondary remain distinct.
+- Right-click track headers to choose visible structure levels; the Beats header additionally offers title line counts and color strength. Color strength is also directly adjustable and persists separately for mini/full timelines.
+- Tag tracks now belong to named categories (General by default). Each category separates emotions from ordinary tags. Character tracks belong to named groups (Main Characters by default). Right-click a member track to assign its category/group. Groups collapse independently; membership is saved in the project and survives Mac/browser interchange.
+- A separate timeline window is available on both platforms. The mini-timeline is hidden while detached; docking restores it. The detached view uses full timeline preferences and shares selection/project edits with the main workspace.
+- Browser wheel and Up/Down arrows zoom the timeline; Shift-wheel remains available for scrolling. Native Up/Down zoom and trackpad magnification are supported. Native labels remain pinned when scrolling horizontally.
+
+### Remaining limits against the reference
+
+This is **not complete Causality equivalence**. Nested research folder ordering is not yet mirrored; groups currently sort by name. The PDF mentions a readability score without specifying its calculation, so no invented score is presented as equivalent. Page timing still uses text-length estimation rather than typeset pagination. Automatic tension policies/composites and episode title pages remain open. Native plain-wheel zoom, the script workspace mini-timeline, and exact typography/layout matching also need further work. Existing contiguous-group restrictions on timeline reordering remain.
+
+### Evidence
+
+Browser acceptance covers context counter changes, category assignment/collapse, color strength, detached-window zoom/docking, and the prior editing/drag/offline paths. Core tests cover serialized group assignment, default categories, invalid edits and backward-compatible preferences. Native acceptance opens/closes the detached window and renders the full timeline; macOS CI is required for AppKit/SwiftUI verification.

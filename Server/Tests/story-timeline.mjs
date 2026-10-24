@@ -20,3 +20,12 @@ assert.equal(mini.lines,2);assert.ok(mini.hidden.has('characters'));assert.ok(!f
 assert.equal(timelinePreferences(true,{...full,collapsed:[],hidden:[]}).lines,3);
 assert.equal(timelinePreferences(true,{...full,scale:Infinity}).scale,60);
 console.log('PASS: independent structural levels, minutes/page overrides and separate mini/full preferences');
+
+const organized=timelineModel(board,[],[],'beats',1,{tags:{Danger:'Dangers'},characters:{VENBA:'Family'}});
+assert.equal(organized.tracks.find(t=>t.id==='tags:Danger').group,'Dangers');
+assert.equal(organized.tracks.find(t=>t.id==='characters:VENBA').group,'Family');
+assert.equal(timelineModel(board,[]).tracks.find(t=>t.id==='tags:Danger').group,'General');
+assert.equal(timelineModel(board,[],[],'beats',1,{tags:{Danger:22}}).tracks.find(t=>t.id==='tags:Danger').group,'General');
+assert.equal(timelinePreferences(true,{...full,colorStrength:.35,collapsed:['group:tags:Dangers'],hidden:[]}).colorStrength,.35);
+assert.ok(timelinePreferences(true,{...full,collapsed:['group:tags:Dangers'],hidden:[]}).collapsed.has('group:tags:Dangers'));
+console.log('PASS: tag categories, character groups and persistent display preferences');

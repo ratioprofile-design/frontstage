@@ -7,6 +7,7 @@ import FrontstageCore
 struct StoryTimelineView: View {
     @ObservedObject var workspace: Workspace
     @Binding var expanded: Bool
+    var detached = false
     @State private var preferences = TimelineDisplayPreferences(compact: true)
     @AppStorage("frontstage-timeline-mini") private var compactPreferences = ""
     @AppStorage("frontstage-timeline-full") private var fullPreferences = ""
@@ -27,6 +28,9 @@ struct StoryTimelineView: View {
     @State private var tension = "0"
     @State private var absolute = false
     @State private var duration = ""
+    @State private var groupTrack: StoryTimeline.Track?
+    @State private var groupName = ""
+    @FocusState private var timelineFocused: Bool
     private var model: StoryTimeline? { try? StoryTimeline(project: workspace.project, timeBase: preferences.primary) }
     private var beatItems: [StoryTimeline.Item] { model?.tracks.first { $0.kind == "beats" }?.items ?? [] }
     private var current: StoryTimeline.Item? { beatItems.first { time >= $0.start && time < $0.start + $0.duration } }
@@ -56,13 +60,16 @@ struct StoryTimelineView: View {
                     .overlay(alignment: .topLeading) {
                         Rectangle().fill(.cyan).frame(width: 1).offset(x: 174 + time * preferences.scale).allowsHitTesting(false)
                     }
-                }
+                }.coordinateSpace(name: "timelineViewport")
             }
         }.background(Color(white: 0.20))
         .simultaneousGesture(MagnifyGesture().onChanged { value in
             if magnifyStart == nil { magnifyStart = preferences.scale }
             preferences.scale = min(180, max(2, (magnifyStart ?? preferences.scale) * value.magnification))
         }.onEnded { _ in magnifyStart = nil })
+        .focusable().focused($timelineFocused)
+        .onKeyPress(.upArrow) { preferences.scale = min(180, preferences.scale * 1.25); return .handled }
+        .onKeyPress(.downArrow) { preferences.scale = max(2, preferences.scale / 1.25); return .handled }
         .onAppear { loadPreferences() }
         .onChange(of: expanded) { _, _ in loadPreferences() }
         .onChange(of: preferences) { _, value in
@@ -72,6 +79,7 @@ struct StoryTimelineView: View {
         .onChange(of: workspace.selectedBoardBeatID) { _, id in if current?.id != id, let item = beatItems.first(where: { $0.id == id }) { time = item.start } }
         .onChange(of: preferences.primary) { old, value in if preferences.secondary == value { preferences.secondary = old }; time = beatItems.first { $0.id == workspace.selectedBoardBeatID }?.start ?? 0 }
         .onChange(of: preferences.secondary) { old, value in if preferences.primary == value { preferences.primary = old } }
+        .sheet(isPresented: Binding(get: { groupTrack != nil }, set: { if !$0 { groupTrack = nil } })) { groupEditor }
         .sheet(isPresented: $showingTiming) { timingEditor }
         .sheet(isPresented: $showingMarker) { structuralEditor }
         .sheet(isPresented: Binding(get: { editingBeat != nil }, set: { if !$0 { editingBeat = nil } })) { valueEditor }
@@ -84,29 +92,49 @@ struct StoryTimelineView: View {
     private var controls: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                Text(counter(preferences.primary) + "   " + counter(preferences.secondary)).font(.system(size: 18, design: .monospaced)).foregroundStyle(.cyan)
-                Button(expanded ? "Restore Board" : "Expand Timeline") { expanded.toggle() }
+                counterView(primary: true)
+                counterView(primary: false)
+                if detached { Button("Dock Timeline") { workspace.timelineWindow.close() } }
+                else {
+                    Button(expanded ? "Restore Board" : "Expand Timeline") { expanded.toggle() }
+                    Button("Detach Timeline") { workspace.timelineWindow.open(workspace) }
+                }
                 Button("−") { preferences.scale = max(2, preferences.scale / 1.25) }.accessibilityLabel("Zoom timeline out").help("Zoom timeline out")
                 Button("\(Int((preferences.scale / 60 * 100).rounded()))%") { preferences.scale = 60 }.accessibilityLabel("Reset timeline zoom").help("Reset timeline zoom to 100%")
                 Button("+") { preferences.scale = min(180, preferences.scale * 1.25) }.accessibilityLabel("Zoom timeline in").help("Zoom timeline in")
                 Picker("Primary", selection: $preferences.primary) { ForEach(TimelineTimeBase.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.fixedSize()
                 Picker("Secondary", selection: $preferences.secondary) { ForEach(TimelineTimeBase.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.fixedSize()
                 Picker("Title lines", selection: $preferences.lines) { ForEach(1...3, id: \.self) { Text("\($0) lines").tag($0) } }.fixedSize()
-                Menu("Tracks") {
-                    ForEach(sectionKinds, id: \.self) { kind in
-                        Toggle(title(kind), isOn: Binding(get: { !preferences.hidden.contains(kind) }, set: { visible in
-                            if visible { preferences.hidden.remove(kind) } else { preferences.hidden.insert(kind) }
-                        }))
-                    }
-                }
+                Menu("Tracks") { trackOptions }
+                Slider(value: Binding(get: { preferences.colorStrength ?? 0.85 }, set: { preferences.colorStrength = $0 }), in: 0...1).frame(width: 80).accessibilityLabel("Beat color strength").help("Beat color strength")
                 Menu("Add Break") { ForEach(StructuralBreakKind.allCases, id: \.self) { kind in Button(kind.title) { openMarker(nil, kind: kind) } } }
                 Button("Timing…") { minutesPerPage = workspace.project.timelineMinutesPerPage; showingTiming = true }
             }.font(.caption).padding(5).fixedSize()
         }.frame(height: 38).background(Color(white: 0.16))
     }
+    private func counterView(primary: Bool) -> some View {
+        let base = primary ? preferences.primary : preferences.secondary
+        return Text(counter(base)).font(.system(size: 20, design: .monospaced)).foregroundStyle(.cyan)
+            .padding(4).background(Color(white: 0.19)).help(base.rawValue)
+            .accessibilityLabel(primary ? "Primary timeline counter" : "Secondary timeline counter")
+            .contextMenu {
+                ForEach(TimelineTimeBase.allCases, id: \.self) { value in
+                    Button((value == base ? "✓ " : "") + value.rawValue) {
+                        if primary { preferences.primary = value } else { preferences.secondary = value }
+                    }
+                }
+            }
+    }
+    private var trackOptions: some View {
+        ForEach(sectionKinds, id: \.self) { kind in
+            Toggle(title(kind), isOn: Binding(get: { !preferences.hidden.contains(kind) }, set: { visible in
+                if visible { preferences.hidden.remove(kind) } else { preferences.hidden.insert(kind) }
+            }))
+        }
+    }
     private func ruler(_ end: Double) -> some View {
         HStack(spacing: 0) {
-            Text(preferences.primary == .beats ? "Beat Number" : "\(preferences.primary.rawValue) · estimated").font(.caption).frame(width: 174, height: 36)
+            Text(preferences.primary == .beats ? "Beat Number" : "\(preferences.primary.rawValue) · estimated").font(.caption).frame(width: 174, height: 36).background(Color(white: 0.19)).modifier(PinnedTimelineLabel())
             ZStack(alignment: .topLeading) {
                 Color(white: 0.19)
                 ForEach(Array(stride(from: 0.0, through: end, by: max(1, ceil(55 / preferences.scale)))), id: \.self) { value in
@@ -124,21 +152,55 @@ struct StoryTimelineView: View {
             HStack(spacing: 0) {
                 Button((preferences.collapsed.contains(kind) ? "▸ " : "▾ ") + title(kind)) {
                     if !preferences.collapsed.insert(kind).inserted { preferences.collapsed.remove(kind) }
-                }.buttonStyle(.plain).frame(width: 166, alignment: .leading).padding(4).background(Color(white: 0.28))
+                }.buttonStyle(.plain).frame(width: 166, alignment: .leading).padding(4).background(Color(white: 0.28)).modifier(PinnedTimelineLabel())
                 Spacer()
-            }.frame(height: 26)
+            }.frame(height: 26).contextMenu { trackOptions }
             if !preferences.collapsed.contains(kind) {
-                ForEach(model.tracks.filter { $0.kind == kind }) { track in
-                    trackRow(track, end: model.end)
+                if kind == "tags" || kind == "characters" {
+                    ForEach(Array(Set(model.tracks.filter { $0.kind == kind }.compactMap(\.group))).sorted(), id: \.self) { group in
+                        groupedTracks(kind, group: group, model: model)
+                    }
+                } else {
+                    ForEach(model.tracks.filter { $0.kind == kind }) { track in trackRow(track, end: model.end) }
                 }
                 if model.tracks.filter({ $0.kind == kind }).isEmpty { Text("Assign \(kind) to beats to show tracks.").font(.caption).foregroundStyle(.secondary).padding(.leading, 180) }
+            }
+        }
+    }
+    private func groupedTracks(_ kind: String, group: String, model: StoryTimeline) -> some View {
+        let key = "group:" + kind + ":" + group
+        let tracks = model.tracks.filter { $0.kind == kind && $0.group == group }
+        return VStack(alignment: .leading, spacing: 0) {
+            Button((preferences.collapsed.contains(key) ? "▸ " : "▾ ") + (kind == "characters" ? "📁 " : "") + group) {
+                if !preferences.collapsed.insert(key).inserted { preferences.collapsed.remove(key) }
+            }.buttonStyle(.plain).font(.caption).frame(width: 158, height: 26, alignment: .leading).padding(.horizontal, 8).background(Color(white: 0.28)).modifier(PinnedTimelineLabel())
+            if !preferences.collapsed.contains(key) {
+                if kind == "tags" {
+                    ForEach([true, false], id: \.self) { emotional in
+                        let members = tracks.filter { $0.items.contains { $0.value != nil } == emotional }
+                        if !members.isEmpty {
+                            Text(emotional ? "Emotions" : "Tags").font(.system(size: 10)).foregroundStyle(.secondary).frame(width: 158, height: 20, alignment: .leading).padding(.horizontal, 8)
+                            ForEach(members) { track in trackRow(track, end: model.end) }
+                        }
+                    }
+                } else { ForEach(tracks) { track in trackRow(track, end: model.end) } }
             }
         }
     }
     private func trackRow(_ track: StoryTimeline.Track, end: Double) -> some View {
         let height: Double = track.kind == "beats" ? Double(preferences.lines * 15 + 10) : track.items.contains(where: { $0.value != nil }) ? 72 : 28
         return HStack(spacing: 0) {
-            Text(track.title).font(.system(size: 11)).lineLimit(1).frame(width: 158, height: height, alignment: .leading).padding(.horizontal, 8).background(Color(white: 0.28))
+            Text(track.title).font(.system(size: 11)).lineLimit(1).frame(width: 158, height: height, alignment: .leading).padding(.horizontal, 8).background(Color(white: 0.28)).modifier(PinnedTimelineLabel())
+                .contextMenu {
+                    if track.kind == "tags" || track.kind == "characters" {
+                        Button(track.kind == "tags" ? "Set Tag Category…" : "Set Character Group…") { groupName = track.group ?? ""; groupTrack = track }
+                    }
+                    if track.kind == "beats" {
+                        Picker("Title lines", selection: $preferences.lines) { ForEach(1...3, id: \.self) { Text("\($0) lines").tag($0) } }
+                        ForEach([0.0, 0.35, 0.65, 1.0], id: \.self) { strength in Button("Color strength \(Int(strength * 100))%") { preferences.colorStrength = strength } }
+                    }
+                    trackOptions
+                }
             ZStack(alignment: .topLeading) {
                 Color(white: 0.21)
                 ForEach(Array(stride(from: 0.0, through: end, by: 5)), id: \.self) { value in Rectangle().fill(.black.opacity(0.12)).frame(width: 1).offset(x: value * preferences.scale) }
@@ -188,7 +250,7 @@ struct StoryTimelineView: View {
     private func timelineItem(_ item: StoryTimeline.Item, kind: String, height: Double) -> some View {
         let color = Color(boardHex: item.color)
         return ZStack {
-            Rectangle().fill(color.opacity(kind == "tags" ? 0.08 : kind == "characters" ? 0.35 : 0.85))
+            Rectangle().fill(color.opacity(kind == "tags" ? 0.08 : kind == "characters" ? 0.35 : (preferences.colorStrength ?? 0.85)))
             if kind == "characters" || kind == "tags" {
                 RoundedRectangle(cornerRadius: item.absolute ? 0 : 4).fill(color).frame(width: 8, height: 8)
                     .shadow(color: color, radius: max(0, item.tension) * 3)
@@ -200,6 +262,21 @@ struct StoryTimelineView: View {
             .contentShape(Rectangle()).help(item.title)
             .onTapGesture(count: 2) { if !item.beatID.isEmpty { workspace.popup.open(item.beatID, workspace: workspace) } }
             .onTapGesture { time = item.start; if isStructural(kind) { openMarker(item.id) }; if !item.beatID.isEmpty { workspace.selectBoardBeat(item.beatID) } }
+    }
+    private var groupEditor: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(groupTrack?.kind == "tags" ? "Tag Category" : "Character Group").font(.headline)
+            Text(groupTrack?.title ?? "")
+            TextField("Name", text: $groupName)
+            HStack {
+                Button("Cancel") { groupTrack = nil }.keyboardShortcut(.cancelAction)
+                Button("Save") {
+                    guard let track = groupTrack else { return }
+                    workspace.edit("Organize Timeline Tracks") { try $0.setTimelineTrackGroup(kind: track.kind, name: track.title, group: groupName) }
+                    if workspace.errorMessage == nil { groupTrack = nil }
+                }.keyboardShortcut(.defaultAction).disabled(groupName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || groupName.count > 120)
+            }
+        }.padding(20).frame(width: 380)
     }
     private func openMarker(_ id: String?, kind: StructuralBreakKind = .act) {
         let marker = workspace.project.storyMilestones.first { $0.id == id }
@@ -273,6 +350,13 @@ struct StoryTimelineView: View {
                 }.keyboardShortcut(.defaultAction)
             }
         }.padding(20).frame(width: 380)
+    }
+}
+private struct PinnedTimelineLabel: ViewModifier {
+    func body(content: Content) -> some View {
+        content.visualEffect { view, geometry in
+            view.offset(x: max(0, -geometry.frame(in: .named("timelineViewport")).minX))
+        }.zIndex(5)
     }
 }
 #endif

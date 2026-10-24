@@ -185,6 +185,22 @@ try{
  await page.locator('.timeline-track-menu summary').click();await page.getByLabel('Show Episodes track',{exact:true}).uncheck();assert.equal(await page.locator('.timeline-item.episodes').count(),0);
  await page.getByRole('button',{name:'Restore Board',exact:true}).click();
 
+ // Manual timeline controls: counter/header context menus, categories and detached window.
+ await page.getByRole('button',{name:'Expand Timeline',exact:true}).click();
+ await page.getByRole('button',{name:'Primary timeline counter',exact:true}).click({button:'right'});
+ await page.getByRole('menuitem',{name:'Pages',exact:true}).click();
+ assert.equal(await page.getByLabel('Primary time base',{exact:true}).inputValue(),'pages');
+ await page.getByLabel('Primary time base',{exact:true}).selectOption('beats');
+ const dangerHeader=page.locator('.story-track-label').filter({hasText:/^Danger$/});
+ await dangerHeader.click({button:'right'});page.once('dialog',d=>d.accept('Dangers'));
+ await page.getByRole('menuitem',{name:'Set Tag Category…',exact:true}).click();
+ await page.getByRole('button',{name:'Toggle Dangers tags',exact:true}).click();assert.equal(await page.locator('.timeline-item.tags').count(),0);
+ await page.getByRole('button',{name:'Toggle Dangers tags',exact:true}).click();assert.ok(await page.locator('.timeline-item.tags').count()>0);
+ await page.getByLabel('Beat color strength',{exact:true}).fill('0.35');await page.getByLabel('Beat color strength',{exact:true}).dispatchEvent('change');
+ const popupPromise=page.waitForEvent('popup');await page.getByRole('button',{name:'Detach Timeline',exact:true}).click();const detached=await popupPromise;
+ await detached.getByRole('button',{name:'Dock Timeline',exact:true}).waitFor();assert.equal(await page.locator('#timeline').isVisible(),false);assert.equal(await page.locator('#canvas').isVisible(),true);
+ await detached.getByRole('button',{name:'Zoom timeline in',exact:true}).click();
+ await detached.getByRole('button',{name:'Dock Timeline',exact:true}).click();await page.locator('#timeline').waitFor({state:'visible'});
  // Navigation and new workspaces remain available after a cold offline launch.
  await page.evaluate(()=>navigator.serviceWorker.ready.then(()=>new Promise(resolve=>navigator.serviceWorker.controller?resolve():navigator.serviceWorker.addEventListener('controllerchange',resolve,{once:true}))));await context.setOffline(true);await page.reload();await page.locator('#local-mode').click();await page.getByRole('button',{name:'The Invitation · on this device',exact:true}).click();await view('people');await page.getByRole('button',{name:'LENA',exact:true}).click();assert.equal(await page.getByLabel('Backstory',{exact:true}).inputValue(),'Knows the station.');
  assert.deepEqual(errors,[]);await writeFile(path.join(output,'index.html'),'<!doctype html><meta charset="utf-8"><title>Frontstage page parity</title><style>body{font:14px system-ui;background:#303133;color:white}section{margin:24px}article{display:flex;gap:16px}figure{margin:0;width:50%}img{width:100%}h2{margin-bottom:8px}</style><h1>Same project · 1440 × 950 · Mac and browser</h1>'+[...design.pages,{id:'board-script',title:'Whiteboard side screenplay'},{id:'popup',title:'Beat popup'}].map(p=>`<section><h2>${p.title}</h2><article><figure><figcaption>Mac</figcaption><img src="mac-${p.id}.png"></figure><figure><figcaption>Browser</figcaption><img src="browser-${p.id}.png"></figure></article></section>`).join(''));

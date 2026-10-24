@@ -19,6 +19,7 @@ let apiOrigin = '';
 let localMode = false;
 let selectedBlocks = new Set(), selectedBeats = new Set();
 function loadTimelinePreferences(expanded){try{return timelinePreferences(expanded,JSON.parse(localStorage.getItem('frontstage-timeline-'+(expanded?'full':'mini'))));}catch{return timelinePreferences(expanded);}}
+let timelineWindow=null,timelineWindowRoot=null;
 const timelineState={expanded:false,time:0,...loadTimelinePreferences(false)};
 function saveTimelinePreferences(){try{localStorage.setItem('frontstage-timeline-'+(timelineState.expanded?'full':'mini'),JSON.stringify({...timelineState,collapsed:[...timelineState.collapsed],hidden:[...timelineState.hidden]}));}catch{}}
 const reader={display:'Expand All',characters:true,tags:true,synopsis:false,boundaries:false,margin:'Compact Margins',zoom:1,filter:'',follow:false};
@@ -455,11 +456,25 @@ function renderProperties() {
     const remove = element('button', 'Remove'); remove.disabled = current.access === 'reader'; remove.onclick = () => edit(() => { board().dependencies = board().dependencies.filter(e => e.id !== edge.id); }); row.append(remove); target.append(row);
   }
 }
+function detachTimeline(){
+  if(timelineWindow&&!timelineWindow.closed){timelineWindow.focus();return;}
+  const target=window.open('about:blank','frontstage-timeline','popup,width=1200,height=720');
+  if(!target){status('Allow popups for Frontstage to open the timeline window.');return;}
+  saveTimelinePreferences();Object.assign(timelineState,loadTimelinePreferences(true),{expanded:true,lastSelected:null});
+  timelineWindow=target;target.document.title='Timeline · '+doc.project.name;
+  for(const sheet of document.querySelectorAll('link[rel="stylesheet"]')){const link=target.document.createElement('link');link.rel='stylesheet';link.href=sheet.href;target.document.head.append(link);}
+  const style=target.document.createElement('style');style.textContent='html,body{margin:0;height:100%;display:block!important}#detached-timeline{height:100vh!important;width:100vw;display:flex;flex-direction:column}.story-timeline-scroll{flex:1}';target.document.head.append(style);
+  timelineWindowRoot=target.document.createElement('div');timelineWindowRoot.id='detached-timeline';target.document.body.append(timelineWindowRoot);
+  target.addEventListener('beforeunload',()=>{timelineWindow=null;timelineWindowRoot=null;saveTimelinePreferences();Object.assign(timelineState,loadTimelinePreferences(false),{expanded:false,lastSelected:null});renderTimeline();},{once:true});
+  renderTimeline();
+}
+window.addEventListener('beforeunload',()=>timelineWindow?.close());
 function renderTimeline() {
   saveTimelinePreferences();
-  $('board-area').classList.toggle('timeline-expanded',timelineState.expanded);$('workspace').classList.toggle('timeline-focus',timelineState.expanded);
-  mountTimeline($('timeline'),timelineModel(board(),doc.project.beats,storyMarkers(),timelineState.timeBase,doc.project.frontstageTimelineOptions?.minutesPerPage),timelineState,{
-    selected,choose,open:openEditor,render:renderTimeline,
+  $('board-area').classList.toggle('timeline-expanded',timelineState.expanded&&!timelineWindowRoot);$('workspace').classList.toggle('timeline-focus',timelineState.expanded&&!timelineWindowRoot);$('timeline').style.display=timelineWindowRoot?'none':'';
+  mountTimeline(timelineWindowRoot??$('timeline'),timelineModel(board(),doc.project.beats,storyMarkers(),timelineState.timeBase,doc.project.frontstageTimelineOptions?.minutesPerPage,doc.project.frontstageTimelineOptions?.trackGroups),timelineState,{
+    selected,choose,open:openEditor,render:renderTimeline,detached:!!timelineWindowRoot,detach:detachTimeline,dock:()=>timelineWindow?.close(),
+    group:(kind,name,previous)=>{if(current.access==='reader')return;const group=prompt(kind==='tags'?'Tag category':'Character group',previous);if(group===null)return;edit(()=>{if(!group.trim()||group.trim().length>120)throw Error('Choose a name between 1 and 120 characters.');doc.project.frontstageTimelineOptions??={};doc.project.frontstageTimelineOptions.trackGroups??={};doc.project.frontstageTimelineOptions.trackGroups[kind]??={};doc.project.frontstageTimelineOptions.trackGroups[kind][name]=group.trim();});},
     expand:expanded=>{saveTimelinePreferences();Object.assign(timelineState,loadTimelinePreferences(expanded),{expanded,lastSelected:null});renderTimeline();},
     addMarker:type=>editMarker(null,type),
     markerType:id=>{if(current.access==='reader')return;const marker=storyMarkers().find(m=>m.id===id);if(!marker)return;const type=prompt('Break type: episode, act, chapter, section',marker.type==='custom'?'act':marker.type??'act');if(type===null)return;edit(()=>{if(!['episode','act','chapter','section'].includes(type))throw Error('Choose episode, act, chapter or section.');doc.project.sectionBreaks.find(m=>m.id===id).type=type;});},

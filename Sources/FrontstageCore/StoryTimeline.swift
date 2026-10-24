@@ -19,6 +19,7 @@ public struct StoryTimeline: Sendable {
         public var title: String
         public var kind: String
         public var items: [Item]
+        public var group: String? = nil
     }
     public var beatTimes: [String: Double] = [:]
     public var beatPages: [String: Double] = [:]
@@ -83,7 +84,7 @@ public struct StoryTimeline: Sendable {
                     item.tension = beat.tensions?[name] ?? 0
                     return item
                 }
-                tracks.append(.init(id: kind + ":" + name, title: name, kind: kind, items: trackItems))
+                tracks.append(.init(id: kind + ":" + name, title: name, kind: kind, items: trackItems, group: project.timelineTrackGroup(kind: kind, name: name)))
             }
         }
         let heat = beats.compactMap { beat -> Item? in

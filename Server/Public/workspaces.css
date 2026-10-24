@@ -128,3 +128,5 @@ input::-webkit-calendar-picker-indicator{display:none!important;}
 #workspace.timeline-focus>#script,#workspace.timeline-focus #properties{display:none!important}
 .timeline-track-menu{padding:4px 8px;background:#48494b;border-radius:3px}.timeline-track-menu summary{cursor:pointer}.timeline-track-menu label{display:inline-flex;gap:4px;margin:5px 8px}
 #board-extent{position:relative;overflow:hidden;min-width:1px;min-height:1px}#board-world{position:absolute;left:0;top:0;transform-origin:0 0}#board-zoom-reset{min-width:54px;font-variant-numeric:tabular-nums}
+
+.timeline-counter{color:#00c5ef;background:#292929;font:20px monospace;border:1px solid #444;min-width:50px;padding:3px 5px}.timeline-readout{display:flex;gap:4px}.story-timeline-tools input[type=range]{width:80px;min-width:80px}.story-timeline-row:first-child{position:sticky;top:0;z-index:4}.timeline-context-menu{max-height:90vh;overflow:auto}

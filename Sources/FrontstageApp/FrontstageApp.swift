@@ -109,6 +109,8 @@ final class Workspace: ObservableObject {
         if let controller = scriptEditors[id] { return controller }
         let controller = ScreenplayEditorController(); scriptEditors[id] = controller; return controller
     }
+    @Published var timelineDetached = false
+    let timelineWindow = TimelineWindowPresenter()
     let popup = BeatPopupPresenter()
     let sharedProjects = SharedProjectClient()
     private var saveURL: URL?

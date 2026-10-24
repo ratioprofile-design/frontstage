@@ -40,17 +40,17 @@ struct WhiteboardWorkspace: View {
                 .background(Color(white: 0.24))
             HSplitView {
                 VStack(spacing: 0) {
-                    if showTimeline { StoryTimelineView(workspace: workspace, expanded: $expandedTimeline).frame(minHeight: expandedTimeline ? 250 : 210, maxHeight: expandedTimeline ? .infinity : 210) }
+                    if showTimeline && !workspace.timelineDetached { StoryTimelineView(workspace: workspace, expanded: $expandedTimeline).frame(minHeight: expandedTimeline ? 250 : 210, maxHeight: expandedTimeline ? .infinity : 210) }
                     if let cause = workspace.pendingBoardCauseID {
                         HStack {
                             Text("Choose an effect for “\(board.beats.first { $0.id == cause }?.title ?? "Cause")”")
                             Spacer(); Button("Cancel") { workspace.pendingBoardCauseID = nil }
                         }.font(.caption).padding(6).background(.cyan.opacity(0.18))
                     }
-                    if !expandedTimeline { WhiteboardCanvas(workspace: workspace, selection: $selection, blockSelection: $blockSelection, pushing: pushing, drawing: drawing, fitRequest: fitRequest)
+                    if !expandedTimeline || workspace.timelineDetached { WhiteboardCanvas(workspace: workspace, selection: $selection, blockSelection: $blockSelection, pushing: pushing, drawing: drawing, fitRequest: fitRequest)
                         .frame(minHeight: 100, maxHeight: .infinity) }
                 }.frame(minWidth: 240, maxWidth: .infinity, maxHeight: .infinity)
-                    .safeAreaInset(edge: .bottom, spacing: 0) { if !expandedTimeline { bottomTools } }
+                    .safeAreaInset(edge: .bottom, spacing: 0) { if !expandedTimeline || workspace.timelineDetached { bottomTools } }
                 if showProperties && !expandedTimeline { properties.frame(minWidth: 210, idealWidth: 240, maxWidth: 300) }
             }
         }
@@ -59,6 +59,7 @@ struct WhiteboardWorkspace: View {
         .environment(\.colorScheme, .dark)
         .sheet(isPresented: $showMarkerEditor) { markerEditor }
         .onAppear { initializeSelection() }
+        .onChange(of: workspace.timelineDetached) { _, detached in if detached { expandedTimeline = false } }
         .onChange(of: expandedTimeline) { _, expanded in
             if expanded { scriptBeforeTimeline = workspace.showBoardScript; workspace.showBoardScript = false }
             else { workspace.showBoardScript = scriptBeforeTimeline }
