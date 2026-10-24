@@ -8,18 +8,25 @@ public enum StructuralBreakKind: String, CaseIterable, Codable, Sendable {
     public var title: String { rawValue.capitalized }
 }
 
+public enum TimelineTitleDisplay: String, Codable, CaseIterable, Sendable {
+    case reference, full
+    public var label: String { self == .reference ? "Reference Layout" : "Full Titles" }
+}
+
 public struct TimelineDisplayPreferences: Codable, Equatable, Sendable {
     public var primary: TimelineTimeBase = .beats
     public var secondary: TimelineTimeBase = .time
     public var scale = 60.0
     public var colorStrength: Double? = nil
+    public var titleDisplay: TimelineTitleDisplay? = nil
+    public var effectiveTitleDisplay: TimelineTitleDisplay { titleDisplay ?? .reference }
     public var lines = 2
     public var collapsed: Set<String> = []
     public var hidden: Set<String> = []
     public init(compact: Bool = false) {
         if compact { hidden = ["episodes", "chapters", "sections", "tags", "characters", "heat"] }
     }
-    public var isValid: Bool { primary != secondary && scale.isFinite && (2...180).contains(scale) && (1...3).contains(lines) && (0...1).contains(colorStrength ?? 0.85) }
+    public var isValid: Bool { primary != secondary && scale.isFinite && (2...180).contains(scale) && (1...5).contains(lines) && (0...1).contains(colorStrength ?? 0.85) }
 }
 
 extension Project {

@@ -76,6 +76,53 @@ final class StoryTimelineTests: XCTestCase {
         preferences.colorStrength = .infinity; XCTAssertFalse(preferences.isValid)
     }
 
+    func testSceneSpansUseNormalizedHeadingsAndExplicitMembers() throws {
+        var p = Project()
+        let lane = try p.createBoardItem(.lane, layerID: "main", position: .init())
+        let headings: [SceneHeading] = [
+            .init(prefix: "INT.", location: " Café மருத்துவமனை ", time: "DAY"),
+            .init(prefix: " int. ", location: "cafe\u{301} மருத்துவமனை", time: " day "),
+            .init(prefix: "EXT.", location: "Café மருத்துவமனை", time: "DAY"),
+            .init(prefix: "INT.", location: "Café மருத்துவமனை", time: "NIGHT"),
+            .init(prefix: "INT.", location: "Café மருத்துவமனை", time: "DAY"),
+            .init(), .init()
+        ]
+        var ids: [String] = []
+        for (index, heading) in headings.enumerated() {
+            let id = try p.createBoardItem(.beat, layerID: lane, position: .init(x: Double(index * 300), y: 40))
+            ids.append(id)
+            let sceneID = try XCTUnwrap(try p.whiteboard().beats.first { $0.id == id }?.sceneID)
+            try p.updateScene(id: sceneID, heading: heading)
+            try p.updateBoardBeat(id) { $0.timelineDuration = Double(index + 1) }
+        }
+        let original = p
+        for base in TimelineTimeBase.allCases {
+            let timeline = try StoryTimeline(project: p, timeBase: base)
+            let spans = try XCTUnwrap(timeline.tracks.first { $0.kind == "scenes" }?.items)
+            let beats = try XCTUnwrap(timeline.tracks.first { $0.kind == "beats" }?.items)
+            XCTAssertEqual(spans.count, 6)
+            XCTAssertEqual(spans[0].memberBeatIDs, Array(ids.prefix(2)))
+            XCTAssertEqual(spans[0].duration, beats[0].duration + beats[1].duration, accuracy: 0.000001)
+            XCTAssertEqual(spans.dropFirst().flatMap(\.memberBeatIDs), Array(ids.dropFirst(2)))
+        }
+        XCTAssertEqual(p, original)
+        try p.reorderTimelineBeats(Set(ids.prefix(2)), before: ids[4])
+        XCTAssertEqual(try p.whiteboard().orderedBeats.prefix(4).map(\.id), [ids[2], ids[3], ids[0], ids[1]])
+        try p.updateBoardBeat(ids[0]) { $0.locked = true }
+        let locked = p
+        XCTAssertThrowsError(try p.reorderTimelineBeats(Set(ids.prefix(2)), before: ids[6]))
+        XCTAssertEqual(p, locked)
+    }
+    func testTitleDisplayPreferencesRemainBackwardCompatible() throws {
+        let old = #"{"primary":"Beat Number","secondary":"Time","scale":60,"lines":1,"collapsed":[],"hidden":[]}"#
+        let legacy = try JSONDecoder().decode(TimelineDisplayPreferences.self, from: Data(old.utf8))
+        XCTAssertTrue(legacy.isValid); XCTAssertEqual(legacy.effectiveTitleDisplay, .reference)
+        var full = legacy; full.lines = 5; full.titleDisplay = .full
+        XCTAssertTrue(full.isValid)
+        XCTAssertEqual(try JSONDecoder().decode(TimelineDisplayPreferences.self, from: JSONEncoder().encode(full)), full)
+        full.lines = 6; XCTAssertFalse(full.isValid)
+    }
+
     func testGroupSplitMergeAndLockedPushRollback() throws {
         var p = Project()
         let lane = try p.createBoardItem(.lane, layerID: "main", position: .init())

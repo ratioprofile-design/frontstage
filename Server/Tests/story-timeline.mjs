@@ -29,3 +29,26 @@ assert.equal(timelineModel(board,[],[],'beats',1,{tags:{Danger:22}}).tracks.find
 assert.equal(timelinePreferences(true,{...full,colorStrength:.35,collapsed:['group:tags:Dangers'],hidden:[]}).colorStrength,.35);
 assert.ok(timelinePreferences(true,{...full,collapsed:['group:tags:Dangers'],hidden:[]}).collapsed.has('group:tags:Dangers'));
 console.log('PASS: tag categories, character groups and persistent display preferences');
+
+const headings=[
+ {id:1,slug:{prefix:'INT.',location:' Café மருத்துவமனை ',time:'DAY'}},
+ {id:2,slug:{prefix:' int. ',location:'cafe\u0301 மருத்துவமனை',time:' day '}},
+ {id:3,slug:{prefix:'EXT.',location:'Café மருத்துவமனை',time:'DAY'}},
+ {id:4,slug:{prefix:'INT.',location:'Café மருத்துவமனை',time:'NIGHT'}},
+ {id:5,slug:{prefix:'INT.',location:'Café மருத்துவமனை',time:'DAY'}},
+ {id:6,slug:{prefix:'INT.',location:'',time:'DAY'}},
+ {id:7,slug:{prefix:'INT.',location:'',time:'DAY'}}
+];
+const grouped=structuredClone(board);grouped.beats=headings.map((s,i)=>({...structuredClone(board.beats[0]),id:'span-'+i,sceneID:s.id,order:i,start:i*3,timelineDuration:i+1}));
+const before=structuredClone(grouped);
+for(const base of ['beats','time','pages']){
+ const m=timelineModel(grouped,headings,[],base),spans=m.tracks.find(t=>t.kind==='scenes').items;
+ assert.equal(spans.length,6);assert.deepEqual(spans[0].memberBeatIDs,['span-0','span-1']);
+ assert.equal(spans[0].duration,m.beats[0].duration+m.beats[1].duration);
+ assert.deepEqual(spans.slice(1).flatMap(s=>s.memberBeatIDs),['span-2','span-3','span-4','span-5','span-6']);
+}
+assert.deepEqual(grouped,before);
+assert.equal(timelinePreferences(true,{...full,lines:5,titleDisplay:'full',collapsed:[],hidden:[]}).titleDisplay,'full');
+assert.equal(timelinePreferences(true,{...full,lines:5,titleDisplay:'unknown',collapsed:[],hidden:[]}).titleDisplay,'reference');
+assert.equal(timelinePreferences(false,{...full,lines:1,collapsed:[],hidden:[]}).lines,1);
+console.log('PASS: normalized full-heading scene spans, explicit membership, time bases and title preference migration');

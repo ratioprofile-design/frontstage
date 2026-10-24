@@ -62,3 +62,14 @@ This is **not complete Causality equivalence**. Nested research folder ordering 
 ### Evidence
 
 Browser acceptance covers context counter changes, category assignment/collapse, color strength, detached-window zoom/docking, and the prior editing/drag/offline paths. Core tests cover serialized group assignment, default categories, invalid edits and backward-compatible preferences. Native acceptance opens/closes the detached window and renders the full timeline; macOS CI is required for AppKit/SwiftUI verification.
+
+## Follow-up: scene spans and readable titles
+
+- Timeline scene spans now combine consecutive beats with matching INT/EXT, location and time of day, even when their stored scene IDs differ. Matching trims surrounding whitespace, normalizes Unicode and ignores capitalization. Incomplete headings fall back to scene identity. Returning to a location after another scene creates a separate span.
+- Scene spans carry explicit member beat IDs for dragging and selection highlighting. Their widths equal the combined beat intervals in Beat Number, Time and Pages modes. No scene records are merged or rewritten by the projection.
+- Title Display offers Reference Layout and Full Titles in both timelines and the scene/beat track-header menus. Reference Layout supports up to five complete beat-title lines, with clean truncation. Legacy one-line preferences remain supported. Scene labels use one complete line in Reference Layout.
+- Full Titles measures wrapping using the actual platform text renderer and grows scene/beat row heights independently. Bar widths, timing and analytical track alignment remain unchanged. Titles align at the top of their cells.
+- Bars too narrow for a character show an overflow indicator. Full text is available on hover and keyboard focus. Browser uses a tooltip; Mac uses hover help and a focused-label overlay.
+- New display preferences are local, separate for compact/full timelines, and backward-compatible with previous settings. Project content is unaffected by display-mode changes.
+
+Verification adds normalized multi-scene-ID fixtures, INT/EXT and DAY/NIGHT distinctions, returning/blank locations, Unicode/Tamil titles, time-base intervals, scene-span reorder and lock rollback, preference migration, actual browser text measurements at multiple zooms/window widths, and native AppKit text-cell measurement tests. Browser layout acceptance runs in macOS CI alongside existing workspace acceptance.

@@ -13,6 +13,7 @@ public struct StoryTimeline: Sendable {
         public var absolute = false
         public var tension = 0.0
         public var beatID: String
+        public var memberBeatIDs: [String] = []
     }
     public struct Track: Identifiable, Equatable, Sendable {
         public var id: String
@@ -41,17 +42,21 @@ public struct StoryTimeline: Sendable {
         }
         end = max(timeBase == .beats ? 25 : 1, (items.last.map { $0.start + $0.duration } ?? 0) + (timeBase == .beats ? 2 : 0.2))
         var scenes: [Item] = []
-        var lastScene: Decimal?
+        var lastScene: [String]?
+        let sceneByID = Dictionary(uniqueKeysWithValues: project.scenes.map { ($0.id, $0) })
         for (index, beat) in beats.enumerated() {
             let item = items[index]
-            if lastScene == beat.sceneID, let last = scenes.last, item.start <= last.start + last.duration + 0.0001 {
+            let scene = sceneByID[beat.sceneID]
+            let heading = scene.map { [$0.heading.prefix, $0.heading.location, $0.heading.time].map { $0.trimmingCharacters(in: .whitespacesAndNewlines).precomposedStringWithCanonicalMapping.lowercased().precomposedStringWithCanonicalMapping } } ?? []
+            let sceneKey = heading.count == 3 && heading.allSatisfy({ !$0.isEmpty }) ? ["heading"] + heading : ["scene", "\(beat.sceneID)"]
+            if lastScene == sceneKey, let last = scenes.last, item.start <= last.start + last.duration + 0.0001 {
                 scenes[scenes.count - 1].duration = max(last.duration, item.start + item.duration - last.start)
+                scenes[scenes.count - 1].memberBeatIDs.append(beat.id)
             } else {
-                let scene = project.scenes.first { $0.id == beat.sceneID }
                 let title = scene.map { "\($0.heading.location.isEmpty ? $0.title : $0.heading.location) – \($0.heading.time)" } ?? beat.title
-                scenes.append(Item(id: "scene-" + beat.id, title: title, start: item.start, duration: item.duration, color: beat.color, beatID: beat.id))
+                scenes.append(Item(id: "scene-" + beat.id, title: title, start: item.start, duration: item.duration, color: beat.color, beatID: beat.id, memberBeatIDs: [beat.id]))
             }
-            lastScene = beat.sceneID
+            lastScene = sceneKey
         }
         let markers = project.storyMilestones
         for (trackID, title) in [("episodes", "Episodes"), ("acts", "Acts"), ("chapters", "Chapters"), ("sections", "Sections")] {

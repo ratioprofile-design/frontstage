@@ -31,6 +31,7 @@ struct StoryTimelineView: View {
     @State private var groupTrack: StoryTimeline.Track?
     @State private var groupName = ""
     @FocusState private var timelineFocused: Bool
+    @FocusState private var focusedItemID: String?
     private var model: StoryTimeline? { try? StoryTimeline(project: workspace.project, timeBase: preferences.primary) }
     private var beatItems: [StoryTimeline.Item] { model?.tracks.first { $0.kind == "beats" }?.items ?? [] }
     private var current: StoryTimeline.Item? { beatItems.first { time >= $0.start && time < $0.start + $0.duration } }
@@ -63,6 +64,12 @@ struct StoryTimelineView: View {
                 }.coordinateSpace(name: "timelineViewport")
             }
         }.background(Color(white: 0.20))
+        .overlay(alignment: .bottomLeading) {
+            if let id = focusedItemID, let item = model?.tracks.flatMap(\.items).first(where: { $0.id == id }) {
+                Text(item.title).font(.system(size: 12)).foregroundStyle(.white).padding(10)
+                    .frame(maxWidth: 380, alignment: .leading).background(Color(white: 0.12)).allowsHitTesting(false)
+            }
+        }
         .simultaneousGesture(MagnifyGesture().onChanged { value in
             if magnifyStart == nil { magnifyStart = preferences.scale }
             preferences.scale = min(180, max(2, (magnifyStart ?? preferences.scale) * value.magnification))
@@ -104,7 +111,10 @@ struct StoryTimelineView: View {
                 Button("+") { preferences.scale = min(180, preferences.scale * 1.25) }.accessibilityLabel("Zoom timeline in").help("Zoom timeline in")
                 Picker("Primary", selection: $preferences.primary) { ForEach(TimelineTimeBase.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.fixedSize()
                 Picker("Secondary", selection: $preferences.secondary) { ForEach(TimelineTimeBase.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.fixedSize()
-                Picker("Title lines", selection: $preferences.lines) { ForEach(1...3, id: \.self) { Text("\($0) lines").tag($0) } }.fixedSize()
+                Picker("Title lines", selection: $preferences.lines) { ForEach(1...5, id: \.self) { Text("\($0) lines").tag($0) } }.fixedSize().disabled(preferences.effectiveTitleDisplay == .full)
+                Picker("Title Display", selection: Binding(get: { preferences.effectiveTitleDisplay }, set: { preferences.titleDisplay = $0 })) {
+                    ForEach(TimelineTitleDisplay.allCases, id: \.self) { Text($0.label).tag($0) }
+                }.fixedSize()
                 Menu("Tracks") { trackOptions }
                 Slider(value: Binding(get: { preferences.colorStrength ?? 0.85 }, set: { preferences.colorStrength = $0 }), in: 0...1).frame(width: 80).accessibilityLabel("Beat color strength").help("Beat color strength")
                 Menu("Add Break") { ForEach(StructuralBreakKind.allCases, id: \.self) { kind in Button(kind.title) { openMarker(nil, kind: kind) } } }
@@ -187,7 +197,9 @@ struct StoryTimelineView: View {
     private func trackRow(_ track: StoryTimeline.Track, end: Double) -> some View {
         let flat = track.kind != "tags" && track.kind != "characters"
         let collapsed = flat && preferences.collapsed.contains(track.kind)
-        let height: Double = collapsed ? 26 : track.kind == "beats" ? Double(preferences.lines * 15 + 10) : track.items.contains(where: { $0.value != nil }) ? 72 : 28
+        let titled = track.kind == "beats" || track.kind == "scenes"
+        let lineLimit: Int? = preferences.effectiveTitleDisplay == .full ? nil : track.kind == "beats" ? preferences.lines : 1
+        let height: Double = collapsed ? 26 : titled ? TimelineTitleLayout.rowHeight(track.items, scale: preferences.scale, lines: lineLimit) : track.items.contains(where: { $0.value != nil }) ? 72 : 28
         return HStack(spacing: 0) {
             Group {
                 if flat {
@@ -198,8 +210,13 @@ struct StoryTimelineView: View {
                     if track.kind == "tags" || track.kind == "characters" {
                         Button(track.kind == "tags" ? "Set Tag Category…" : "Set Character Group…") { groupName = track.group ?? ""; groupTrack = track }
                     }
+                    if titled {
+                        Picker("Title Display", selection: Binding(get: { preferences.effectiveTitleDisplay }, set: { preferences.titleDisplay = $0 })) {
+                            ForEach(TimelineTitleDisplay.allCases, id: \.self) { Text($0.label).tag($0) }
+                        }
+                    }
                     if track.kind == "beats" {
-                        Picker("Title lines", selection: $preferences.lines) { ForEach(1...3, id: \.self) { Text("\($0) lines").tag($0) } }
+                        Picker("Title lines", selection: $preferences.lines) { ForEach(1...5, id: \.self) { Text("\($0) lines").tag($0) } }
                         ForEach([0.0, 0.35, 0.65, 1.0], id: \.self) { strength in Button("Color strength \(Int(strength * 100))%") { preferences.colorStrength = strength } }
                     }
                     trackOptions
@@ -231,7 +248,7 @@ struct StoryTimelineView: View {
                                         let unit = workspace.whiteboard.beats.first { $0.id == item.beatID }?.start ?? item.start
                                         workspace.edit("Move Structural Break") { try $0.updateStoryMilestone(parts[2], title: title, page: unit) }
                                     } else if let source = model?.tracks.first(where: { $0.kind == parts[1] })?.items.first(where: { $0.id == parts[2] }) {
-                                        let ids = parts[1] == "scenes" ? Set(beatItems.filter { $0.start >= source.start && $0.start < source.start + source.duration }.map(\.id)) : Set([source.beatID])
+                                        let ids = parts[1] == "scenes" ? Set(source.memberBeatIDs) : Set([source.beatID])
                                         workspace.edit("Reorder Timeline") { try $0.reorderTimelineBeats(ids, before: item.beatID) }
                                     }
                                 }
@@ -253,6 +270,9 @@ struct StoryTimelineView: View {
     }
     private func timelineItem(_ item: StoryTimeline.Item, kind: String, height: Double) -> some View {
         let color = Color(boardHex: item.color)
+        let width = max(3, item.duration * preferences.scale - 1)
+        let titled = kind == "beats" || kind == "scenes"
+        let lineLimit: Int? = preferences.effectiveTitleDisplay == .full ? nil : kind == "beats" ? preferences.lines : 1
         return ZStack {
             Rectangle().fill(color.opacity(kind == "tags" ? 0.08 : kind == "characters" ? 0.35 : (preferences.colorStrength ?? 0.85)))
             if kind == "characters" || kind == "tags" {
@@ -260,10 +280,21 @@ struct StoryTimelineView: View {
                     .shadow(color: color, radius: max(0, item.tension) * 3)
                     .offset(y: item.value.map { (height - 12) / 2 - min(100, max(0, $0)) / 100 * (height - 12) } ?? 0)
             }
-            else if kind != "heat" { Text(item.title).font(.system(size: 10)).lineLimit(preferences.lines).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 3) }
-        }.frame(width: max(3, item.duration * preferences.scale - 1), height: height - 2)
-            .overlay(Rectangle().stroke(workspace.selectedBoardBeatID == item.beatID ? .white : .clear))
-            .contentShape(Rectangle()).help(item.title)
+            else if titled {
+                if TimelineTitleLayout.isNarrow(item.title, width: width - 10) {
+                    Rectangle().fill(.white.opacity(0.7)).frame(width: min(2, width), height: 8)
+                } else {
+                    TimelineTitleLabel(title: item.title, width: width - 10, lines: lineLimit)
+                        .frame(width: width - 10, height: TimelineTitleLayout.height(item.title, width: width - 10, lines: lineLimit))
+                        .frame(width: width - 10, height: height - 10, alignment: .topLeading).clipped()
+                }
+            }
+            else if kind != "heat" { Text(item.title).font(.system(size: 10)).lineLimit(1).truncationMode(.tail).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 3) }
+        }.frame(width: width, height: height - 2)
+            .overlay(Rectangle().stroke((workspace.selectedBoardBeatID == item.beatID || item.memberBeatIDs.contains(workspace.selectedBoardBeatID ?? "")) ? .white : .clear))
+            .contentShape(Rectangle()).help(item.title).accessibilityLabel(item.title)
+            .focusable(titled).focused($focusedItemID, equals: item.id)
+            .onKeyPress(.return) { if !item.beatID.isEmpty { workspace.selectBoardBeat(item.beatID) }; return .handled }
             .onTapGesture(count: 2) { if !item.beatID.isEmpty { workspace.popup.open(item.beatID, workspace: workspace) } }
             .onTapGesture { time = item.start; if isStructural(kind) { openMarker(item.id) }; if !item.beatID.isEmpty { workspace.selectBoardBeat(item.beatID) } }
     }
