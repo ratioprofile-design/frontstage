@@ -35,3 +35,11 @@ Portable Swift tests cover time-base projection, emotion checkpoints, manual hea
 - Tracks menu controls visibility independently from section collapse. Mini and expanded timelines keep separate time bases, zoom, title lines, collapsed sections and hidden tracks in local preferences. The compact view initially hides analytical tracks. Preferences do not modify shared project content.
 - Timing settings save minutes per page (0.1–10) in the project. Explicit beat duration overrides are unchanged. The script-length estimate remains approximate.
 - Regression coverage includes crossing structure boundaries, project round-trip, invalid timing rollback, preference serialization, full/compact restoration, browser break creation and exported timing values.
+
+## Follow-up: board and timeline zoom
+
+- Both workspaces expose minus, percentage/reset and plus controls on Mac and browser. Clicking the percentage resets to 100%.
+- Browser whiteboard zoom scales its content and scroll bounds together. Placement, inline entry, group nesting, dependency picking and Push convert pointer coordinates into board coordinates. Fit frames the selected beats, or all containers when nothing is selected.
+- Browser Command/Ctrl-wheel zooms around the pointer; Command/Ctrl +/−/0 works with board/timeline focus. Mac supports trackpad magnification; its existing whiteboard Command-scroll gesture remains available.
+- Timeline zoom-out now continues below the previous minimum without jumping inward after Fit. Browser zoom preserves the viewed position.
+- Browser regression coverage exercises nesting and inline beat creation while zoomed, card scaling, reset and timeline zoom-out below the previous lower bound. Native build/interaction validation is a separate macOS CI gate.

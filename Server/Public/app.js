@@ -250,6 +250,19 @@ function storyIssues() {
   }
   try { causalOrder(); } catch (error) { result.push({ id: null, text: error.message }); } return result;
 }
+let boardZoom=1;
+function boardPoint(event){const canvas=$('canvas'),frame=canvas.getBoundingClientRect();return {x:(event.clientX-frame.left+canvas.scrollLeft)/boardZoom,y:(event.clientY-frame.top+canvas.scrollTop)/boardZoom};}
+function sizeBoardSurface(g=geometry()){
+  $('board-world').style.width=g.width+'px';$('board-world').style.height=g.height+'px';$('board-world').style.transform=`scale(${boardZoom})`;
+  $('board-extent').style.width=g.width*boardZoom+'px';$('board-extent').style.height=g.height*boardZoom+'px';$('board-zoom-reset').textContent=Math.round(boardZoom*100)+'%';
+}
+function zoomBoard(value,anchor=null){
+  if(!doc)return;const canvas=$('canvas'),point=anchor??{x:canvas.clientWidth/2,y:canvas.clientHeight/2},world={x:(canvas.scrollLeft+point.x)/boardZoom,y:(canvas.scrollTop+point.y)/boardZoom};
+  boardZoom=Math.max(.15,Math.min(3,value));sizeBoardSurface();canvas.scrollLeft=world.x*boardZoom-point.x;canvas.scrollTop=world.y*boardZoom-point.y;
+}
+$('board-zoom-in').onclick=()=>zoomBoard(boardZoom*1.25);$('board-zoom-out').onclick=()=>zoomBoard(boardZoom/1.25);$('board-zoom-reset').onclick=()=>zoomBoard(1);
+$('canvas').addEventListener('wheel',e=>{if(!e.ctrlKey&&!e.metaKey)return;e.preventDefault();const frame=$('canvas').getBoundingClientRect();zoomBoard(boardZoom*Math.exp(-e.deltaY*.005),{x:e.clientX-frame.left,y:e.clientY-frame.top});},{passive:false});
+$('canvas').addEventListener('keydown',e=>{if(e.target!==$('canvas')||!(e.ctrlKey||e.metaKey))return;if(['+','=','-','0'].includes(e.key)){e.preventDefault();zoomBoard(e.key==='0'?1:boardZoom*(e.key==='-'?.8:1.25));}});
 function geometry() {
   const blocks = new Map(), beats = new Map(), layers = new Map(); let y = 0, maxX = 1500;
   for (const layer of board().layers) {
@@ -288,6 +301,7 @@ function render() {
   selectedBeats = new Set([...selectedBeats].filter(id => beatIDs.has(id))); selectedBlocks = new Set([...selectedBlocks].filter(id => blockIDs.has(id)));
   if (!beatIDs.has(selected)) selected = null;
   const g = geometry(), issues = storyIssues(), warning = new Set(issues.map(i => i.id));
+  sizeBoardSurface(g);
   $('layers').replaceChildren(); $('blocks').replaceChildren(); $('links').replaceChildren(); if(!editingSide)$('snippet-list').replaceChildren(); $('issues').replaceChildren();
   for (const layer of board().layers) {
     const rect = g.layers.get(layer.id), node = element('div', undefined, 'layer'); position(node, { x: 0, y: rect.y, width: g.width, height: rect.height });
@@ -308,13 +322,13 @@ function render() {
       selectedBeats.clear();
       const moving = descendantBlocks(board(), selectedBlocks), start = { x: e.clientX, y: e.clientY };
       const nodes = [...$('blocks').children].filter(n => moving.has(n.dataset.blockId));
-      title.onpointermove = event => { for (const item of nodes) { const r = g.blocks.get(item.dataset.blockId); item.style.left = `${r.x + event.clientX - start.x}px`; item.style.top = `${r.y + event.clientY - start.y}px`; } };
+      title.onpointermove = event => { for (const item of nodes) { const r = g.blocks.get(item.dataset.blockId); item.style.left = `${r.x + (event.clientX - start.x)/boardZoom}px`; item.style.top = `${r.y + (event.clientY - start.y)/boardZoom}px`; } };
       title.onpointerup = event => {
         title.onpointermove = null; title.onpointerup = null;
-        const frame=$('canvas').getBoundingClientRect(),y=event.clientY-frame.top+$('canvas').scrollTop;
+        const frame=$('canvas').getBoundingClientRect(),y=boardPoint(event).y;
         const target=board().layers.find(l=>{const r=g.layers.get(l.id);return y>=r.y&&y<r.y+r.height;});
         if(selectedBlocks.size&&target&&Math.abs(event.clientX-start.x)+Math.abs(event.clientY-start.y)>3)edit(()=>{
-          const x=event.clientX-frame.left+$('canvas').scrollLeft,dx=event.clientX-start.x,dy=event.clientY-start.y+g.layers.get(block.layerID).y-g.layers.get(target.id).y;
+          const x=boardPoint(event).x,dx=(event.clientX-start.x)/boardZoom,dy=(event.clientY-start.y)/boardZoom+g.layers.get(block.layerID).y-g.layers.get(target.id).y;
           const container=board().blocks.filter(b=>!moving.has(b.id)&&!b.standalone&&b.containerKind!=='beatGroup').filter(b=>{const r=g.blocks.get(b.id);return r&&x>=r.x&&x<=r.x+r.width&&y>=r.y&&y<=r.y+r.height;}).sort((a,b)=>{const r=g.blocks.get(a.id),s=g.blocks.get(b.id);return r.width*r.height-s.width*s.height;})[0];
           doc.project.frontstageWhiteboard=spatialOrder(container&&[...selectedBlocks].every(id=>board().blocks.find(b=>b.id===id)?.containerKind==='beatGroup')?nestGroups(board(),selectedBlocks,container.id,dx,dy):moveBlocks(board(),selectedBlocks,dx,dy,{layerID:target.id,ripple:$('ripple').checked}));
         });render();
@@ -328,7 +342,7 @@ function render() {
       if(block.standalone && (!targetBeat || moving.blockID === block.id)){dropStandaloneBeats(e);return;}
       if(targetBeat?.dataset.beatId===id)return;
       edit(() => { moving.blockID = block.id; moving.order = Math.max(-1, ...board().beats.filter(b => b.blockID === block.id && b.id !== id).map(b => b.order)) + 1;
-        const hit=e.target.closest('[data-beat-id]');if(hit&&hit.dataset.beatId!==id){doc.project.frontstageWhiteboard=spatialOrder(dropBeats(board(),new Set([id]),hit.dataset.beatId));return;}if(!hit){const frame=node.getBoundingClientRect();moving.position={x:Math.max(6,e.clientX-frame.left),y:Math.max(24,e.clientY-frame.top)};}else delete moving.position; doc.project.frontstageWhiteboard=spatialOrder(pruneEmptyBeatContainers(board())); });
+        const hit=e.target.closest('[data-beat-id]');if(hit&&hit.dataset.beatId!==id){doc.project.frontstageWhiteboard=spatialOrder(dropBeats(board(),new Set([id]),hit.dataset.beatId));return;}if(!hit){const frame=node.getBoundingClientRect();moving.position={x:Math.max(6,(e.clientX-frame.left)/boardZoom),y:Math.max(24,(e.clientY-frame.top)/boardZoom)};}else delete moving.position; doc.project.frontstageWhiteboard=spatialOrder(pruneEmptyBeatContainers(board())); });
     };
     if (!block.collapsed) for (const beat of board().beats.filter(b => b.blockID === block.id).sort((a, b) => a.order - b.order)) {
       const tile = element('div', undefined, `beat${selectedBeats.has(beat.id) ? ' selected' : ''}`); tile.style.backgroundColor = /^#[a-f0-9]{6}$/i.test(beat.color) ? beat.color : '#a34eae';
@@ -340,7 +354,7 @@ function render() {
       tile.ondragstart = e => {
         e.dataTransfer.setData('text/frontstage-beat', beat.id);
         const frame = node.getBoundingClientRect();
-        e.dataTransfer.setData('text/frontstage-grab-offset', `${e.clientX - frame.left},${e.clientY - frame.top}`);
+        e.dataTransfer.setData('text/frontstage-grab-offset', `${(e.clientX - frame.left)/boardZoom},${(e.clientY - frame.top)/boardZoom}`);
       };
       node.append(tile);
     }
@@ -596,7 +610,7 @@ function dropStandaloneBeats(e) {
   const offset = e.dataTransfer.getData('text/frontstage-grab-offset').split(',').map(Number);
   const [ox, oy] = offset.length === 2 && offset.every(Number.isFinite) ? offset : [0, 0];
   const ids = selectedBeats.has(id) ? selectedBeats : new Set([id]);
-  const g = geometry(), x=e.clientX-frame.left+$('canvas').scrollLeft, y=e.clientY-frame.top+$('canvas').scrollTop;
+  const g = geometry(), x=boardPoint(e).x, y=boardPoint(e).y;
   const target=board().layers.find(l=>{const r=g.layers.get(l.id);return y>=r.y&&y<r.y+r.height;});
   if (!target) return;
   edit(() => {
@@ -622,7 +636,7 @@ function createPalette(kind,layerID,position,parentID=null,inlineTitle=null){
 }
 function paletteDrop(e){
   const kind=e.dataTransfer?.getData('text/frontstage-create');if(!['lane','block','group','beat'].includes(kind))return false;
-  e.preventDefault();e.stopPropagation();const frame=$('canvas').getBoundingClientRect(),g=geometry(),x=e.clientX-frame.left+$('canvas').scrollLeft,y=e.clientY-frame.top+$('canvas').scrollTop;
+  e.preventDefault();e.stopPropagation();const frame=$('canvas').getBoundingClientRect(),g=geometry(),x=boardPoint(e).x,y=boardPoint(e).y;
   const layer=board().layers.find(l=>{const r=g.layers.get(l.id);return y>=r.y&&y<r.y+r.height;});if(!layer)return true;
   const parent=board().blocks.find(b=>b.id===e.target.closest('[data-block-id]')?.dataset.blockId&&!b.standalone);
   createPalette(kind,layer.id,{x:Math.max(0,x-110),y:Math.max(32,y-g.layers.get(layer.id).y)},['block','lane'].includes(kind)?null:parent?.id);return true;
@@ -637,7 +651,7 @@ function beginInlineBeat(layerID,position,parentID=null){
   if(parentID&&locked({blockID:parentID}))return;
   const input=element('input',undefined,'inline-beat-name');input.placeholder='Beat name';input.setAttribute('aria-label','New beat name');
   input.style.left=(position.x+110)+'px';input.style.top=(position.y+geometry().layers.get(layerID).y)+'px';
-  $('canvas').append(input);inlineBeatInput=input;input.focus();
+  $('board-world').append(input);inlineBeatInput=input;input.focus();
   let finished=false;
   const finish=next=>{if(finished)return;finished=true;const title=input.value.trim();input.remove();inlineBeatInput=null;
     if(title){const id=createPalette('beat',layerID,position,parentID,title);if(id&&next){const rect=geometry().beats.get(id);beginInlineBeat(layerID,{x:position.x,y:position.y+(rect?.height??28)+12},parentID);}}
@@ -648,7 +662,7 @@ function beginInlineBeat(layerID,position,parentID=null){
 }
 $('canvas').addEventListener('dblclick',event=>{
   if(event.target.closest('[data-beat-id],.block-title,button,input'))return;
-  const frame=$('canvas').getBoundingClientRect(),g=geometry(),x=event.clientX-frame.left+$('canvas').scrollLeft,y=event.clientY-frame.top+$('canvas').scrollTop;
+  const frame=$('canvas').getBoundingClientRect(),g=geometry(),x=boardPoint(event).x,y=boardPoint(event).y;
   const layer=board().layers.find(l=>{const r=g.layers.get(l.id);return y>=r.y&&y<r.y+r.height;});if(!layer)return;
   const parent=board().blocks.find(b=>b.id===event.target.closest('[data-block-id]')?.dataset.blockId&&!b.standalone);
   beginInlineBeat(layer.id,{x:Math.max(0,x-110),y:Math.max(32,y-g.layers.get(layer.id).y)},parent?.id);
@@ -656,21 +670,21 @@ $('canvas').addEventListener('dblclick',event=>{
 $('canvas').addEventListener('pointerdown',e=>{
  const cause=e.target.closest('[data-beat-id]')?.dataset.beatId;if(!e.altKey||!cause||current.access==='reader')return;
  e.preventDefault();e.stopImmediatePropagation();const canvas=$('canvas');canvas.setPointerCapture(e.pointerId);
- canvas.addEventListener('pointerup',event=>{const frame=canvas.getBoundingClientRect(),x=event.clientX-frame.left+canvas.scrollLeft,y=event.clientY-frame.top+canvas.scrollTop;const hit=[...geometry().beats].find(([,r])=>x>=r.x&&x<=r.x+r.width&&y>=r.y&&y<=r.y+r.height);if(hit&&hit[0]!==cause)edit(()=>{board().dependencies.push({id:uuid(),cause,effect:hit[0],reason:'',reference:false});});},{once:true});
+ canvas.addEventListener('pointerup',event=>{const frame=canvas.getBoundingClientRect(),x=boardPoint(event).x,y=boardPoint(event).y;const hit=[...geometry().beats].find(([,r])=>x>=r.x&&x<=r.x+r.width&&y>=r.y&&y<=r.y+r.height);if(hit&&hit[0]!==cause)edit(()=>{board().dependencies.push({id:uuid(),cause,effect:hit[0],reason:'',reference:false});});},{once:true});
 },true);
 document.addEventListener('keydown',e=>{if(e.target!==$('canvas')||!(e.ctrlKey||e.metaKey)||!selected)return;if(e.key.toLowerCase()==='i'){e.preventDefault();source=selected;status('Select the effect, then press Command/Ctrl+O');}if(e.key.toLowerCase()==='o'&&source){e.preventDefault();const cause=source;edit(()=>{board().dependencies.push({id:uuid(),cause,effect:selected,reason:'',reference:false});});source=null;}});
 let pushEnabled=false;
 const pushButton=element('button','Push');pushButton.setAttribute('aria-pressed','false');pushButton.onclick=()=>{pushEnabled=!pushEnabled;pushButton.setAttribute('aria-pressed',String(pushEnabled));};$('fit').after(pushButton);
 $('canvas').addEventListener('pointerdown',e=>{
  if(!(pushEnabled||e.ctrlKey||e.metaKey)||e.button!==0||current.access==='reader')return;e.preventDefault();e.stopImmediatePropagation();
- const canvas=$('canvas'),frame=canvas.getBoundingClientRect(),start=e.clientX,pivot=e.clientX-frame.left+canvas.scrollLeft-110;canvas.setPointerCapture(e.pointerId);canvas.style.cursor='ew-resize';
- const finish=event=>{canvas.removeEventListener('pointerup',finish);canvas.removeEventListener('pointercancel',cancel);canvas.style.cursor='';const distance=event.clientX-start;if(Math.abs(distance)>3)edit(()=>{doc.project.frontstageWhiteboard=spatialOrder(pushBoard(board(),pivot,distance));});};
+ const canvas=$('canvas'),frame=canvas.getBoundingClientRect(),start=e.clientX,pivot=boardPoint(e).x-110;canvas.setPointerCapture(e.pointerId);canvas.style.cursor='ew-resize';
+ const finish=event=>{canvas.removeEventListener('pointerup',finish);canvas.removeEventListener('pointercancel',cancel);canvas.style.cursor='';const distance=(event.clientX-start)/boardZoom;if(Math.abs(distance)>3)edit(()=>{doc.project.frontstageWhiteboard=spatialOrder(pushBoard(board(),pivot,distance));});};
  const cancel=()=>{canvas.removeEventListener('pointerup',finish);canvas.style.cursor='';};canvas.addEventListener('pointerup',finish,{once:true});canvas.addEventListener('pointercancel',cancel,{once:true});
 },true);
 let boardMenu=null;
 function closeBoardMenu(){boardMenu?.remove();boardMenu=null;}
 $('canvas').addEventListener('contextmenu',event=>{
-  event.preventDefault();closeBoardMenu();const frame=$('canvas').getBoundingClientRect(),g=geometry(),x=event.clientX-frame.left+$('canvas').scrollLeft,y=event.clientY-frame.top+$('canvas').scrollTop;
+  event.preventDefault();closeBoardMenu();const frame=$('canvas').getBoundingClientRect(),g=geometry(),x=boardPoint(event).x,y=boardPoint(event).y;
   const beat=board().beats.find(b=>b.id===event.target.closest('[data-beat-id]')?.dataset.beatId),block=board().blocks.find(b=>b.id===event.target.closest('[data-block-id]')?.dataset.blockId),layer=board().layers.find(l=>{const r=g.layers.get(l.id);return y>=r.y&&y<r.y+r.height;});if(!layer)return;
   const menu=element('div',undefined,'board-context-menu');boardMenu=menu;menu.setAttribute('role','menu');menu.setAttribute('aria-label','Whiteboard actions');
   const item=(label,run,disabled=false)=>{const button=element('button',label);button.setAttribute('role','menuitem');button.disabled=disabled;button.onclick=()=>{closeBoardMenu();run();};menu.append(button);};
@@ -734,7 +748,11 @@ $('add-beat').onclick = () => addBeat(true); $('add-to-block').onclick = () => a
 $('add-layer').onclick = () => { const name = prompt('Layer name', 'New Layer'); if (name) edit(() => board().layers.push({ id: uuid(), name, height: 300, collapsed: false, locked: false, unused: false, useBlocks:false })); };
 $('cause').onclick = () => { if (selected) { source = selected; status('Select the effect beat'); } };
 $('resolve').onclick = () => edit(resolve);
-$('fit').onclick = () => { if (!doc) return; const rect = geometry().beats.get(selected); $('canvas').scrollTo({ left: Math.max(0, (rect?.x || 110) - 100), top: Math.max(0, (rect?.y || 60) - 80), behavior: 'smooth' }); };
+$('fit').onclick = () => {
+  if(!doc)return;const g=geometry(),chosen=[...selectedBeats].map(id=>g.beats.get(id)).filter(Boolean),rects=chosen.length?chosen:[...g.blocks.values()];if(!rects.length){zoomBoard(1);return;}
+  const left=Math.min(...rects.map(r=>r.x))-30,top=Math.min(...rects.map(r=>r.y))-30,right=Math.max(...rects.map(r=>r.x+r.width))+30,bottom=Math.max(...rects.map(r=>r.y+r.height))+30,canvas=$('canvas');
+  zoomBoard(Math.min(canvas.clientWidth/(right-left),canvas.clientHeight/(bottom-top)));canvas.scrollLeft=Math.max(0,left*boardZoom);canvas.scrollTop=Math.max(0,top*boardZoom);
+};
 $('keep-local').onclick = () => { if (!pendingConflict) return; base = clone(pendingConflict.document); current.revision = pendingConflict.revision; pendingConflict = null; $('conflict').hidden = true; dirty = true; sync(); };
 $('take-server').onclick = async () => { if (!pendingConflict) return; download(); doc = initializeBoard(clone(pendingConflict.document)); base = clone(pendingConflict.document); current.revision = pendingConflict.revision; dirty = false; pendingConflict = null; $('conflict').hidden = true; closeEditors(); editorID = null; await saveLocal(); render(); status('Server copy loaded; previous local copy downloaded'); };
 $('share').onclick = async () => { if (current?.local) { status('Download your local project, sign in, then import it to create a shared copy.'); return; } if (!current || current.access !== 'owner') { status('Only the project owner can change access'); return; } const username = prompt('Existing account username'); if (!username) return; const access = prompt('Access: reader or editor', 'editor'); if (!['reader', 'editor'].includes(access)) return; try { await api(`/api/projects/${current.id}/members`, 'POST', { username, access }); status(`Shared with ${username} (${access})`); } catch (error) { status(error.message); } };

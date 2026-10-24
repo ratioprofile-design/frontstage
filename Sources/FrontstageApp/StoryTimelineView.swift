@@ -11,6 +11,7 @@ struct StoryTimelineView: View {
     @AppStorage("frontstage-timeline-mini") private var compactPreferences = ""
     @AppStorage("frontstage-timeline-full") private var fullPreferences = ""
     @State private var time = 0.0
+    @State private var magnifyStart: Double?
     @State private var showingTiming = false
     @State private var minutesPerPage = 1.0
     @State private var showingMarker = false
@@ -58,6 +59,10 @@ struct StoryTimelineView: View {
                 }
             }
         }.background(Color(white: 0.20))
+        .simultaneousGesture(MagnifyGesture().onChanged { value in
+            if magnifyStart == nil { magnifyStart = preferences.scale }
+            preferences.scale = min(180, max(2, (magnifyStart ?? preferences.scale) * value.magnification))
+        }.onEnded { _ in magnifyStart = nil })
         .onAppear { loadPreferences() }
         .onChange(of: expanded) { _, _ in loadPreferences() }
         .onChange(of: preferences) { _, value in
@@ -81,8 +86,9 @@ struct StoryTimelineView: View {
             HStack(spacing: 8) {
                 Text(counter(preferences.primary) + "   " + counter(preferences.secondary)).font(.system(size: 18, design: .monospaced)).foregroundStyle(.cyan)
                 Button(expanded ? "Restore Board" : "Expand Timeline") { expanded.toggle() }
-                Button("−") { preferences.scale = max(12, preferences.scale / 1.25) }.accessibilityLabel("Zoom timeline out")
-                Button("+") { preferences.scale = min(180, preferences.scale * 1.25) }.accessibilityLabel("Zoom timeline in")
+                Button("−") { preferences.scale = max(2, preferences.scale / 1.25) }.accessibilityLabel("Zoom timeline out").help("Zoom timeline out")
+                Button("\(Int((preferences.scale / 60 * 100).rounded()))%") { preferences.scale = 60 }.accessibilityLabel("Reset timeline zoom").help("Reset timeline zoom to 100%")
+                Button("+") { preferences.scale = min(180, preferences.scale * 1.25) }.accessibilityLabel("Zoom timeline in").help("Zoom timeline in")
                 Picker("Primary", selection: $preferences.primary) { ForEach(TimelineTimeBase.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.fixedSize()
                 Picker("Secondary", selection: $preferences.secondary) { ForEach(TimelineTimeBase.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.fixedSize()
                 Picker("Title lines", selection: $preferences.lines) { ForEach(1...3, id: \.self) { Text("\($0) lines").tag($0) } }.fixedSize()

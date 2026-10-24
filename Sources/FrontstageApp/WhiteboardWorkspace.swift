@@ -27,13 +27,16 @@ struct WhiteboardWorkspace: View {
     var body: some View {
         GeometryReader { viewport in
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
+            ScrollView(.horizontal, showsIndicators: false) { HStack(spacing: 12) {
                 Text(workspace.project.name).font(.caption.weight(.semibold))
                 Spacer()
+                Button { changeZoom(0.8) } label: { Image(systemName: "minus.magnifyingglass") }.accessibilityLabel("Zoom whiteboard out").help("Zoom whiteboard out")
+                Button("\(Int((board.viewport.zoom * 100).rounded()))%") { changeZoom(1 / board.viewport.zoom) }.accessibilityLabel("Reset whiteboard zoom").help("Reset whiteboard zoom to 100%")
+                Button { changeZoom(1.25) } label: { Image(systemName: "plus.magnifyingglass") }.accessibilityLabel("Zoom whiteboard in").help("Zoom whiteboard in")
                 Toggle("Script", isOn: $workspace.showBoardScript).toggleStyle(.button)
                 Toggle("Timeline", isOn: $showTimeline).toggleStyle(.button)
                 Toggle("Properties", isOn: $showProperties).toggleStyle(.button)
-            }.font(.caption).buttonStyle(.borderless).padding(.horizontal, 10).padding(.vertical, 5)
+            }.font(.caption).buttonStyle(.borderless).padding(.horizontal, 10).padding(.vertical, 5).fixedSize(horizontal: true, vertical: false) }.frame(height: 32)
                 .background(Color(white: 0.24))
             HSplitView {
                 VStack(spacing: 0) {

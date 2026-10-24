@@ -114,6 +114,9 @@ try{
  const blockLane=paletteBoard.layers.find(l=>l.name==='New Layer');assert.equal(blockLane.useBlocks,true);
  const placedGroup=paletteBoard.blocks.find(b=>b.layerID===blockLane.id&&b.containerKind==='beatGroup');assert.equal(placedGroup.parentID,newBlockID);assert.equal(paletteBoard.beats.filter(b=>b.blockID===placedGroup.id).length,1);
  await page.screenshot({path:path.join(output,'browser-block-layer-palette.png')});
+ // Exercise containment and inline creation with scaled board coordinates.
+ await page.getByRole('button',{name:'Zoom whiteboard out',exact:true}).click();
+ assert.equal(await page.locator('#board-zoom-reset').textContent(),'80%');
  // Existing group title drags must establish containment, not just overlap the block.
  const existingGroup=page.locator(`[data-block-id="${group.id}"] .block-title`);await existingGroup.scrollIntoViewIfNeeded();
  let from=await existingGroup.boundingBox();await newBlock.scrollIntoViewIfNeeded();let to=await newBlock.boundingBox();from=await existingGroup.boundingBox();
@@ -142,9 +145,26 @@ try{
  await page.locator('#blocks .beat').filter({hasText:'Untitled Beat'}).first().dispatchEvent('dblclick');
  assert.equal(await page.locator('.beat-popup.active [data-field="beat-title"]').evaluate(n=>n===document.activeElement),true);
  await page.keyboard.press('Escape');
+ await page.getByRole('button',{name:'Reset whiteboard zoom',exact:true}).click();
+ assert.equal(await page.locator('#board-zoom-reset').textContent(),'100%');
+ const card=page.locator('#blocks .beat').first(),normalWidth=(await card.boundingBox()).width;
+ await page.getByRole('button',{name:'Zoom whiteboard in',exact:true}).click();
+ assert.ok(Math.abs((await card.boundingBox()).width-normalWidth*1.25)<1);
+ await page.getByRole('button',{name:'Reset whiteboard zoom',exact:true}).click();
+ await page.getByRole('button',{name:'Zoom whiteboard out',exact:true}).click();
+ assert.ok(Math.abs((await card.boundingBox()).width-normalWidth*.8)<1);
+ await page.getByRole('button',{name:'Reset whiteboard zoom',exact:true}).click();
  // The full timeline uses serialized beat order, with independent primary/secondary counters.
  await page.getByRole('button',{name:'Expand Timeline',exact:true}).click();
  assert.equal(await page.locator('#canvas').isVisible(),false);
+ const timelineZoom=page.getByRole('button',{name:'Reset timeline zoom',exact:true});
+ await timelineZoom.click();await page.getByRole('button',{name:'Zoom timeline in',exact:true}).click();
+ assert.equal(await timelineZoom.textContent(),'125%');
+ for(let i=0;i<10;i++)await page.getByRole('button',{name:'Zoom timeline out',exact:true}).click();
+ const lowZoom=parseInt(await timelineZoom.textContent());
+ await page.getByRole('button',{name:'Zoom timeline out',exact:true}).click();
+ assert.ok(parseInt(await timelineZoom.textContent())<lowZoom);
+ await timelineZoom.click();assert.equal(await timelineZoom.textContent(),'100%');
  await page.getByLabel('Primary time base',{exact:true}).selectOption('time');
  assert.equal(await page.getByLabel('Secondary time base',{exact:true}).inputValue(),'beats');
  await page.getByLabel('Primary time base',{exact:true}).selectOption('pages');
