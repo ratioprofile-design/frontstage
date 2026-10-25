@@ -150,18 +150,3 @@ input::-webkit-calendar-picker-indicator{display:none!important;}
 
 /* Script headings grow vertically instead of inheriting single-line button layout. */
 .script-beat-title { box-sizing:border-box; min-width:0; height:auto; max-height:none; white-space:pre-wrap; overflow-wrap:anywhere; word-break:normal; line-height:1.5; text-overflow:clip; }
-
-/* Keep planning notes from displacing the screenplay editor. */
-.popup-fields textarea { height:64px; min-height:48px; max-height:96px; overflow-y:auto; resize:none; }
-.beat-popup .popup-top { max-height:240px; overflow-y:auto; margin-bottom:12px; }
-.beat-popup .paper-desk { min-height:180px; }
-.popup-fields input[type=color] { width:52px; height:26px; padding:2px; }
-.synopsis-preview { padding:8px; }
-.synopsis-preview .reader-synopsis { white-space:pre-wrap; overflow-wrap:anywhere; max-height:6em; overflow:auto; margin:0; color:var(--synopsis-color,#0000aa); line-height:1.5; }
-.synopsis-preview.expanded .reader-synopsis { max-height:18em; }
-.synopsis-preview>button { font:12px system-ui; margin-top:4px; }
-.script-text,[data-field="snippet-editor"] { color:var(--screenplay-color,#111111); }
-.script-color-controls label { display:block; margin:6px 0; }
-.script-color-controls select { display:block; width:100%; }
-.sc-character,.sc-slugline,.slugline-fields input { text-transform:uppercase; }
-@media print { .script-text,[data-field="snippet-editor"],.reader-synopsis { color:black!important; } .synopsis-preview .reader-synopsis { max-height:none;overflow:visible; } .synopsis-preview>button { display:none; } }

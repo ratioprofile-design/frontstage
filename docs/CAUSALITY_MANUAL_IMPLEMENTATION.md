@@ -73,11 +73,3 @@ Browser acceptance covers context counter changes, category assignment/collapse,
 - New display preferences are local, separate for compact/full timelines, and backward-compatible with previous settings. Project content is unaffected by display-mode changes.
 
 Verification adds normalized multi-scene-ID fixtures, INT/EXT and DAY/NIGHT distinctions, returning/blank locations, Unicode/Tamil titles, time-base intervals, scene-span reorder and lock rollback, preference migration, actual browser text measurements at multiple zooms/window widths, and native AppKit text-cell measurement tests. Browser layout acceptance runs in macOS CI alongside existing workspace acceptance.
-
-### Script usability: synopsis, colors, and completions
-
-The Script / Screenwriting and Paragraph Styles sections distinguish planning synopsis from screenplay content, use uppercase cues and headings, and reserve backgrounds for highlighting. The popup now bounds synopsis editing; script readers show a scrollable synopsis preview with expand/collapse, preserving all notes while leaving writing space. Beat color is available in the popup as well as properties. Styling menus provide separate primary text colors for synopsis and screenplay; these are device-local reading preferences, and printed screenplay remains black by default.
-
-Character suggestions collect character-style paragraphs from project scenes and whiteboard beats, alongside manually registered characters, with case-insensitive deduplication. Character cues and slugline edits are uppercased without changing dialogue or Tamil text. Browser sluglines use the same styled keyboard suggestion list as screenplay transitions, replacing platform datalists. Native fields use AppKit completion.
-
-Validation: `script-usability.mjs` covers long Tamil notes, preserved editor space, beat colors, persisted text colors, character discovery, and uppercase suggestions. `workspace-parity.mjs` covers editing a slugline after selecting a suggestion and then saving/restoring a version. `ScriptUsabilityTests.swift` checks native character discovery and cue normalization with dialogue preservation.

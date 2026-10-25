@@ -524,7 +524,7 @@ struct ScriptSuggestionField: NSViewRepresentable {
     @Environment(\.isEnabled) private var enabled
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeNSView(context: Context) -> NSTextField {
-        let field = NSTextField(string: text.uppercased())
+        let field = NSTextField(string: text)
         field.placeholderString = label; field.setAccessibilityLabel(label)
         field.isBezeled = true; field.bezelStyle = .roundedBezel
         field.delegate = context.coordinator
@@ -532,7 +532,7 @@ struct ScriptSuggestionField: NSViewRepresentable {
     }
     func updateNSView(_ field: NSTextField, context: Context) {
         context.coordinator.parent = self; field.isEnabled = enabled
-        if field.currentEditor() == nil { field.stringValue = text.uppercased() }
+        if field.currentEditor() == nil { field.stringValue = text }
     }
     final class Coordinator: NSObject, NSTextFieldDelegate {
         var parent: ScriptSuggestionField
@@ -540,12 +540,7 @@ struct ScriptSuggestionField: NSViewRepresentable {
         init(_ parent: ScriptSuggestionField) { self.parent = parent }
         func controlTextDidChange(_ notification: Notification) {
             guard let field = notification.object as? NSTextField else { return }
-            if let editor = field.currentEditor() as? NSTextView, editor.hasMarkedText() { return }
-            if let editor = field.currentEditor() as? NSTextView, editor.string != editor.string.uppercased() {
-                let caret = editor.selectedRange();let prefix = (editor.string as NSString).substring(to: min(caret.location, (editor.string as NSString).length)).uppercased()
-                editor.string = editor.string.uppercased();editor.setSelectedRange(NSRange(location: prefix.utf16.count, length: 0))
-            }
-            parent.text = field.stringValue.uppercased()
+            parent.text = field.stringValue
             guard !completing, let editor = field.currentEditor() as? NSTextView, !editor.hasMarkedText(), !field.stringValue.isEmpty else { return }
             completing = true; editor.complete(nil); completing = false
         }
@@ -554,7 +549,7 @@ struct ScriptSuggestionField: NSViewRepresentable {
             let prefix = source.substring(to: NSMaxRange(range))
             let before = source.substring(to: range.location)
             index.pointee = -1
-            return Array(Set(parent.options.map { $0.uppercased() })).sorted().filter { $0.lowercased().hasPrefix(prefix.lowercased()) && $0.lowercased() != prefix.lowercased() }.map { String($0.dropFirst(before.count)) }
+            return parent.options.filter { $0.lowercased().hasPrefix(prefix.lowercased()) && $0.lowercased() != prefix.lowercased() }.map { String($0.dropFirst(before.count)) }
         }
     }
 }
@@ -566,7 +561,7 @@ struct SceneHeadingFields: View {
     private var current: FrontstageCore.Scene { workspace.project.scenes.first { $0.id == scene.id } ?? scene }
     private func heading(_ key: WritableKeyPath<SceneHeading, String>) -> Binding<String> {
         Binding(get: { current.heading[keyPath: key] }, set: { value in
-            var updated = current.heading; updated[keyPath: key] = value.uppercased()
+            var updated = current.heading; updated[keyPath: key] = value
             workspace.updateScene(id: scene.id, heading: updated)
         })
     }
@@ -587,7 +582,7 @@ struct SceneHeadingFields: View {
 
 extension Workspace {
     var screenplayCompletions: [ScreenplayElement: [String]] {
-        [.character: Array(Set((project.characters.map(\.name) + whiteboard.beats.flatMap(\.characters) + whiteboard.beats.flatMap { ScriptCueNames.characters(in: $0.html) } + project.scenes.flatMap { ScriptCueNames.characters(in: $0.html) }).map { $0.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() })).filter { !$0.isEmpty }.sorted(),
+        [.character: Array(Set(project.characters.map(\.name) + whiteboard.beats.flatMap(\.characters))).filter { !$0.isEmpty }.sorted(),
          .transition: ["CUT TO:", "DISSOLVE TO:", "FADE IN:", "FADE OUT.", "FADE TO BLACK.", "SMASH CUT TO:", "MATCH CUT TO:"],
          .parenthetical: ["(beat)", "(quietly)", "(into phone)"],
          .shot: ["CLOSE ON", "ANGLE ON", "INSERT", "POV"]]

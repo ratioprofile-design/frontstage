@@ -1,4 +1,3 @@
-import {scriptColorControls,synopsisPreview} from './script-presentation.js';
 import { timelineModel, mountTimeline, timelinePreferences } from './story-timeline.js';
 import { mountWorkspaces } from './workspaces.js';
 import { splitAtCaret, screenplayToolbar, sluglineFields, characterNames } from './screenplay-editor.js';
@@ -385,7 +384,7 @@ function render() {
       const body=element('div',undefined,'script-beat-body');title.onclick=()=>{body.hidden=!body.hidden;title.textContent=(body.hidden?'▶ ':'▼ ')+beat.title;selected=id;selectedBeats=new Set([id]);highlightScript();};
       const plain=['Content Only','Final Script'].includes(reader.display);if(!plain)section.append(title);
       if(!plain&&((reader.characters&&beat.characters.length)||(reader.tags&&beat.tags.length)))section.append(metadataChips({...beat,characters:reader.characters?beat.characters:[],tags:reader.tags?beat.tags:[]}));
-      if(!plain&&(reader.synopsis||reader.display==='Index Cards'))section.append(synopsisPreview(beat.synopsis));
+      if(!plain&&(reader.synopsis||reader.display==='Index Cards'))section.append(element('p',beat.synopsis,'reader-synopsis'));
       body.hidden=['Collapse All','Index Cards'].includes(reader.display);
       if(reader.boundaries){const owner=board().blocks.find(b=>b.id===beat.blockID);if(!owner.standalone&&board().beats.filter(b=>b.blockID===owner.id).sort((a,b)=>a.order-b.order)[0]?.id===id)$('snippet-list').append(element('div',owner.name,'reader-boundary'));}
 
@@ -416,7 +415,7 @@ function renderReaderTools() {
   const display=menu('Display');for(const mode of ['Expand All','Index Cards','Collapse All','Content Only','Final Script'])action(display,mode,()=>reader.display=mode);
   for(const [key,label]of [['characters','Show Characters'],['tags','Show Tags'],['synopsis','Show Synopsis Field'],['boundaries','Show Block/Group Beginnings']]){const labelNode=element('label',label),input=element('input');input.type='checkbox';input.checked=reader[key];input.onchange=()=>{reader[key]=input.checked;render();};labelNode.prepend(input);display.append(labelNode);}
   for(const mode of ['Full Margins','Compact Margins','Squeezed','Super Squeezed'])action(display,mode,()=>reader.margin=mode);
-  const styling=menu('Styling');styling.append(scriptColorControls());action(styling,'Zoom In',()=>reader.zoom=Math.min(2,reader.zoom+.1));action(styling,'Zoom Out',()=>reader.zoom=Math.max(.7,reader.zoom-.1));action(styling,'100%',()=>reader.zoom=1);
+  const styling=menu('Styling');action(styling,'Zoom In',()=>reader.zoom=Math.min(2,reader.zoom+.1));action(styling,'Zoom Out',()=>reader.zoom=Math.max(.7,reader.zoom-.1));action(styling,'100%',()=>reader.zoom=1);
   const filter=menu('Filter'),input=element('input');input.placeholder='Script, character or tag';input.setAttribute('aria-label','Filter script');input.oninput=()=>{reader.filter=input.value;render();};filter.append(input);action(filter,'All Beats',()=>{reader.filter='';input.value='';});
   const presets=menu('Presets');for(const [label,mode]of [['Reading','Final Script'],['Story Review','Expand All'],['Index Cards','Index Cards']])action(presets,label,()=>reader.display=mode);
   const options=menu('Options');action(options,'Follow Selected Beat',()=>reader.follow=!reader.follow);action(options,'Full Screen',()=>{if(document.fullscreenElement)document.exitFullscreen();else document.documentElement.requestFullscreen().catch(()=>{});});
@@ -451,7 +450,7 @@ function renderProperties() {
   for (const [title, key] of [['Must Be Caused', 'mustBeCaused'], ['Omitted', 'omitted'], ['Locked', 'locked']]) {
     const label = element('label', title), input = element('input'); input.type = 'checkbox'; input.checked = beat[key]; input.disabled = current.access === 'reader'; input.onchange = () => edit(() => { beat[key] = input.checked; }); label.prepend(input); target.append(label);
   }
-  const color = element('input'); color.setAttribute('aria-label','Beat color'); color.type = 'color'; color.value = /^#[a-f0-9]{6}$/i.test(beat.color) ? beat.color : '#a34eae'; color.disabled = current.access === 'reader'; color.onchange = () => edit(() => { beat.color = color.value; }); target.append(color);
+  const color = element('input'); color.type = 'color'; color.value = /^#[a-f0-9]{6}$/i.test(beat.color) ? beat.color : '#a34eae'; color.disabled = current.access === 'reader'; color.onchange = () => edit(() => { beat.color = color.value; }); target.append(color);
   for (const edge of board().dependencies.filter(e => e.cause === beat.id || e.effect === beat.id)) {
     const other = board().beats.find(b => b.id === (edge.cause === beat.id ? edge.effect : edge.cause)); const row = element('p', `${edge.cause === beat.id ? '→' : '←'} ${other?.title || 'Beat'}`);
     const remove = element('button', 'Remove'); remove.disabled = current.access === 'reader'; remove.onclick = () => edit(() => { board().dependencies = board().dependencies.filter(e => e.id !== edge.id); }); row.append(remove); target.append(row);
@@ -507,7 +506,7 @@ function editMarker(marker = null, kind = 'act') {
 }
 const editors = new Map();
 let editorStack = 20;
-const editorFields = [['beat-color','color'], ['beat-title', 'title'], ['beat-synopsis', 'synopsis'], ['beat-kind', 'kind'], ['must-cause', 'mustBeCaused'], ['beat-characters', 'characters'], ['beat-tags', 'tags']];
+const editorFields = [['beat-title', 'title'], ['beat-synopsis', 'synopsis'], ['beat-kind', 'kind'], ['must-cause', 'mustBeCaused'], ['beat-characters', 'characters'], ['beat-tags', 'tags']];
 function refreshEditors(force = false) {
   for (const [id, panel] of editors) {
     const beat = board().beats.find(b => b.id === id);

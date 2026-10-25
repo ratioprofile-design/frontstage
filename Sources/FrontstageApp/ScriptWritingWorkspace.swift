@@ -33,11 +33,11 @@ struct ScriptWritingWorkspace: View {
                     Button("Zoom In") { zoom = min(2, zoom + 0.1) }; Button("Zoom Out") { zoom = max(0.5, zoom - 0.1) }; Button("100%") { zoom = 1 }
                 }
                 Menu("Styling") {
-                    ScriptColorOptions()
                     ForEach(ScreenplayElement.editable, id: \.self) { element in Button(element.label) { activeController?.format(element) } }
                     Divider()
                     ForEach(["bold", "italic", "underline"], id: \.self) { style in Button(style.capitalized) { activeController?.toggleInlineStyle(style) } }
                 }
+                .disabled(activeController?.textView?.isEditable != true)
                 Menu("Filter") {
                     Button("Reset Filter") { filter = "" }
                     ForEach(workspace.project.characters) { character in Button(character.name) { filter = character.name } }
@@ -118,7 +118,7 @@ struct ScriptWritingWorkspace: View {
                     Text((expanded ? "▾ " : "▸ ") + beat.title).lineLimit(nil).fixedSize(horizontal: false, vertical: true).multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading).padding(6)
                 }.buttonStyle(.plain).background(Color(boardHex: beat.color).opacity(0.2))
                 if display != "Index Cards" { BeatReferenceChips(characters: showCharacters ? beat.characters : [], tags: showTags ? beat.tags : []) }
-                if showSynopsis || display == "Index Cards" { ScriptSynopsisPreview(text: beat.synopsis) }
+                if showSynopsis || display == "Index Cards" { Text(beat.synopsis).font(.caption).padding(6) }
                 if showBoundaries, let owner = workspace.whiteboard.blocks.first(where: { $0.id == beat.blockID }), owner.standalone != true, workspace.whiteboard.orderedBeats.first(where: { $0.blockID == owner.id })?.id == beat.id { Text(owner.name).font(.caption).padding(4) }
             }
             if display != "Index Cards", plain || expanded { snippet(sceneID: beat.sceneID, beatID: beat.id, key: beat.id) }
@@ -222,7 +222,7 @@ struct SideScriptBeat: View {
                 if (settings.characters && !beat.characters.isEmpty) || (settings.tags && !beat.tags.isEmpty) {
                     BeatReferenceChips(characters: settings.characters ? beat.characters : [], tags: settings.tags ? beat.tags : []).padding(8).frame(maxWidth: .infinity, alignment: .leading).background(Color(white: 0.94))
                 }
-                if settings.synopsis || settings.display == "Index Cards" { ScriptSynopsisPreview(text: beat.synopsis) }
+                if settings.synopsis || settings.display == "Index Cards" { Text(beat.synopsis).padding(8) }
             }
             if plain || (expanded && settings.display != "Index Cards") {
                 if beat.html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -261,7 +261,6 @@ struct ScriptSidePaper: View {
                 Section("Display Margins") { Picker("Margins", selection: $workspace.reader.margins) { ForEach(["Full Margins", "Compact Margins", "Squeezed", "Super Squeezed"], id: \.self) { Text($0) } } }
             } label: { Label("Display", systemImage: "rectangle.split.3x1") }
             Menu {
-                ScriptColorOptions()
                 Button("Zoom In") { workspace.reader.zoom = min(2, workspace.reader.zoom + 0.1) }
                 Button("Zoom Out") { workspace.reader.zoom = max(0.7, workspace.reader.zoom - 0.1) }
                 Button("100%") { workspace.reader.zoom = 1 }

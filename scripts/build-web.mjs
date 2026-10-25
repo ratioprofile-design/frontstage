@@ -18,7 +18,7 @@ await mkdir(output, { recursive: true });
 await cp(path.join(root, 'Server/Public'), output, { recursive: true });
 await writeFile(path.join(output, 'config.js'), `export const apiOrigin = ${JSON.stringify(origin)};\n`);
 const hash = createHash('sha256');
-for (const file of ['index.html', 'app.js', 'merge.js', 'board-operations.js', 'story-timeline.js', 'config.js', 'style.css', 'workspace-design.js', 'workspace-design.css', 'workspace-model.js', 'workspaces.js', 'pagination.js', 'workspaces.css', 'screenplay-editor.js', 'script-presentation.js', 'bamini.js']) {
+for (const file of ['index.html', 'app.js', 'merge.js', 'board-operations.js', 'story-timeline.js', 'config.js', 'style.css', 'workspace-design.js', 'workspace-design.css', 'workspace-model.js', 'workspaces.js', 'pagination.js', 'workspaces.css', 'screenplay-editor.js', 'bamini.js']) {
   hash.update(file); hash.update(await readFile(path.join(output, file)));
 }
 const worker = await readFile(path.join(output, 'sw.js'), 'utf8');

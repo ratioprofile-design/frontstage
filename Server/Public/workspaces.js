@@ -1,4 +1,3 @@
-import {scriptColorControls,synopsisPreview} from './script-presentation.js';
 import { workspaceDesign as design } from './workspace-design.js';
 import * as model from './workspace-model.js';
 import { baminiPairs } from './bamini.js';
@@ -59,7 +58,7 @@ export function mountWorkspaces(api) {
     for(const [key,label]of [['characters','Show Characters'],['tags','Show Tags'],['synopsis','Show Synopsis'],['boundaries','Show Block/Group Beginnings']])option(display,(scriptView[key]?'✓ ':'')+label,()=>scriptPreference(key,!scriptView[key]));
     for(const margin of ['Full Margins','Compact Margins','Squeezed','Super Squeezed'])option(display,margin,()=>scriptPreference('margin',margin));
     option(display,'Zoom In',()=>scriptPreference('zoom',Math.min(2,scriptView.zoom+.1)));option(display,'Zoom Out',()=>scriptPreference('zoom',Math.max(.5,scriptView.zoom-.1)));option(display,'100%',()=>scriptPreference('zoom',1));
-    const styling=menu('Styling'),formatButtons=[];styling.querySelector('.script-menu-items').append(scriptColorControls());
+    const styling=menu('Styling'),formatButtons=[];
     for(const kind of elements)formatButtons.push(option(styling,kind[0].toUpperCase()+kind.slice(1),()=>activeEditor?.format(kind)));
     for(const command of ['bold','italic','underline','strikeThrough'])formatButtons.push(option(styling,command,()=>activeEditor?.inline(command)));
     formatButtons.push(option(styling,'Split at Cursor',()=>activeEditor?.split()),option(styling,'Open Beat Editor',()=>activeEditor?.open()));
@@ -83,7 +82,7 @@ export function mountWorkspaces(api) {
         const id=beat.id,block=el('section',null,'script-snippet');block.dataset.scriptBeatID=id;
         if(!plain){const isExpanded=(scriptView.display!=='Collapse All')!==expandedBeats.has(id),name=button((isExpanded?'▾ ':'▸ ')+beat.title,()=>{if(expandedBeats.has(id))expandedBeats.delete(id);else expandedBeats.add(id);const text=block.querySelector('.script-text');if(text){text.hidden=!text.hidden;name.textContent=(text.hidden?'▸ ':'▾ ')+beat.title;}});name.className='snippet-heading';name.ondblclick=()=>api.openBeat(id);block.append(name);
           if(scriptView.display!=='Index Cards'){if(scriptView.characters&&beat.characters.length)block.append(el('div',beat.characters.join(' · '),'script-beat-details'));if(scriptView.tags&&beat.tags.length)block.append(el('div',beat.tags.join(' · '),'script-beat-details'));}
-          if(scriptView.synopsis||scriptView.display==='Index Cards')block.append(synopsisPreview(beat.synopsis||''));
+          if(scriptView.synopsis||scriptView.display==='Index Cards')block.append(el('div',beat.synopsis||'','script-beat-details'));
           if(scriptView.boundaries){const owner=model.board(doc()).blocks.find(b=>b.id===beat.blockID);if(owner&&!owner.standalone&&model.board(doc()).beats.filter(b=>b.blockID===owner.id).sort((a,b)=>a.order-b.order)[0]?.id===id)block.prepend(el('div',owner.name,'script-beat-details'));}
         }
         if(scriptView.display!=='Index Cards'){
