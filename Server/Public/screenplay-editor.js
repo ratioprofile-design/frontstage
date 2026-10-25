@@ -4,7 +4,7 @@ export function screenplayToolbar(text, changed, editable=true, characters=()=>[
   const select=document.createElement('select');select.setAttribute('aria-label','Element');
   for(const key of elements){const o=document.createElement('option');o.value=key;o.textContent=key[0].toUpperCase()+key.slice(1);select.append(o);}
   const paragraph=()=>{let node=window.getSelection()?.anchorNode;if(node?.nodeType===3)node=node.parentElement;if(!node||!text.contains(node))return null;while(node!==text&&node.parentElement!==text)node=node.parentElement;return node;};
-  const format=kind=>{if(!text.isContentEditable)return;text.focus();let node=paragraph();if(node===text){document.execCommand('formatBlock',false,'p');node=paragraph();}if(node&&node!==text){node.className=`sc-line sc-${kind}`;select.value=kind;changed();}};
+  const format=kind=>{if(!text.isContentEditable)return;text.focus();let node=paragraph();if(node===text){document.execCommand('formatBlock',false,'p');node=paragraph();}if(node&&node!==text){node.className=`sc-line sc-${kind}`;capitalizeCue(node);select.value=kind;changed();}};
   select.onchange=()=>format(select.value);select.disabled=!editable;bar.append(select);
   for(const command of ['bold','italic','underline']){const b=document.createElement('button');b.textContent=command==='bold'?'B':command==='italic'?'I':'U';b.setAttribute('aria-label',command);b.disabled=!editable;b.onpointerdown=e=>e.preventDefault();b.onclick=()=>{text.focus();document.execCommand(command);changed();};bar.append(b);}
   let savedRange;
@@ -36,6 +36,9 @@ export function screenplayToolbar(text, changed, editable=true, characters=()=>[
     if((event.altKey||event.ctrlKey||event.metaKey)&&/^[1-7]$/.test(event.key)){event.preventDefault();format(elements[Number(event.key)-1]);}
     if(event.key==='Enter'&&!event.shiftKey){const node=paragraph(),kind=elements.find(e=>node?.classList.contains('sc-'+e))||'action',empty=!node?.textContent.trim(),next=kind==='character'||kind==='parenthetical'?'dialogue':kind==='lyrics'?'lyrics':'action';event.preventDefault();if(!empty||['action','character','dialogue'].includes(kind))document.execCommand('insertParagraph');format(next);}
   });
+  text.addEventListener('input',event=>{if(!event.isComposing)capitalizeCue(paragraph());},true);
+  text.addEventListener('compositionend',()=>{if(capitalizeCue(paragraph()))changed();});
+  text.addEventListener('blur',()=>{let updated=false;for(const line of text.querySelectorAll('.sc-character,.sc-slugline,.sc-transition'))updated=capitalizeCue(line)||updated;if(updated)changed();});
   attachCompletions(text,paragraph,characters,changed);
   bar.editor={format:kind=>{text.focus();if(savedRange&&text.contains(savedRange.startContainer)){const selection=window.getSelection();selection.removeAllRanges();selection.addRange(savedRange);}format(kind);},inline:command=>{text.focus();if(savedRange&&text.contains(savedRange.startContainer)){const selection=window.getSelection();selection.removeAllRanges();selection.addRange(savedRange);}document.execCommand(command);changed();},remember};
   return bar;
@@ -50,7 +53,9 @@ export function splitAtCaret(text) {
 }
 
 export function characterNames(document) {
-  return [...Object.entries(document.project.characterData||{}).map(([key,value])=>value.name||key),...document.project.frontstageWhiteboard.beats.flatMap(b=>b.characters||[])];
+  const project=document.project,beats=project.frontstageWhiteboard?.beats||[];
+  const cues=[...beats.map(b=>b.html||''),...(project.beats||[]).map(s=>s.content||'')].flatMap(html=>[...new DOMParser().parseFromString(html,'text/html').querySelectorAll('.sc-character')].map(n=>n.textContent.replace(/\s*\((?:V\.O\.|O\.S\.|CONT['’]D)\)\s*$/i,'')));
+  return [...new Set([...Object.entries(project.characterData||{}).map(([key,value])=>value.name||key),...beats.flatMap(b=>b.characters||[]),...cues].map(n=>n.trim().normalize('NFC').toUpperCase()).filter(Boolean))].sort();
 }
 // Each control resolves its scene on every edit so simultaneous popups cannot overwrite another scene.
 export function sluglineFields(getScene, getScenes, commit, editable=true) {
@@ -59,9 +64,10 @@ export function sluglineFields(getScene, getScenes, commit, editable=true) {
   for(const [key,label,fallback,options] of [['prefix','INT. / EXT.','INT.',['INT.','EXT.','INT./EXT.','EXT./INT.']],['location','Location','',getScenes().map(s=>s.slug?.location).filter(Boolean)],['time','DAY / NIGHT','DAY',['DAY','NIGHT','DAWN','DUSK','MORNING','AFTERNOON','EVENING','LATER','CONTINUOUS','SAME TIME']]]) {
     const wrap=document.createElement('label');wrap.textContent=label;
     const input=document.createElement('input');input.setAttribute('aria-label',label);input.dataset.slugKey=key;input.value=getScene()?.slug?.[key]??fallback;input.disabled=!editable||!!getScene()?.frontstageTextLocked;
-    const list=document.createElement('datalist');list.id='slug-options-'+crypto.randomUUID();for(const value of [...new Set(options)])list.append(new Option(value,value));input.setAttribute('list',list.id);
-    input.onchange=()=>commit(()=>{const scene=getScene();if(!scene||scene.frontstageTextLocked)throw Error('Unlock the scene heading before changing it.');(scene.slug||={})[key]=input.value;});
-    const combo=document.createElement('div');combo.className='slugline-combo';combo.append(input);wrap.append(combo,list);root.append(wrap);
+    inputCompletions(input,()=>key==='location'?getScenes().map(s=>s.slug?.location).filter(Boolean):options);
+    const save=()=>{const value=input.value.trim().toUpperCase();input.value=value;if(getScene()?.slug?.[key]===value)return;commit(()=>{const scene=getScene();if(!scene||scene.frontstageTextLocked)throw Error('Unlock the scene heading before changing it.');(scene.slug||={})[key]=value;});};
+    input.onchange=save;input.addEventListener('blur',save);
+    const combo=document.createElement('div');combo.className='slugline-combo';combo.append(input);wrap.append(combo);root.append(wrap);
   }
   root.refresh=()=>{const scene=getScene();for(const choice of root.querySelectorAll('[data-slug-options]'))choice.disabled=!editable||!!scene?.frontstageTextLocked;for(const input of root.querySelectorAll('[data-slug-key]')){input.disabled=!editable||!!scene?.frontstageTextLocked;if(document.activeElement!==input)input.value=scene?.slug?.[input.dataset.slugKey]??(input.dataset.slugKey==='prefix'?'INT.':input.dataset.slugKey==='time'?'DAY':'');}};
   return root;
@@ -84,4 +90,27 @@ function attachCompletions(text,paragraph,characters,changed) {
   });
   text.addEventListener('keydown',event=>{if(!popup||event.isComposing)return;if(['ArrowDown','ArrowUp','Enter','Tab','Escape'].includes(event.key)){event.preventDefault();event.stopImmediatePropagation();if(event.key==='Escape')close();else if(['Enter','Tab'].includes(event.key))choose(event.key==='Enter');else{index=(index+(event.key==='ArrowDown'?1:values.length-1))%values.length;highlight();}}},true);
   text.addEventListener('blur',close);text.addEventListener('compositionstart',close);
+}
+
+// Keep text and caret positions intact while normalizing screenplay cues.
+export function capitalizeCue(line) {
+  if(!line?.matches('.sc-character,.sc-slugline,.sc-transition'))return false;
+  const selection=window.getSelection(),anchor=selection?.anchorNode,focus=selection?.focusNode;
+  let a=selection?.anchorOffset||0,f=selection?.focusOffset||0,changed=false;
+  const walker=document.createTreeWalker(line,NodeFilter.SHOW_TEXT);let node;
+  while((node=walker.nextNode())){const original=node.data,upper=original.toUpperCase();if(original===upper)continue;if(node===anchor)a=original.slice(0,a).toUpperCase().length;if(node===focus)f=original.slice(0,f).toUpperCase().length;node.data=upper;changed=true;}
+  if(changed&&anchor&&focus&&line.contains(anchor)&&line.contains(focus))selection.setBaseAndExtent(anchor,a,focus,f);
+  return changed;
+}
+function inputCompletions(input,options){
+  let popup,index=0,values=[];
+  const close=()=>{popup?.remove();popup=null;input.setAttribute('aria-expanded','false');};
+  const choose=()=>{input.value=values[index];close();input.dispatchEvent(new Event('change'));};
+  input.setAttribute('role','combobox');input.setAttribute('aria-autocomplete','list');input.setAttribute('aria-expanded','false');
+  const show=event=>{close();if(event?.isComposing||input.disabled)return;values=[...new Set(options().filter(Boolean).map(v=>v.trim().toUpperCase()))].filter(v=>v.startsWith(input.value.trim().toUpperCase())&&v!==input.value.toUpperCase()).slice(0,12);if(!values.length)return;
+    popup=document.createElement('div');popup.className='autofill-list';popup.setAttribute('role','listbox');popup.setAttribute('aria-label','Slugline suggestions');index=0;
+    for(const [i,value]of values.entries()){const b=document.createElement('button');b.textContent=value;b.setAttribute('role','option');b.setAttribute('aria-selected',String(i===0));b.onpointerdown=e=>{e.preventDefault();index=i;choose();};popup.append(b);}
+    const r=input.getBoundingClientRect();popup.style.left=Math.max(0,Math.min(r.left,innerWidth-220))+'px';popup.style.top=Math.max(0,Math.min(r.bottom+4,innerHeight-190))+'px';document.body.append(popup);input.setAttribute('aria-expanded','true');};
+  input.addEventListener('input',show);input.addEventListener('focus',show);input.addEventListener('compositionend',show);input.addEventListener('compositionstart',close);input.addEventListener('blur',close);
+  input.addEventListener('keydown',event=>{if(!popup||event.isComposing)return;if(['ArrowDown','ArrowUp','Enter','Tab','Escape'].includes(event.key)){event.preventDefault();event.stopPropagation();if(event.key==='Escape')close();else if(['Enter','Tab'].includes(event.key))choose();else{index=(index+(event.key==='ArrowDown'?1:values.length-1))%values.length;popup.querySelectorAll('button').forEach((b,i)=>b.setAttribute('aria-selected',String(i===index)));}}});
 }

@@ -44,7 +44,7 @@ enum ScreenplayTypography {
             font = NSFontManager.shared.convert(base, toHaveTrait: .italicFontMask)
         } else { font = base }
         return [.font: font, .paragraphStyle: paragraph,
-                .foregroundColor: printing ? NSColor.black : NSColor.textColor,
+                .foregroundColor: printing ? NSColor.black : NSColor(boardHex: UserDefaults.standard.string(forKey: "frontstage-screenplay-color") ?? "#111111"),
                 .screenplayElement: element.rawValue]
     }
 

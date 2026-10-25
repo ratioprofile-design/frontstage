@@ -165,6 +165,7 @@ final class ScreenplayTextView: NSTextView {
 }
 
 struct ScreenplayEditor: NSViewRepresentable {
+    @AppStorage("frontstage-screenplay-color") private var screenplayColor = "#111111"
     @Binding var html: String
     @ObservedObject var controller: ScreenplayEditorController
     var width: CGFloat = 432
@@ -224,6 +225,7 @@ struct ScreenplayEditor: NSViewRepresentable {
         context.coordinator.onError = onError
         guard let text = scroll.documentView as? NSTextView else { return }
         text.isEditable = editable
+        text.textColor = NSColor(boardHex: screenplayColor)
         controller.textView = text
         if controller.contentWidth != width || controller.typography != typography {
             controller.minimumHeight = continuous ? typography.lineHeight : 48
@@ -305,6 +307,7 @@ struct ScreenplayEditor: NSViewRepresentable {
                 loading = false
             }
             pendingElement = nil
+            loading = true; ScriptCueNames.capitalize(in: text); loading = false
             let result = ScreenplayTextCodec.encode(text.attributedString())
             lastHTML = result
             html.wrappedValue = result

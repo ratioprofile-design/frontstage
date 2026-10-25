@@ -118,7 +118,7 @@ struct BeatPopupView: View {
     private var scene: FrontstageCore.Scene? { beat.flatMap { b in workspace.project.scenes.first { $0.id == b.sceneID } } }
     private func heading(_ key: WritableKeyPath<SceneHeading, String>) -> Binding<String> {
         Binding(get: { scene?.heading[keyPath: key] ?? "" }, set: { value in
-            guard let scene else { return }; var heading = scene.heading; heading[keyPath: key] = value
+            guard let scene else { return }; var heading = scene.heading; heading[keyPath: key] = value.uppercased()
             workspace.updateScene(id: scene.id, heading: heading)
         })
     }
@@ -128,6 +128,11 @@ struct BeatPopupView: View {
                 VStack(spacing: 10) {
                     HStack { Text("Beat Name").frame(width: 80, alignment: .leading); TextField("Beat Name", text: text(\.title, label: "Beat Title")).focused($nameFocused) }
                     HStack { Text("Synopsis").frame(width: 80, alignment: .leading); TextField("Synopsis", text: text(\.synopsis, label: "Beat Synopsis"), axis: .vertical).lineLimit(2...3) }
+                    HStack { Text("Beat color").frame(width: 80, alignment: .leading)
+                        ForEach(["#39798c", "#a34eae", "#ab7d22", "#34834b", "#535f8a", "#a30e3f"], id: \.self) { color in
+                            Button { workspace.edit("Beat Color") { try $0.updateBoardBeat(beatID) { $0.color = color } } } label: { Circle().fill(Color(boardHex: color)).frame(width: 18, height: 18).overlay(Circle().stroke(beat.color == color ? Color.white : .clear, lineWidth: 2)) }.buttonStyle(.plain).accessibilityLabel("Beat color " + color)
+                        }
+                    }
                     HStack { Text("Visibility").frame(width: 80, alignment: .leading)
                         Picker("Visibility", selection: Binding(get: { beat.omitted }, set: { value in workspace.edit("Beat Visibility") { try $0.updateBoardBeat(beatID) { $0.omitted = value } } })) {
                             Text("Visible In Script").tag(false); Text("Hidden In Script").tag(true)
