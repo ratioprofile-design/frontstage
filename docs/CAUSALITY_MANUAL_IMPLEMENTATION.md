@@ -73,3 +73,7 @@ Browser acceptance covers context counter changes, category assignment/collapse,
 - New display preferences are local, separate for compact/full timelines, and backward-compatible with previous settings. Project content is unaffected by display-mode changes.
 
 Verification adds normalized multi-scene-ID fixtures, INT/EXT and DAY/NIGHT distinctions, returning/blank locations, Unicode/Tamil titles, time-base intervals, scene-span reorder and lock rollback, preference migration, actual browser text measurements at multiple zooms/window widths, and native AppKit text-cell measurement tests. Browser layout acceptance runs in macOS CI alongside existing workspace acceptance.
+
+### Screenplay completions
+
+Character suggestions collect character-style paragraphs from project scenes and whiteboard beats, alongside manually registered characters. Character cues and slugline edits are uppercased without changing dialogue or Tamil text. Browser sluglines use the same styled keyboard suggestion list as screenplay transitions. Native fields use AppKit completion.

@@ -118,7 +118,7 @@ struct BeatPopupView: View {
     private var scene: FrontstageCore.Scene? { beat.flatMap { b in workspace.project.scenes.first { $0.id == b.sceneID } } }
     private func heading(_ key: WritableKeyPath<SceneHeading, String>) -> Binding<String> {
         Binding(get: { scene?.heading[keyPath: key] ?? "" }, set: { value in
-            guard let scene else { return }; var heading = scene.heading; heading[keyPath: key] = value
+            guard let scene else { return }; var heading = scene.heading; heading[keyPath: key] = value.uppercased()
             workspace.updateScene(id: scene.id, heading: heading)
         })
     }

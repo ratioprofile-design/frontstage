@@ -305,6 +305,7 @@ struct ScreenplayEditor: NSViewRepresentable {
                 loading = false
             }
             pendingElement = nil
+            loading = true; ScriptCueNames.capitalize(in: text); loading = false
             let result = ScreenplayTextCodec.encode(text.attributedString())
             lastHTML = result
             html.wrappedValue = result

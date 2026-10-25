@@ -150,3 +150,5 @@ input::-webkit-calendar-picker-indicator{display:none!important;}
 
 /* Script headings grow vertically instead of inheriting single-line button layout. */
 .script-beat-title { box-sizing:border-box; min-width:0; height:auto; max-height:none; white-space:pre-wrap; overflow-wrap:anywhere; word-break:normal; line-height:1.5; text-overflow:clip; }
+
+.sc-character,.sc-slugline,.slugline-fields input { text-transform:uppercase; }
