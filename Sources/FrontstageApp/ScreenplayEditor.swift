@@ -311,13 +311,14 @@ struct ScreenplayEditor: NSViewRepresentable {
             html.wrappedValue = result
             controller.selectionChanged()
             controller.measure()
+            text.scrollRangeToVisible(text.selectedRange())
             if !completing, !(suggestions[controller.activeElement] ?? []).isEmpty {
                 completing = true; text.complete(nil); completing = false
             }
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
-            if !loading { controller.selectionChanged() }
+            if !loading { controller.selectionChanged(); if let text = notification.object as? NSTextView, text.window?.firstResponder === text { text.scrollRangeToVisible(text.selectedRange()) } }
         }
 
         func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange,

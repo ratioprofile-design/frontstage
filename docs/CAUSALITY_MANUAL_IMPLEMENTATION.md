@@ -77,3 +77,11 @@ Verification adds normalized multi-scene-ID fixtures, INT/EXT and DAY/NIGHT dist
 ### Screenplay completions
 
 Character suggestions collect character-style paragraphs from project scenes and whiteboard beats, alongside manually registered characters. Character cues and slugline edits are uppercased without changing dialogue or Tamil text. Browser sluglines use the same styled keyboard suggestion list as screenplay transitions. Native fields use AppKit completion.
+
+### Script filters and caret visibility
+
+Script editing projections include disabled and unused-lane beats with status labels; export projections retain their active-only behavior. Readers provide selection filtering, category filters (beats, tags, characters, locations, blocks and lanes), Show/Hide inversion, tag/character AND/OR matching, back/forward history, reset, and visibility switches for disabled/empty beats, headings, container boundaries and gaps. Block filtering includes descendants; character filtering also recognizes screenplay cues. Gap labels offer story duration, approximate pages (text-length estimate), or beat counts. Filter settings reset for a newly opened project.
+
+Browser popup editors scroll the caret into their scroll containers after typing, navigation and IME completion. Native editors reveal the selected text range after editing and selection changes. Tests cover a 100-paragraph popup, omitted/unused visibility, filter combinations/history, and export preservation.
+
+Deletion cleanup removes only affected loose-beat containers and groups that become empty, including nested empty groups. Explicit blocks and unrelated empty groups are retained. Browser Delete/Backspace and context deletion share the same lock-aware operation, with undo/redo and persistence regression coverage. Native beat deletion performs the corresponding cleanup atomically.

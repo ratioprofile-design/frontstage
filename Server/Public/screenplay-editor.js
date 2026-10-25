@@ -40,6 +40,18 @@ export function screenplayToolbar(text, changed, editable=true, characters=()=>[
   text.addEventListener('compositionend',()=>{if(capitalizeCue(paragraph()))changed();});
   text.addEventListener('blur',()=>{let updated=false;for(const line of text.querySelectorAll('.sc-character,.sc-slugline,.sc-transition'))updated=capitalizeCue(line)||updated;if(updated)changed();});
   attachCompletions(text,paragraph,characters,changed);
+  let caretFrame;
+  const followCaret=()=>{cancelAnimationFrame(caretFrame);caretFrame=requestAnimationFrame(()=>{
+    const selection=window.getSelection();if(!text.isConnected||!selection?.rangeCount||!text.contains(selection.focusNode)||!selection.isCollapsed)return;
+    const range=selection.getRangeAt(0);let rect=range.getBoundingClientRect();
+    if(!rect.height)rect=paragraph()?.getBoundingClientRect();if(!rect)return;
+    for(let pane=text;pane&&pane!==document.body;pane=pane.parentElement){
+      if(!/(auto|scroll)/.test(getComputedStyle(pane).overflowY)||pane.scrollHeight<=pane.clientHeight)continue;
+      const bounds=pane.getBoundingClientRect(),delta=rect.bottom>bounds.bottom-20?rect.bottom-bounds.bottom+20:rect.top<bounds.top+12?rect.top-bounds.top-12:0;
+      if(delta){pane.scrollTop+=delta;rect=range.getBoundingClientRect();}
+    }
+  });};
+  for(const event of ['input','keyup','click','compositionend'])text.addEventListener(event,followCaret);
   bar.editor={format:kind=>{text.focus();if(savedRange&&text.contains(savedRange.startContainer)){const selection=window.getSelection();selection.removeAllRanges();selection.addRange(savedRange);}format(kind);},inline:command=>{text.focus();if(savedRange&&text.contains(savedRange.startContainer)){const selection=window.getSelection();selection.removeAllRanges();selection.addRange(savedRange);}document.execCommand(command);changed();},remember};
   return bar;
 }

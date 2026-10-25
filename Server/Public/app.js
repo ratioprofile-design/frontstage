@@ -1,10 +1,11 @@
+import {createScriptFilter,mountScriptFilter,matchesScriptFilter,gapLabel} from './script-filter.js';
 import { timelineModel, mountTimeline, timelinePreferences } from './story-timeline.js';
 import { mountWorkspaces } from './workspaces.js';
 import { splitAtCaret, screenplayToolbar, sluglineFields, characterNames } from './screenplay-editor.js';
 import { splitBeat, scriptSegments, heading, captureRevision, restoreRevision } from './workspace-model.js';
 import { mergeDocuments } from './merge.js';
 import { apiOrigin as configuredOrigin } from './config.js';
-import { causalOrder as orderCauses, compactCausalTime, groupBlocks, ungroupBlocks, moveBlocks, moveStandaloneBeats, descendantBlocks, deleteBlocks, validateBoard, groupBeats, beatSize, moveBeatsToLayer, spatialOrder, dropBeats, pruneEmptyBeatContainers, usesBlocks, nestGroups, splitGroupAt, mergeContainers, pushBoard, splitBlockAt, reorderTimelineBeats } from './board-operations.js';
+import { causalOrder as orderCauses, compactCausalTime, groupBlocks, ungroupBlocks, moveBlocks, moveStandaloneBeats, descendantBlocks, deleteBlocks, deleteBeats, validateBoard, groupBeats, beatSize, moveBeatsToLayer, spatialOrder, dropBeats, pruneEmptyBeatContainers, usesBlocks, nestGroups, splitGroupAt, mergeContainers, pushBoard, splitBlockAt, reorderTimelineBeats } from './board-operations.js';
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
 
@@ -22,6 +23,7 @@ function loadTimelinePreferences(expanded){try{return timelinePreferences(expand
 let timelineWindow=null,timelineWindowRoot=null;
 const timelineState={expanded:false,time:0,...loadTimelinePreferences(false)};
 function saveTimelinePreferences(){try{localStorage.setItem('frontstage-timeline-'+(timelineState.expanded?'full':'mini'),JSON.stringify({...timelineState,collapsed:[...timelineState.collapsed],hidden:[...timelineState.hidden]}));}catch{}}
+const scriptFilter=createScriptFilter();let filterProjectID;
 const reader={display:'Expand All',characters:true,tags:true,synopsis:false,boundaries:false,margin:'Compact Margins',zoom:1,filter:'',follow:false};
 $('server-address').value = configuredOrigin || localStorage.getItem('frontstage-server') || '';
 function setServer() {
@@ -298,6 +300,7 @@ function position(node, rect) { node.style.left = `${rect.x}px`; node.style.top 
 function render() {
   const editingSide=document.activeElement?.hasAttribute('data-script-beat');
   if (!doc) return;
+  if(filterProjectID!==current.id){filterProjectID=current.id;scriptFilter.clear();}
   const beatIDs = new Set(board().beats.map(b => b.id)), blockIDs = new Set(board().blocks.map(b => b.id));
   selectedBeats = new Set([...selectedBeats].filter(id => beatIDs.has(id))); selectedBlocks = new Set([...selectedBlocks].filter(id => blockIDs.has(id)));
   if (!beatIDs.has(selected)) selected = null;
@@ -375,18 +378,25 @@ function render() {
   renderReaderTools();
   renderSideSlugline();
   if(!editingSide)$('snippet-list').append(element('div',doc.name||'Untitled Story','script-project-title'));
-  if(!editingSide) for (const segment of scriptSegments(doc)) {
-    const visibleIDs=segment.beatIDs.filter(id=>{const b=board().beats.find(b=>b.id===id);return !reader.filter||[b.title,b.synopsis,b.html,...b.characters,...b.tags].join(' ').toLowerCase().includes(reader.filter.toLowerCase());});if(reader.filter&&!visibleIDs.length)continue;
-    const headingRow=element('h3',undefined,'script-heading');headingRow.append(element('span',heading(segment.scene)+(segment.continuation?' (CONTINUED)':'')),element('span',segment.number,'scene-number'));$('snippet-list').append(headingRow);
-    for(const id of visibleIDs){
+  if(!editingSide&&selected){const beat=board().beats.find(b=>b.id===selected);if(beat&&!matchesScriptFilter(beat,board(),doc.project.beats,scriptFilter.state)){const notice=element('div','Selected beat is hidden by the current filters. ','script-filter-gap'),show=element('button','Reveal selected beat');show.onclick=()=>{scriptFilter.reset();render();document.querySelector(`[data-script-beat="${CSS.escape(selected)}"]`)?.scrollIntoView({block:'nearest'});};notice.append(show);$('snippet-list').append(notice);}}
+  let filteredGap=[];
+  if(!editingSide) for (const segment of scriptSegments(doc,{includeInactive:true})) {
+    const visibleIDs=segment.beatIDs.filter(id=>matchesScriptFilter(board().beats.find(b=>b.id===id),board(),doc.project.beats,scriptFilter.state));
+    if(!visibleIDs.length&&segment.beatIDs.length){filteredGap.push(...segment.beatIDs.map(id=>board().beats.find(b=>b.id===id)));continue;}
+    const headingRow=element('h3',undefined,'script-heading');headingRow.append(element('span',heading(segment.scene)+(segment.continuation?' (CONTINUED)':'')),element('span',segment.number,'scene-number'));if(!scriptFilter.state.hideHeadings)$('snippet-list').append(headingRow);
+    for(const id of segment.beatIDs){
+      if(!visibleIDs.includes(id)){filteredGap.push(board().beats.find(b=>b.id===id));continue;}
+      if(filteredGap.length&&!scriptFilter.state.hideGaps)$('snippet-list').append(element('div',gapLabel(filteredGap,scriptFilter.state.gaps),'script-filter-gap'));filteredGap=[];
       const beat=board().beats.find(b=>b.id===id),section=element('section',undefined,'script-beat-section'),title=element('button','▼ '+beat.title,'script-beat-title');
+      section.classList.toggle('inactive-script-beat',!!beat.omitted||!!segment.scene.isDisabled||!!unused(beat));
+      if(unused(beat)||beat.omitted||segment.scene.isDisabled)section.append(element('div',unused(beat)?'Unused lane · excluded from export':'Disabled beat · excluded from export','script-beat-status'));
       title.style.backgroundColor=beat.color+'22';title.ondblclick=()=>openEditor(id);
       const body=element('div',undefined,'script-beat-body');title.onclick=()=>{body.hidden=!body.hidden;title.textContent=(body.hidden?'▶ ':'▼ ')+beat.title;selected=id;selectedBeats=new Set([id]);highlightScript();};
       const plain=['Content Only','Final Script'].includes(reader.display);if(!plain)section.append(title);
       if(!plain&&((reader.characters&&beat.characters.length)||(reader.tags&&beat.tags.length)))section.append(metadataChips({...beat,characters:reader.characters?beat.characters:[],tags:reader.tags?beat.tags:[]}));
       if(!plain&&(reader.synopsis||reader.display==='Index Cards'))section.append(element('p',beat.synopsis,'reader-synopsis'));
       body.hidden=['Collapse All','Index Cards'].includes(reader.display);
-      if(reader.boundaries){const owner=board().blocks.find(b=>b.id===beat.blockID);if(!owner.standalone&&board().beats.filter(b=>b.blockID===owner.id).sort((a,b)=>a.order-b.order)[0]?.id===id)$('snippet-list').append(element('div',owner.name,'reader-boundary'));}
+      if(reader.boundaries&&!scriptFilter.state.hideBreaks){const owner=board().blocks.find(b=>b.id===beat.blockID);if(!owner.standalone&&board().beats.filter(b=>b.blockID===owner.id).sort((a,b)=>a.order-b.order)[0]?.id===id)$('snippet-list').append(element('div',owner.name,'reader-boundary'));}
 
       const text=element('div',undefined,'side-script-text script-text');text.innerHTML=cleanHTML(beat.html);text.dataset.scriptBeat=id;text.dataset.placeholder='Write this beat’s screenplay here…';text.tabIndex=0;text.setAttribute('aria-label',`Edit script: ${beat.title}`);text.contentEditable=current.access!=='reader'&&!segment.scene.frontstageTextLocked;text.setAttribute('role','textbox');
       text.onfocus=()=>{selected=id;selectedBeats=new Set([id]);highlightScript();document.querySelectorAll('[data-beat-id]').forEach(n=>n.classList.toggle('selected',n.dataset.beatId===id));};
@@ -416,7 +426,7 @@ function renderReaderTools() {
   for(const [key,label]of [['characters','Show Characters'],['tags','Show Tags'],['synopsis','Show Synopsis Field'],['boundaries','Show Block/Group Beginnings']]){const labelNode=element('label',label),input=element('input');input.type='checkbox';input.checked=reader[key];input.onchange=()=>{reader[key]=input.checked;render();};labelNode.prepend(input);display.append(labelNode);}
   for(const mode of ['Full Margins','Compact Margins','Squeezed','Super Squeezed'])action(display,mode,()=>reader.margin=mode);
   const styling=menu('Styling');action(styling,'Zoom In',()=>reader.zoom=Math.min(2,reader.zoom+.1));action(styling,'Zoom Out',()=>reader.zoom=Math.max(.7,reader.zoom-.1));action(styling,'100%',()=>reader.zoom=1);
-  const filter=menu('Filter'),input=element('input');input.placeholder='Script, character or tag';input.setAttribute('aria-label','Filter script');input.oninput=()=>{reader.filter=input.value;render();};filter.append(input);action(filter,'All Beats',()=>{reader.filter='';input.value='';});
+  const filter=menu('Filter');mountScriptFilter(filter,scriptFilter,{board,scenes:()=>doc.project.beats,selection:()=>selectedBeats.size?selectedBeats:new Set(board().beats.filter(b=>descendantBlocks(board(),selectedBlocks).has(b.blockID)).map(b=>b.id)),changed:()=>render()});
   const presets=menu('Presets');for(const [label,mode]of [['Reading','Final Script'],['Story Review','Expand All'],['Index Cards','Index Cards']])action(presets,label,()=>reader.display=mode);
   const options=menu('Options');action(options,'Follow Selected Beat',()=>reader.follow=!reader.follow);action(options,'Full Screen',()=>{if(document.fullscreenElement)document.exitFullscreen();else document.documentElement.requestFullscreen().catch(()=>{});});
   applyReader();
@@ -710,6 +720,7 @@ $('canvas').addEventListener('contextmenu',event=>{
     if(block?.containerKind==='beatGroup')item('Split Group Here',()=>edit(()=>{doc.project.frontstageWhiteboard=splitGroupAt(board(),beat.id);}),uneditable||beat.locked);
     item('Group Selected Beats',()=>edit(()=>{doc.project.frontstageWhiteboard=groupBeats(board(),selectedBeats,uuid());}),uneditable||beat.locked);
     item('Create Dependency From',()=>{source=beat.id;status('Select the effect beat');},uneditable||beat.locked);
+    item(selectedBeats.size>1?'Delete Selected Beats':'Delete Beat',()=>edit(()=>{doc=deleteBeats(doc,selectedBeats);}),uneditable||[...selectedBeats].some(id=>locked(board().beats.find(b=>b.id===id))));
     item(beat.omitted?'Include Beat':'Omit Beat',()=>edit(()=>{beat.omitted=!beat.omitted;}),uneditable||beat.locked);
   }
   if(block&&!block.standalone){
@@ -808,3 +819,7 @@ const workspaces = mountWorkspaces({
 
 // Re-measure cards if a fallback/web font finishes loading after the first render.
 document.fonts?.addEventListener('loadingdone', () => { if (doc) render(); });
+
+document.addEventListener('keydown',event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='l'&&selectedBeats.size&&(event.target===$('canvas')||$('script').contains(event.target))&&!event.target.isContentEditable&&!['INPUT','TEXTAREA'].includes(event.target.tagName)){event.preventDefault();scriptFilter.set({...scriptFilter.state,facets:{...scriptFilter.state.facets,Beats:{values:[...selectedBeats],hide:false,all:false}}});render();}});
+
+$('canvas').addEventListener('keydown',event=>{if(event.target===$('canvas')&&['Delete','Backspace'].includes(event.key)&&!event.isComposing){event.preventDefault();if(selectedBlocks.size)edit(()=>{doc=deleteBlocks(doc,selectedBlocks);});else if(selectedBeats.size)edit(()=>{doc=deleteBeats(doc,selectedBeats);});}});

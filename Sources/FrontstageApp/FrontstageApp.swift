@@ -141,6 +141,7 @@ final class Workspace: ObservableObject {
 
     func loadCopy(_ imported: Project) {
         documentSessionID = UUID()
+        reader.filters = .init(); reader.filter = ""
         sharedProjects.detach()
         popup.close()
         scriptEditors.removeAll()
@@ -219,6 +220,7 @@ final class Workspace: ObservableObject {
     func newProject() {
         guard confirmDiscardOrSave() else { return }
         documentSessionID = UUID()
+        reader.filters = .init(); reader.filter = ""
         sharedProjects.detach()
         popup.close(); scriptEditors.removeAll(); selectedBoardBeatID = nil
         recoveryTask?.cancel()

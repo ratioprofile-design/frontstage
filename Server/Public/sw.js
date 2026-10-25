@@ -1,6 +1,6 @@
 // Cache the public application shell only. Account/API traffic and project data are excluded.
 const FRONTSTAGE_SHELL = 'frontstage-shell-__FRONTSTAGE_BUILD__';
-const ASSETS = ['/', '/index.html', '/app.js', '/merge.js', '/board-operations.js', '/story-timeline.js', '/config.js', '/style.css', '/workspace-design.js', '/workspace-design.css', '/workspace-model.js', '/workspaces.js', '/pagination.js', '/workspaces.css', '/screenplay-editor.js', '/bamini.js'];
+const ASSETS = ['/', '/index.html', '/app.js', '/merge.js', '/board-operations.js', '/story-timeline.js', '/config.js', '/style.css', '/workspace-design.js', '/workspace-design.css', '/workspace-model.js', '/workspaces.js', '/pagination.js', '/workspaces.css', '/screenplay-editor.js', '/script-filter.js', '/bamini.js'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(FRONTSTAGE_SHELL).then(cache => cache.addAll(ASSETS.map(url => new Request(url, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });

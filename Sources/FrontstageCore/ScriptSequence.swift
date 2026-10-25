@@ -9,8 +9,8 @@ public struct ScriptSegment: Equatable, Sendable {
 }
 
 extension Project {
-    public func orderedScript() throws -> [ScriptSegment] {
-        let active = scenes.filter { !$0.isDisabled }
+    public func orderedScript(includeInactive: Bool = false) throws -> [ScriptSegment] {
+        let active = scenes.filter { includeInactive || !$0.isDisabled }
         var numbers = Dictionary(uniqueKeysWithValues: active.enumerated().map { ($0.element.id, $0.element.sceneNumber.isEmpty ? String($0.offset + 1) : $0.element.sceneNumber) })
         guard state["frontstageWhiteboard"] != nil else {
             return active.map { ScriptSegment(scene: $0, beatIDs: [], number: numbers[$0.id]!, isContinuation: false) }
@@ -19,13 +19,13 @@ extension Project {
         try validateNativeScriptText(board)
         let unused = Set(board.layers.filter(\.unused).map(\.id)), inactive = Set(board.blocks.filter { unused.contains($0.layerID) }.map(\.id))
         var numbered = Set<Decimal>()
-        let narrative = board.orderedBeats.filter { !$0.omitted && !inactive.contains($0.blockID) }.compactMap { byID[$0.sceneID] }
+        let narrative = board.orderedBeats.filter { includeInactive || (!$0.omitted && !inactive.contains($0.blockID)) }.compactMap { byID[$0.sceneID] }
         for scene in narrative + active where numbered.insert(scene.id).inserted {
             numbers[scene.id] = scene.sceneNumber.isEmpty ? String(numbered.count) : scene.sceneNumber
         }
         let represented = Set(board.beats.map(\.sceneID))
         var segments: [ScriptSegment] = [], seen = Set<Decimal>()
-        for beat in board.orderedBeats where !beat.omitted && !inactive.contains(beat.blockID) {
+        for beat in board.orderedBeats where includeInactive || (!beat.omitted && !inactive.contains(beat.blockID)) {
             guard var scene = byID[beat.sceneID] else { continue }
             if let last = segments.indices.last, segments[last].scene.id == beat.sceneID {
                 segments[last].scene.html += beat.html; segments[last].beatIDs.append(beat.id)
@@ -37,7 +37,7 @@ extension Project {
             }
         }
         // Preserve active imported scenes that do not yet have native snippet ownership.
-        for scene in active where !represented.contains(scene.id) {
+        for scene in active where !represented.contains(scene.id) && (!scene.isDisabled || !scene.html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
             segments.append(ScriptSegment(scene: scene, beatIDs: [], number: numbers[scene.id]!, isContinuation: false))
         }
         return segments

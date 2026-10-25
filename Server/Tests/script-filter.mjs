@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {createScriptFilter,matchesScriptFilter,filterChoices,gapLabel} from '../Public/script-filter.js';
+import {scriptSegments} from '../Public/workspace-model.js';
+const board={layers:[{id:'main'},{id:'unused',unused:true}],blocks:[{id:'block',layerID:'main'},{id:'group',layerID:'main',parentID:'block'},{id:'loose',layerID:'unused'}],beats:[{id:'a',sceneID:1,blockID:'block',order:0,title:'One',html:'<p class="sc-character">KAMAL</p>',tags:['A','B'],characters:[],duration:10},{id:'b',sceneID:2,blockID:'group',order:1,title:'Two',html:'',tags:['A'],characters:[],duration:20},{id:'c',sceneID:1,blockID:'loose',order:2,title:'Unused',html:'Unused writing',tags:['B'],characters:[],omitted:true,duration:30}]};
+const scenes=[{id:1,slug:{location:'ROAD'}},{id:2,slug:{location:'HOME'}}],controller=createScriptFilter(),doc={project:{beats:scenes,frontstageWhiteboard:board}};
+assert.equal(scriptSegments(doc).flatMap(s=>s.beatIDs).length,2);assert.equal(scriptSegments(doc,{includeInactive:true}).flatMap(s=>s.beatIDs).length,3);
+const match=()=>board.beats.filter(b=>matchesScriptFilter(b,board,scenes,controller.state)).map(b=>b.id);
+assert.deepEqual(match(),['a','b','c']);controller.set({...controller.state,facets:{Tags:{values:['A','B'],all:true}}});assert.deepEqual(match(),['a']);controller.back();assert.deepEqual(match(),['a','b','c']);controller.forward();assert.deepEqual(match(),['a']);controller.reset();
+controller.set({...controller.state,facets:{Blocks:{values:['block']},Lanes:{values:['main']}}});assert.deepEqual(match(),['a','b']);
+controller.set({...controller.state,facets:{Characters:{values:['kamal']}}});assert.deepEqual(match(),['a']);assert.ok(filterChoices('Characters',board,scenes).some(([id])=>id==='KAMAL'));
+controller.set({...controller.state,facets:{Locations:{values:['road'],hide:true}}});assert.deepEqual(match(),['b']);controller.reset();controller.set({...controller.state,hideEmpty:true,hideDisabled:true});assert.deepEqual(match(),['a']);
+assert.equal(gapLabel(board.beats,'Time'),'60.0 seconds omitted');assert.equal(gapLabel(board.beats,'Events'),'3 beats omitted');console.log('PASS: inclusion without export changes, category combinations, descendants, inversion, AND/OR, cue characters and history');

@@ -414,8 +414,21 @@ extension Project {
         var candidate = self
         try candidate.editWhiteboard { board in
             guard ids.isSubset(of: Set(board.beats.map(\.id))) else { throw ProjectError.sceneNotFound }
+            var affectedOwners = Set(board.beats.filter { ids.contains($0.id) }.map(\.blockID))
+            var pending = Array(affectedOwners)
+            while let id = pending.popLast(), let owner = board.blocks.first(where: { $0.id == id }) {
+                if let parent = owner.parentID, affectedOwners.insert(parent).inserted { pending.append(parent) }
+            }
             board.beats.removeAll { ids.contains($0.id) }
             board.dependencies.removeAll { ids.contains($0.cause) || ids.contains($0.effect) }
+            // Loose-beat containers and emptied groups are implementation details; keep explicit blocks.
+            var removed = true
+            while removed {
+                let occupied = Set(board.beats.map(\.blockID)), parents = Set(board.blocks.compactMap(\.parentID))
+                let before = board.blocks.count
+                board.blocks.removeAll { affectedOwners.contains($0.id) && ($0.standalone == true || $0.containerKind == "beatGroup") && !occupied.contains($0.id) && !parents.contains($0.id) }
+                removed = board.blocks.count != before
+            }
         }
         let remaining = Set(try candidate.whiteboard().beats.map(\.sceneID))
         for id in affected.subtracting(remaining) { try candidate.editBeat(id) { $0["content"] = .string(""); $0["isDisabled"] = .bool(true) } }

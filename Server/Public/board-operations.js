@@ -132,6 +132,18 @@ export function ungroupBlocks(source, ids) {
   const occupied = new Set(board.beats.map(b => b.blockID));
   board.blocks = board.blocks.filter(b => !ids.has(b.id) || occupied.has(b.id)); return board;
 }
+export function deleteBeats(source, ids) {
+  const document=copy(source),board=document.project.frontstageWhiteboard,members=board.beats.filter(b=>ids.has(b.id));
+  const scenes=new Set(members.map(b=>b.sceneID));
+  if(!ids.size||members.length!==ids.size||members.some(b=>b.locked||blockLocked(board,b.blockID))||document.project.beats.some(s=>scenes.has(s.id)&&s.frontstageTextLocked))throw Error('Select unlocked beats and scene scripts before deleting.');
+  const affected=new Set(members.map(b=>b.blockID)),pending=[...affected];
+  while(pending.length){const owner=board.blocks.find(b=>b.id===pending.pop());if(owner?.parentID&&!affected.has(owner.parentID)){affected.add(owner.parentID);pending.push(owner.parentID);}}
+  board.beats=board.beats.filter(b=>!ids.has(b.id));board.dependencies=board.dependencies.filter(e=>!ids.has(e.cause)&&!ids.has(e.effect));
+  let removed=true;while(removed){const occupied=new Set(board.beats.map(b=>b.blockID)),parents=new Set(board.blocks.map(b=>b.parentID)),before=board.blocks.length;board.blocks=board.blocks.filter(b=>!affected.has(b.id)||(!b.standalone&&b.containerKind!=='beatGroup')||occupied.has(b.id)||parents.has(b.id));removed=before!==board.blocks.length;}
+  const remaining=new Set(board.beats.map(b=>b.sceneID));for(const scene of document.project.beats)if(scenes.has(scene.id)&&!remaining.has(scene.id)){scene.content='';scene.isDisabled=true;}
+  return document;
+}
+
 export function deleteBlocks(source, ids) {
   const document = copy(source), board = document.project.frontstageWhiteboard, deleting = descendantBlocks(board, ids);
   if (!ids.size || board.blocks.filter(b => deleting.has(b.id)).length !== deleting.size || [...deleting].some(id => blockLocked(board, id))) throw Error('Select unlocked blocks to delete.');

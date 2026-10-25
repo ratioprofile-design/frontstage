@@ -16,11 +16,11 @@ struct ScriptWritingWorkspace: View {
     @State private var activeController: ScreenplayEditorController?
     @State private var headingID: Decimal?
     @State private var toggled: Set<String> = []
-    private var segments: [ScriptSegment] { (try? workspace.project.orderedScript()) ?? [] }
+    private var segments: [ScriptSegment] { (try? workspace.project.orderedScript(includeInactive: true)) ?? [] }
     private var plain: Bool { display == "Final Script" || display == "Content Only" }
     private var inset: CGFloat { margin == "Full Margins" ? workspace.paper.leftMargin : margin == "Compact Margins" ? 16 : margin == "Squeezed" ? 8 : 3 }
     private var contentWidth: CGFloat { margin == "Squeezed" ? 404 : margin == "Super Squeezed" ? 354 : workspace.paper.contentWidth }
-    private func matches(_ beat: BoardBeat) -> Bool { filter.isEmpty || ([beat.title, beat.synopsis, beat.html] + beat.characters + beat.tags).joined(separator: " ").localizedCaseInsensitiveContains(filter) }
+    private func matches(_ beat: BoardBeat) -> Bool { workspace.reader.filters.matches(beat, board: workspace.whiteboard, scenes: workspace.project.scenes) && (filter.isEmpty || ([beat.title, beat.synopsis, beat.html] + beat.characters + beat.tags).joined(separator: " ").localizedCaseInsensitiveContains(filter)) }
     private var tools: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 16) {
@@ -38,10 +38,7 @@ struct ScriptWritingWorkspace: View {
                     ForEach(["bold", "italic", "underline"], id: \.self) { style in Button(style.capitalized) { activeController?.toggleInlineStyle(style) } }
                 }
                 .disabled(activeController?.textView?.isEditable != true)
-                Menu("Filter") {
-                    Button("Reset Filter") { filter = "" }
-                    ForEach(workspace.project.characters) { character in Button(character.name) { filter = character.name } }
-                }
+                ScriptFilterMenu(workspace: workspace, state: $workspace.reader.filters).id(workspace.documentSessionID)
                 Menu("Presets") {
                     Button("Reading") { display = "Final Script"; margin = "Full Margins"; zoom = 1; filter = "" }
                     Button("Story Review") { display = "Expand All" }
@@ -65,10 +62,12 @@ struct ScriptWritingWorkspace: View {
                         ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
                             let beats = segment.beatIDs.compactMap { id in workspace.whiteboard.beats.first { $0.id == id } }.filter(matches)
                             if !beats.isEmpty || segment.beatIDs.isEmpty {
-                                if display != "Index Cards" { heading(segment) }
+                                if display != "Index Cards" && !workspace.reader.filters.hideHeadings { heading(segment) }
                                 if segment.beatIDs.isEmpty {
                                     snippet(sceneID: segment.scene.id, beatID: nil, key: "scene-\(segment.scene.id)")
-                                } else { ForEach(beats) { beat in beatView(beat) } }
+                                } else { ForEach(beats) { beat in
+                                    if let gap = workspace.reader.filters.gap(before: beat.id, board: workspace.whiteboard, scenes: workspace.project.scenes) { Text(gap).font(.caption).padding(10) }
+                                    beatView(beat) } }
                             }
                         }
                         Spacer(minLength: 24)
@@ -113,13 +112,14 @@ struct ScriptWritingWorkspace: View {
     private func beatView(_ beat: BoardBeat) -> some View {
         let expanded = (display != "Collapse All") != toggled.contains(beat.id)
         return VStack(alignment: .leading, spacing: 0) {
+            if beat.omitted || workspace.whiteboard.isUnused(beat) { Text(workspace.whiteboard.isUnused(beat) ? "Unused lane · excluded from export" : "Disabled beat · excluded from export").font(.caption).foregroundStyle(.secondary).padding(5) }
             if !plain {
                 Button { if !toggled.insert(beat.id).inserted { toggled.remove(beat.id) } } label: {
                     Text((expanded ? "▾ " : "▸ ") + beat.title).lineLimit(nil).fixedSize(horizontal: false, vertical: true).multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading).padding(6)
                 }.buttonStyle(.plain).background(Color(boardHex: beat.color).opacity(0.2))
                 if display != "Index Cards" { BeatReferenceChips(characters: showCharacters ? beat.characters : [], tags: showTags ? beat.tags : []) }
                 if showSynopsis || display == "Index Cards" { Text(beat.synopsis).font(.caption).padding(6) }
-                if showBoundaries, let owner = workspace.whiteboard.blocks.first(where: { $0.id == beat.blockID }), owner.standalone != true, workspace.whiteboard.orderedBeats.first(where: { $0.blockID == owner.id })?.id == beat.id { Text(owner.name).font(.caption).padding(4) }
+                if showBoundaries && !workspace.reader.filters.hideBreaks, let owner = workspace.whiteboard.blocks.first(where: { $0.id == beat.blockID }), owner.standalone != true, workspace.whiteboard.orderedBeats.first(where: { $0.blockID == owner.id })?.id == beat.id { Text(owner.name).font(.caption).padding(4) }
             }
             if display != "Index Cards", plain || expanded { snippet(sceneID: beat.sceneID, beatID: beat.id, key: beat.id) }
             if display == "Content Only" { Color.gray.frame(height: 6).padding(.vertical, 8) }
@@ -201,6 +201,7 @@ struct ScriptReaderSettings {
     var margins = "Compact Margins"
     var zoom = 1.0
     var filter = ""
+    var filters = ScriptFilters()
     var followSelection = false
     var revision = 0
     var inset: CGFloat { margins == "Full Margins" ? 48 : margins == "Compact Margins" ? 16 : margins == "Squeezed" ? 8 : 3 }
@@ -215,6 +216,7 @@ struct SideScriptBeat: View {
     private var plain: Bool { ["Content Only", "Final Script"].contains(settings.display) }
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if beat.omitted || workspace.whiteboard.isUnused(beat) { Text(workspace.whiteboard.isUnused(beat) ? "Unused lane · excluded from export" : "Disabled beat · excluded from export").font(.caption).foregroundStyle(.secondary).padding(5) }
             if !plain {
                 Button { expanded.toggle(); workspace.selectBoardBeat(beat.id) } label: {
                     Text((expanded ? "▼ " : "▶ ") + beat.title).font(.system(size: 16)).lineLimit(nil).fixedSize(horizontal: false, vertical: true).multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading).padding(9)
@@ -242,10 +244,10 @@ struct SideScriptBeat: View {
 struct ScriptSidePaper: View {
     @ObservedObject var workspace: Workspace
     private func display(_ mode: String) { workspace.reader.display = mode; workspace.reader.revision += 1 }
-    private var segments: [ScriptSegment] { (try? workspace.project.orderedScript()) ?? [] }
+    private var segments: [ScriptSegment] { (try? workspace.project.orderedScript(includeInactive: true)) ?? [] }
     private func matches(_ beat: BoardBeat) -> Bool {
         let query = workspace.reader.filter
-        return query.isEmpty || ([beat.title, beat.synopsis, beat.html] + beat.characters + beat.tags).joined(separator: " ").localizedCaseInsensitiveContains(query)
+        return workspace.reader.filters.matches(beat, board: workspace.whiteboard, scenes: workspace.project.scenes) && (query.isEmpty || ([beat.title, beat.synopsis, beat.html] + beat.characters + beat.tags).joined(separator: " ").localizedCaseInsensitiveContains(query))
     }
     private var tools: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -265,10 +267,7 @@ struct ScriptSidePaper: View {
                 Button("Zoom Out") { workspace.reader.zoom = max(0.7, workspace.reader.zoom - 0.1) }
                 Button("100%") { workspace.reader.zoom = 1 }
             } label: { Label("Styling", systemImage: "textformat") }
-            Menu {
-                Button("All Beats") { workspace.reader.filter = "" }
-                ForEach(workspace.project.characters, id: \.id) { character in Button(character.name) { workspace.reader.filter = character.name } }
-            } label: { Label("Filter", systemImage: "line.3.horizontal.decrease") }
+            ScriptFilterMenu(workspace: workspace, state: $workspace.reader.filters).id(workspace.documentSessionID)
             Menu {
                 Button("Story Review") { workspace.reader = ScriptReaderSettings() }
                 Button("Reading") { display("Final Script"); workspace.reader.zoom = 1.1 }
@@ -285,6 +284,9 @@ struct ScriptSidePaper: View {
         VStack(spacing: 0) {
             tools.frame(maxWidth: .infinity, alignment: .leading)
             TextField("Filter script, characters or tags", text: $workspace.reader.filter).textFieldStyle(.roundedBorder).padding(6)
+            if let id = workspace.selectedBoardBeatID, let beat = workspace.whiteboard.beats.first(where: { $0.id == id }), !matches(beat) {
+                HStack { Text("Selected beat is hidden by filters.").font(.caption); Button("Reveal selected beat") { workspace.reader.filters = .init(); workspace.reader.filter = "" } }.padding(6)
+            }
             GeometryReader { geometry in
                 ScrollViewReader { proxy in
                     ScrollView(.vertical) {
@@ -293,10 +295,13 @@ struct ScriptSidePaper: View {
                             ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
                                 let beats = segment.beatIDs.compactMap { id in workspace.whiteboard.beats.first { $0.id == id } }.filter(matches)
                                 if !beats.isEmpty || (segment.beatIDs.isEmpty && workspace.reader.filter.isEmpty) {
+                                    if !workspace.reader.filters.hideHeadings {
                                     HStack { Text(segment.scene.heading.text + (segment.isContinuation ? " (CONTINUED)" : "")); Spacer(); Text(segment.number) }
                                         .font(.custom("Courier", size: 14 * workspace.reader.zoom).bold()).foregroundStyle(.black).padding(10).background(Color.white)
+                                    }
                                     ForEach(beats, id: \.id) { beat in
-                                        if workspace.reader.boundaries, let owner = workspace.whiteboard.blocks.first(where: { $0.id == beat.blockID }), owner.standalone != true,
+                                        if let gap = workspace.reader.filters.gap(before: beat.id, board: workspace.whiteboard, scenes: workspace.project.scenes) { Text(gap).font(.caption).frame(maxWidth: .infinity).padding(10).background(Color.gray.opacity(0.2)) }
+                                        if workspace.reader.boundaries && !workspace.reader.filters.hideBreaks, let owner = workspace.whiteboard.blocks.first(where: { $0.id == beat.blockID }), owner.standalone != true,
                                            workspace.whiteboard.orderedBeats.first(where: { $0.blockID == owner.id })?.id == beat.id {
                                             Text(owner.name).font(.caption).padding(5).background(Color.black)
                                         }

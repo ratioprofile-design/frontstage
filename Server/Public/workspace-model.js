@@ -11,10 +11,10 @@ const object = (o, key) => { if (o[key] != null && (typeof o[key] !== 'object' |
 export function scene(document,id) { const s=document.project.beats.find(s=>s.id===id); if(!s) throw Error('Select a scene.'); return s; }
 export function board(document) { return document.project.frontstageWhiteboard; }
 export function activeBeats(document) { const b=board(document), unused=new Set(b.layers.filter(l=>l.unused).map(l=>l.id)), inactive=new Set(b.blocks.filter(x=>unused.has(x.layerID)).map(x=>x.id)); return b.beats.filter(x=>!x.omitted&&!inactive.has(x.blockID)).sort((a,b)=>a.order-b.order||a.id.localeCompare(b.id)); }
-export function scriptSegments(document) {
+export function scriptSegments(document,{includeInactive=false}={}) {
   const scenes=document.project.beats, byID=new Map(scenes.map(s=>[s.id,s])), seen=new Set(), result=[];
-  for(const beat of activeBeats(document)) {
-    const s=byID.get(beat.sceneID); if(!s||s.isDisabled) continue;
+  for(const beat of (includeInactive?[...board(document).beats].sort((a,b)=>a.order-b.order||a.id.localeCompare(b.id)):activeBeats(document))) {
+    const s=byID.get(beat.sceneID); if(!s||(!includeInactive&&s.isDisabled)) continue;
     const last=result.at(-1); if(last?.scene.id===s.id) { last.html+=beat.html; last.beatIDs.push(beat.id); }
     else { result.push({scene:s,html:beat.html,beatIDs:[beat.id],number:result.find(r=>r.scene.id===s.id)?.number||s.sceneNumber||String(seen.size+1),continuation:seen.has(s.id)}); seen.add(s.id); }
   }

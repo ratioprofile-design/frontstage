@@ -3,6 +3,30 @@ import XCTest
 @testable import FrontstageCore
 
 final class WhiteboardTests: XCTestCase {
+    func testDeletingLooseBeatRemovesItsHiddenContainer() throws {
+        var project = Project()
+        let id = try project.addBoardBeat(title: "Delete me")
+        let owner = try XCTUnwrap(project.whiteboard().beats.first { $0.id == id }?.blockID)
+        try project.editWhiteboard { board in board.blocks[board.blocks.firstIndex { $0.id == owner }!].standalone = true }
+        try project.removeBoardBeats([id])
+        XCTAssertFalse(try project.whiteboard().blocks.contains { $0.id == owner })
+        XCTAssertTrue(try project.whiteboard().beats.isEmpty)
+        XCTAssertTrue(try project.orderedScript(includeInactive: true).isEmpty)
+    }
+    func testDeletingLastGroupedBeatPreservesExplicitParentBlock() throws {
+        var project = Project()
+        let a = try project.addBoardBeat(title: "First")
+        let group = try XCTUnwrap(project.whiteboard().beats.first { $0.id == a }?.blockID)
+        let b = try project.addBoardBeat(blockID: group, title: "Second")
+        try project.editWhiteboard { board in
+            let index = board.blocks.firstIndex { $0.id == group }!
+            board.blocks[index].containerKind = "beatGroup"; board.blocks[index].parentID = "manual"
+            board.blocks.append(BoardBlock(id: "manual", name: "Keep block", layerID: "main", position: .init()))
+        }
+        try project.removeBoardBeats([a]); XCTAssertTrue(try project.whiteboard().blocks.contains { $0.id == group })
+        try project.removeBoardBeats([b]); XCTAssertEqual(try project.whiteboard().blocks.map(\.id), ["manual"])
+    }
+
     func testMeasuredTextDrivesCardContainerAndHitTesting() throws {
         var project = Project()
         let id = try project.addBoardBeat(title: "காகித கப்பல்")

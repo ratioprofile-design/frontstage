@@ -1,3 +1,4 @@
+import {createScriptFilter,mountScriptFilter,matchesScriptFilter,gapLabel} from './script-filter.js';
 import { workspaceDesign as design } from './workspace-design.js';
 import * as model from './workspace-model.js';
 import { baminiPairs } from './bamini.js';
@@ -8,6 +9,7 @@ const el=(tag,text,className)=>{const e=document.createElement(tag);if(text!=nul
 const $=id=>document.getElementById(id);
 const download=(name,data,type='text/plain')=>{const url=URL.createObjectURL(new Blob([data],{type})),a=el('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 export function mountWorkspaces(api) {
+  const scriptFilter=createScriptFilter();
   let mode='board',sceneID=null,roleID=null,actorID=null,revisionID=null,dayID=null,recordID=null,kind='research',search='',writing=false,projectID=null,paper='letter';
   const root=$('workspace-page'),selector=$('view-mode');
   const scriptDefaults={display:'Final Script',margin:'Full Margins',zoom:1,characters:true,tags:true,synopsis:false,boundaries:false,filter:''};
@@ -38,7 +40,7 @@ export function mountWorkspaces(api) {
 
   function render(){
     if(!doc())return;
-    if(projectID!==api.current()?.id){projectID=api.current()?.id;sceneID=api.selectedScene()??scenes()[0]?.id;roleID=actorID=revisionID=dayID=recordID=null;mode='board';selector.value=mode;}
+    if(projectID!==api.current()?.id){scriptFilter.clear();projectID=api.current()?.id;sceneID=api.selectedScene()??scenes()[0]?.id;roleID=actorID=revisionID=dayID=recordID=null;mode='board';selector.value=mode;}
     if(!scenes().some(s=>s.id===sceneID))sceneID=api.selectedScene()??scenes()[0]?.id;
     $('workspace').dataset.page=mode;$('workspace').classList.toggle('document-mode',mode!=='board');
     $('board-shell').hidden=mode!=='board';root.hidden=mode==='board';$('project-toolbar').hidden=false;
@@ -63,27 +65,31 @@ export function mountWorkspaces(api) {
     for(const command of ['bold','italic','underline','strikeThrough'])formatButtons.push(option(styling,command,()=>activeEditor?.inline(command)));
     formatButtons.push(option(styling,'Split at Cursor',()=>activeEditor?.split()),option(styling,'Open Beat Editor',()=>activeEditor?.open()));
     const enableFormatting=enabled=>formatButtons.forEach(b=>b.disabled=!enabled);enableFormatting(false);
-    const filter=menu('Filter'),query=el('input');query.type='search';query.placeholder='Script, characters or tags';query.setAttribute('aria-label','Filter dedicated script');query.value=scriptView.filter;query.onchange=()=>scriptPreference('filter',query.value);filter.querySelector('.script-menu-items').append(query);option(filter,'Reset Filter',()=>scriptPreference('filter',''));
+    const filter=menu('Filter');mountScriptFilter(filter.querySelector('.script-menu-items'),scriptFilter,{board:()=>model.board(doc()),scenes,selection:()=>new Set(api.selectedBeat()?[api.selectedBeat()]:[]),changed:()=>render()});
     const presets=menu('Presets');option(presets,'Reading',()=>{scriptView={...scriptDefaults};scriptPreference('display','Final Script');});option(presets,'Story Review',()=>scriptPreference('display','Expand All'));option(presets,'Index Cards',()=>scriptPreference('display','Index Cards'));
     const options=menu('Options');option(options,'Full Screen',()=>{if(document.fullscreenElement)document.exitFullscreen?.();else root.requestFullscreen?.();});option(options,'Writing Settings',()=>navigate('writingTools'));
     tools.append(el('span',scriptView.display,'script-mode-label'));
-    const segments=model.scriptSegments(doc());if(!segments.length){wrap.append(empty('Your next story starts here','Add a scene or a beat to begin.'),button('Add Scene',()=>api.addScene(),true));return;}
+    const segments=model.scriptSegments(doc(),{includeInactive:true});if(!segments.length){wrap.append(empty('Your next story starts here','Add a scene or a beat to begin.'),button('Add Scene',()=>api.addScene(),true));return;}
     const desk=el('div',null,'continuous-desk'),sheet=el('div',null,'continuous-paper');desk.append(sheet);wrap.append(desk);applyTypography(sheet);sheet.dataset.display=scriptView.display;sheet.dataset.margin=scriptView.margin;sheet.style.zoom=scriptView.zoom;
     const plain=['Final Script','Content Only'].includes(scriptView.display);
+    let filteredGap=[];
     for(const segment of segments){
-      const s=segment.scene,beats=segment.beatIDs.map(id=>model.board(doc()).beats.find(b=>b.id===id)).filter(Boolean).filter(b=>!scriptView.filter||[b.title,b.synopsis,b.html,...b.characters,...b.tags].join(' ').toLowerCase().includes(scriptView.filter.toLowerCase()));
-      if(segment.beatIDs.length&&!beats.length)continue;
-      if(scriptView.display!=='Index Cards'){
+      const s=segment.scene,beats=segment.beatIDs.map(id=>model.board(doc()).beats.find(b=>b.id===id)).filter(Boolean).filter(b=>matchesScriptFilter(b,model.board(doc()),scenes(),scriptFilter.state));
+      if(segment.beatIDs.length&&!beats.length){filteredGap.push(...segment.beatIDs.map(id=>model.board(doc()).beats.find(b=>b.id===id)));continue;}
+      if(scriptView.display!=='Index Cards'&&!scriptFilter.state.hideHeadings){
         const heading=el('button',`${segment.number}  ${model.heading(s)}${segment.continuation?' (CONTINUED)':''}`,'script-heading');heading.setAttribute('aria-label','Edit scene heading: '+model.heading(s));sheet.append(heading);
         heading.onclick=()=>{headingScene=headingScene===s.id?null:s.id;sceneID=s.id;render();};
         if(headingScene===s.id){const fields=el('div',null,'writing-scene-fields');fields.append(field('Scene title',s.title,(v,d)=>model.scene(d,s.id).title=v),field('Synopsis',s.summary,(v,d)=>model.scene(d,s.id).summary=v),sluglineFields(()=>model.scene(doc(),s.id),()=>scenes(),action=>change(()=>action(),true),!readonly()),button('Done',()=>{headingScene=null;render();}));sheet.append(fields);}
       }
-      for(const beat of beats){
+      for(const beat of segment.beatIDs.map(id=>model.board(doc()).beats.find(b=>b.id===id)).filter(Boolean)){
+        if(!beats.includes(beat)){filteredGap.push(beat);continue;}
+        if(filteredGap.length&&!scriptFilter.state.hideGaps)sheet.append(el('div',gapLabel(filteredGap,scriptFilter.state.gaps),'script-filter-gap'));filteredGap=[];
         const id=beat.id,block=el('section',null,'script-snippet');block.dataset.scriptBeatID=id;
+        const owner=model.board(doc()).blocks.find(b=>b.id===beat.blockID),unused=model.board(doc()).layers.find(l=>l.id===owner?.layerID)?.unused;if(unused||beat.omitted||s.isDisabled)block.append(el('div',unused?'Unused lane · excluded from export':'Disabled beat · excluded from export','script-beat-status'));
         if(!plain){const isExpanded=(scriptView.display!=='Collapse All')!==expandedBeats.has(id),name=button((isExpanded?'▾ ':'▸ ')+beat.title,()=>{if(expandedBeats.has(id))expandedBeats.delete(id);else expandedBeats.add(id);const text=block.querySelector('.script-text');if(text){text.hidden=!text.hidden;name.textContent=(text.hidden?'▸ ':'▾ ')+beat.title;}});name.className='snippet-heading';name.ondblclick=()=>api.openBeat(id);block.append(name);
           if(scriptView.display!=='Index Cards'){if(scriptView.characters&&beat.characters.length)block.append(el('div',beat.characters.join(' · '),'script-beat-details'));if(scriptView.tags&&beat.tags.length)block.append(el('div',beat.tags.join(' · '),'script-beat-details'));}
           if(scriptView.synopsis||scriptView.display==='Index Cards')block.append(el('div',beat.synopsis||'','script-beat-details'));
-          if(scriptView.boundaries){const owner=model.board(doc()).blocks.find(b=>b.id===beat.blockID);if(owner&&!owner.standalone&&model.board(doc()).beats.filter(b=>b.blockID===owner.id).sort((a,b)=>a.order-b.order)[0]?.id===id)block.prepend(el('div',owner.name,'script-beat-details'));}
+          if(!scriptFilter.state.hideBreaks&&scriptView.boundaries){const owner=model.board(doc()).blocks.find(b=>b.id===beat.blockID);if(owner&&!owner.standalone&&model.board(doc()).beats.filter(b=>b.blockID===owner.id).sort((a,b)=>a.order-b.order)[0]?.id===id)block.prepend(el('div',owner.name,'script-beat-details'));}
         }
         if(scriptView.display!=='Index Cards'){
           const text=el('div',null,'script-text');text.contentEditable=!(readonly()||s.frontstageTextLocked||beat.locked||blockLocked(model.board(doc()),beat.blockID));text.setAttribute('role','textbox');text.setAttribute('aria-label',`Script: ${beat.title}`);text.innerHTML=api.cleanHTML(beat.html);text.dataset.beatId=id;text.hidden=!plain&&((scriptView.display==='Collapse All')!==expandedBeats.has(id));

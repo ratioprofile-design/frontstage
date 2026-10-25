@@ -1,6 +1,8 @@
 # Remaining phases
 
-Updated 24 October 2026. These are remaining completion gates, not a claim that previously implemented features are absent. Whiteboard remains the highest priority. See CAUSALITY_MANUAL_IMPLEMENTATION.md for the detailed manual comparison.
+Updated 25 October 2026. These are remaining completion gates, not a claim that previously implemented features are absent. Whiteboard remains the highest priority. See CAUSALITY_MANUAL_IMPLEMENTATION.md for the detailed manual comparison.
+
+Recent fixes awaiting final Mac build/acceptance: category filters and history; inactive-beat editing visibility without changing export; popup caret tracking; deletion cleanup for loose beat containers and emptied groups. Fresh browser deletion checks include undo/redo and project reload.
 
 1. **Whiteboard and timeline completion.** Live Push preview and collision packing; container endpoint dependencies and dependency navigation; FlowLines and character/tag coloring; nested research folder ordering and composite curves; automatic tension rules and readability; actual typeset-page timing; script-workspace mini-timeline and complete episode title-page semantics.
 2. **Screenplay and production completion.** Dual dialogue, frozen production pagination and revision marks; full typography/printing and Office fidelity; advanced scheduling, production and drawing tools. Verify multilingual input and screenplay suggestions on an installed Mac.
