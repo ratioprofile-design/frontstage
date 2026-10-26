@@ -28,7 +28,7 @@ extension Project {
             else { milliseconds = 0 }
             return SceneRevision(id: id, label: item["frontstageLabel"]?.string ?? item["title"]?.string ?? "Revision",
                 date: Date(timeIntervalSince1970: milliseconds / 1000), title: item["title"]?.string ?? "", html: html, summary: item["summary"]?.string ?? "")
-        }.reversed()
+        }.sorted { $0.date > $1.date }
     }
 
     @discardableResult
@@ -66,6 +66,11 @@ extension Project {
         if let raw = version["frontstageSnippets"] { savedSnippets = try JSONDecoder().decode([BoardBeat].self, from: JSONEncoder().encode(raw)) }
         else { savedSnippets = nil }
         let currentSnippets = native ? try whiteboard().beats.filter { $0.sceneID == sceneID } : []
+        if native {
+            let board = try whiteboard()
+            guard !currentSnippets.contains(where: { board.isLocked($0) }) else { throw ProjectError.invalidProject("Unlock the scene's beats before restoring") }
+            if let savedSnippets, savedSnippets.contains(where: { beat in beat.sceneID != sceneID || !board.blocks.contains(where: { $0.id == beat.blockID }) }) { throw ProjectError.invalidProject("A saved beat container is missing; restore it before restoring this snapshot") }
+        }
         if native && savedSnippets == nil && currentSnippets.count > 1 {
             throw ProjectError.invalidProject("this older revision has no snippet boundaries; use a revision captured after whiteboard migration")
         }

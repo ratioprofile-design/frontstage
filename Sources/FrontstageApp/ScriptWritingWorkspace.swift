@@ -115,7 +115,7 @@ struct ScriptWritingWorkspace: View {
     }
     private func heading(_ segment: ScriptSegment) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Button { headingID = headingID == segment.scene.id ? nil : segment.scene.id } label: {
+            Button { headingID = headingID == segment.scene.id ? nil : segment.scene.id; workspace.selectedSceneID = segment.scene.id; if let first = segment.beatIDs.first { workspace.selectBoardBeat(first) } } label: {
                 Text("\(segment.number)  \(segment.scene.heading.text)\(segment.isContinuation ? " (CONTINUED)" : "")")
                     .font(.custom(workspace.project.scriptLayout.fontName, size: workspace.project.scriptLayout.fontSize * zoom).weight(.bold)).frame(maxWidth: .infinity, alignment: .leading)
             }.buttonStyle(.plain).accessibilityLabel("Edit scene heading: " + segment.scene.heading.text)

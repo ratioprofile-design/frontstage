@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import * as m from '../Public/write-panel-model.js';
 import * as model from '../Public/workspace-model.js';
+import {mergeDocuments} from '../Public/merge.js';
 const fixture=JSON.parse(await readFile(new URL('../../Tests/Fixtures/write-panels.frontstage',import.meta.url)));
 const d=structuredClone(fixture),s=d.project.beats[0],id=s.id;
 const oldSynopsis=model.board(d).beats.find(b=>b.sceneID===id).synopsis;
@@ -22,3 +23,8 @@ const entry=model.breakdownEntries(s).find(e=>e.id==='legacy-prop');m.moveRequir
 const notes=structuredClone(s.notes),breakdown=structuredClone(s.breakdown);const revision=model.captureRevision(d,id,'Before');m.updateSceneSummary(d,id,'New');model.restoreRevision(d,id,revision);assert.deepEqual(s.notes,notes);assert.deepEqual(s.breakdown,breakdown);assert.equal(s.versions.length,(fixture.project.beats[0].versions||[]).length+2);
 s.frontstageTextLocked=true;assert.throws(()=>m.updateSceneSummary(d,id,'Locked'));assert.throws(()=>m.addNote(d,id));assert.throws(()=>model.restoreRevision(d,id,revision));
 console.log('PASS: Write panel projections, summary isolation, target safety, legacy notes, all categories, movement and history');
+
+const local=structuredClone(fixture),remote=structuredClone(fixture);m.updateNote(local,1,'note-import',{content:'<p>Local note</p>'});m.updateSceneSummary(remote,1,'Remote summary');const merged=mergeDocuments(fixture,local,remote);assert.equal(merged.conflicts.length,0);assert.equal(merged.value.project.beats[0].summary,'Remote summary');assert.equal(merged.value.project.beats[0].notes[0].content,'<p>Local note</p>');
+const broken=structuredClone(fixture),v=model.captureRevision(broken,1,'Broken container');broken.project.beats[0].versions.find(r=>r.id===v).frontstageSnippets[0].blockID='missing';const before=structuredClone(broken);assert.throws(()=>model.restoreRevision(broken,1,v),/container/);assert.deepEqual(broken,before);
+assert.equal(m.editableNote({id:'audio-html',content:'<div><audio src="data:audio/webm;base64,AA=="></audio></div>'}),false);
+console.log('PASS: cross-device note/summary merge and atomic missing-container rejection');

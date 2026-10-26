@@ -80,7 +80,7 @@ export function mountWorkspaces(api) {
       if(segment.beatIDs.length&&!beats.length){filteredGap.push(...segment.beatIDs.map(id=>model.board(doc()).beats.find(b=>b.id===id)));continue;}
       if(scriptView.display!=='Index Cards'&&!scriptFilter.state.hideHeadings){
         const heading=el('button',`${segment.number}  ${model.heading(s)}${segment.continuation?' (CONTINUED)':''}`,'script-heading');heading.setAttribute('aria-label','Edit scene heading: '+model.heading(s));heading.dataset.sceneId=s.id;sheet.append(heading);
-        heading.onclick=()=>{headingScene=headingScene===s.id?null:s.id;sceneID=s.id;render();};
+        heading.onclick=()=>{headingScene=headingScene===s.id?null:s.id;sceneID=s.id;api.selectScene(s.id,segment.beatIDs[0]);render();};
         if(headingScene===s.id){const fields=el('div',null,'writing-scene-fields');fields.append(field('Scene title',s.title,(v,d)=>model.scene(d,s.id).title=v),field('Synopsis',s.summary,(v,d)=>model.scene(d,s.id).summary=v),sluglineFields(()=>model.scene(doc(),s.id),()=>scenes(),action=>change(()=>action(),true),!readonly()),button('Done',()=>{headingScene=null;render();}));sheet.append(fields);}
       }
       for(const beat of segment.beatIDs.map(id=>model.board(doc()).beats.find(b=>b.id===id)).filter(Boolean)){
@@ -96,7 +96,7 @@ export function mountWorkspaces(api) {
         if(scriptView.display!=='Index Cards'){
           const text=el('div',null,'script-text');text.contentEditable=!(readonly()||s.frontstageTextLocked||beat.locked||blockLocked(model.board(doc()),beat.blockID));text.setAttribute('role','textbox');text.setAttribute('aria-label',`Script: ${beat.title}`);text.innerHTML=api.cleanHTML(beat.html);text.dataset.beatId=id;text.hidden=!plain&&((scriptView.display==='Collapse All')!==expandedBeats.has(id));
           const changed=()=>{if(text.isComposing)return;change(d=>{const target=model.board(d).beats.find(b=>b.id===id);if(target)target.html=api.cleanHTML(text.innerHTML);});};
-          text.oncompositionstart=()=>text.isComposing=true;text.oncompositionend=()=>{text.isComposing=false;changed();};text.oninput=changed;
+          text.addEventListener('compositionstart',()=>text.isComposing=true);text.addEventListener('compositionend',()=>{text.isComposing=false;changed();});text.oninput=changed;
           const behavior=screenplayToolbar(text,changed,text.contentEditable==='true',()=>characterNames(doc())).editor;
           behavior.split=()=>{const [first,last]=splitAtCaret(text);change(d=>model.splitBeat(d,id,first,last),true);};behavior.open=()=>api.openBeat(id);
           text.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'&&!e.isComposing){e.preventDefault();try{behavior.split();}catch(error){api.status(error.message);}}});
@@ -108,7 +108,8 @@ export function mountWorkspaces(api) {
       if(!segment.beatIDs.length){const p=el('div',null,'script-text');p.innerHTML=api.cleanHTML(segment.html);sheet.append(p);}
     }
     const reveal=(sid,bid)=>{const node=bid?[...sheet.querySelectorAll('[data-script-beat-id]')].find(n=>n.dataset.scriptBeatId===bid):[...sheet.querySelectorAll('[data-scene-id]')].find(n=>n.dataset.sceneId===String(sid));if(!node)return false;sceneID=sid;api.selectScene(sid,bid);node.scrollIntoView({block:'nearest'});return true;};
-    writePanels=mountWritePanels(outer,wrap,{document:doc,selection:()=>({sceneID,beatID:api.selectedBeat()}),readonly,change:action=>change(action),status:api.status,plain:api.plain,rebuild:render,reveal,resetReveal:(sid,bid)=>{scriptFilter.clear();sceneID=sid;render();requestAnimationFrame(()=>root.querySelector(`[data-script-beat-id="${CSS.escape(bid)}"]`)?.scrollIntoView({block:'nearest'}));}});
+    const panelProjectID=api.current()?.id;
+    writePanels=mountWritePanels(outer,wrap,{document:doc,selection:()=>({sceneID,beatID:api.selectedBeat()}),readonly,change:action=>{if(api.current()?.id!==panelProjectID)throw Error('The open project changed; select the note again.');change(action);},status:api.status,plain:api.plain,rebuild:render,reveal,resetReveal:(sid,bid)=>{scriptFilter.clear();sceneID=sid;render();requestAnimationFrame(()=>root.querySelector(`[data-script-beat-id="${CSS.escape(bid)}"]`)?.scrollIntoView({block:'nearest'}));}});
   }
   function applyTypography(node){const t=state().frontstageScriptLayout||{};node.style.setProperty('--script-font',t.fontName||'Courier');node.style.setProperty('--script-size',`${t.fontSize||12}px`);node.style.setProperty('--script-line',`${t.lineHeight||14}px`);node.style.setProperty('--script-spacing',`${t.paragraphSpacing??10}px`);}
   function pagesPage(){

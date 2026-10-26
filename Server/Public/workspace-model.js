@@ -1,3 +1,4 @@
+import {blockLocked} from './board-operations.js';
 // Browser operations use the existing native project schema; callers commit atomically.
 export const characterFields = ['occupation','backstory','psychology','physiology','sociology','wardrobeNotes','specialSkills','playingAge'];
 export const castingStatuses = ['idea','in_talks','audition_requested','self_tape_received','callback','chemistry_read','offer_sent','contract_signed','on_board','passed','hold'];
@@ -43,7 +44,8 @@ export function captureRevision(document,id,name) { if(!name.trim()) throw Error
 export function restoreRevision(document,id,revisionID) {
   const s=scene(document,id), revision=s.versions?.find(v=>v.id===revisionID), b=board(document), current=b.beats.filter(x=>x.sceneID===id);
   if(!revision||typeof revision.content!=='string') throw Error('Revision not found.');
-  if(s.frontstageTextLocked) throw Error('Unlock the scene script before restoring a revision.');
+  if(s.frontstageTextLocked||current.some(beat=>beat.locked||blockLocked(b,beat.blockID))) throw Error('Unlock the scene and its beats before restoring a revision.');
+  if(revision.frontstageSnippets&&revision.frontstageSnippets.some(beat=>beat.sceneID!==id||!b.blocks.some(block=>block.id===beat.blockID)))throw Error('A saved beat container is missing or belongs to another scene. Restore the container before restoring this snapshot.');
   if(!revision.frontstageSnippets&&current.length>1) throw Error('This older revision has no snippet boundaries.');
   captureRevision(document,id,`Before restoring ${revision.frontstageLabel||'revision'}`);
   s.title=revision.title??s.title;s.summary=revision.summary??s.summary;

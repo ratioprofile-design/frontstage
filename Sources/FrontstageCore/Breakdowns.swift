@@ -14,6 +14,7 @@ public struct BreakdownEntry: Identifiable, Equatable, Sendable {
     public let name: String
     public let notes: String
     public let count: Int
+    public let sourceQuote: String?
     let storageKey: String
     let bucket: String
     let index: Int
@@ -42,7 +43,7 @@ extension Project {
                 let count = max(1, min(100_000, NSDecimalNumber(decimal: object?["count"]?.decimal ?? 1).intValue))
                 result.append(BreakdownEntry(id: "\(key):\(bucket):\(object?["id"]?.string ?? String(index))",
                     category: object?["category"]?.string ?? aliases[bucket] ?? bucket,
-                    name: name, notes: object?["description"]?.string ?? "", count: count,
+                    name: name, notes: object?["description"]?.string ?? "", count: count, sourceQuote: object?["sourceQuote"]?.string,
                     storageKey: key, bucket: bucket, index: index))
             }
         }

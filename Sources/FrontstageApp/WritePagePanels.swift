@@ -166,6 +166,7 @@ struct NoteRichEditor: NSViewRepresentable {
         context.coordinator.binding = $html
         if let text = view.documentView as? NSTextView, context.coordinator.last != html, !text.hasMarkedText() { context.coordinator.load(html, text) }
     }
+    @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         var binding: Binding<String>; var last = ""
         init(_ binding: Binding<String>) { self.binding = binding }
@@ -228,6 +229,7 @@ struct WriteBreakdownPanel: View {
                     TextField("Requirement name", text: Binding(get: { item.name }, set: { value in workspace.edit("Requirement Name", key: item.id) { try $0.updateBreakdownItem(sceneID: sceneID, itemID: item.id, name: value) } }))
                     TextField("Description", text: Binding(get: { item.notes }, set: { value in workspace.edit("Requirement Description", key: item.id) { try $0.updateBreakdownItem(sceneID: sceneID, itemID: item.id, notes: value) } }))
                     Stepper("Quantity: \(item.count)", value: Binding(get: { item.count }, set: { value in workspace.edit("Requirement Quantity") { try $0.updateBreakdownItem(sceneID: sceneID, itemID: item.id, count: value) } }), in: 1...100_000)
+                    if let quote = item.sourceQuote { Text(quote).font(.caption).textSelection(.enabled) }
                     Menu("Move to category") { ForEach(BreakdownCategory.allCases, id: \.self) { target in Button(target.label) { workspace.edit("Move Requirement") { try $0.moveBreakdownItem(sceneID: sceneID, itemID: item.id, category: target) } } } }
                     Button("Delete Requirement") { workspace.edit("Delete Requirement") { try $0.removeBreakdownItem(sceneID: sceneID, itemID: item.id) } }
                 }.padding(6)

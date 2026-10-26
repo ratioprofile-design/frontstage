@@ -42,3 +42,44 @@ final class WritePanelTests: XCTestCase {
         XCTAssertThrowsError(try p.restoreRevision(sceneID: 1, revisionID: revision))
     }
 }
+
+extension WritePanelTests {
+    func testRepeatedSceneCardsAndUnsafeRestoreAreAtomic() throws {
+        var p = try fixture()
+        try p.editWhiteboard { board in
+            var repeated = board.beats[0]; repeated.id = "repeat-beat"; repeated.order = 100; board.beats.append(repeated)
+        }
+        XCTAssertEqual(try p.sceneCards().count, 2)
+        XCTAssertEqual(try p.sceneCards().first?.beats.count, 2)
+        let before = p
+        XCTAssertThrowsError(try p.reorderSceneCard(1, before: 2)); XCTAssertEqual(p, before)
+        let legacy = try XCTUnwrap(p.revisions(for: 1).first?.id)
+        try p.editBeat(1) { fields in
+            var versions = fields["versions"]!.array!, version = fields["versions"]!.array![0].object!
+            version.removeValue(forKey: "frontstageSnippets"); versions[0] = .object(version); fields["versions"] = .array(versions)
+        }
+        let legacyBefore = p
+        XCTAssertThrowsError(try p.restoreRevision(sceneID: 1, revisionID: legacy)); XCTAssertEqual(p, legacyBefore)
+        let snapshot = try p.saveRevision(sceneID: 1, label: "With boundaries")
+        try p.editBeat(1) { fields in
+            var versions = fields["versions"]!.array!
+            let index = versions.firstIndex { $0.object?["id"]?.string == snapshot }!
+            var version = versions[index].object!, snippets = version["frontstageSnippets"]!.array!
+            var snippet = snippets[0].object!; snippet["blockID"] = .string("missing-container"); snippets[0] = .object(snippet)
+            version["frontstageSnippets"] = .array(snippets); versions[index] = .object(version); fields["versions"] = .array(versions)
+        }
+        let missing = p
+        XCTAssertThrowsError(try p.restoreRevision(sceneID: 1, revisionID: snapshot)); XCTAssertEqual(p, missing)
+    }
+    func testNotesAndSummariesMergeAcrossDevices() throws {
+        let base = try fixture(); var local = base, remote = base
+        try local.updateWritingNote(sceneID: 1, id: "note-import", content: "<p>Local note</p>")
+        try remote.updateSceneSummary(1, summary: "Remote summary")
+        let decode: (Project) throws -> JSONValue = { try JSONDecoder().decode(JSONValue.self, from: $0.encoded()) }
+        let merged = try ProjectMerge.mergeDocuments(base: decode(base), local: decode(local), remote: decode(remote))
+        XCTAssertTrue(merged.conflicts.isEmpty)
+        let result = try Project(data: JSONEncoder().encode(merged.value))
+        XCTAssertEqual(result.scenes.first?.summary, "Remote summary")
+        XCTAssertEqual(result.writingNotes(sceneID: 1).first?.content, "<p>Local note</p>")
+    }
+}
