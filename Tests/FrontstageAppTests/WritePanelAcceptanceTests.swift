@@ -5,6 +5,18 @@ import XCTest
 import FrontstageCore
 @testable import FrontstageApp
 final class WritePanelAcceptanceTests: XCTestCase {
+    func testLiveMarkdownFormattingAndSemanticRoundTrip() async throws {
+        try await MainActor.run {
+            let text = NSTextView(); text.string = "**Hello தமிழ்**"; text.setSelectedRange(NSRange(location: text.string.utf16.count, length: 0))
+            LiveNoteFormatting.apply(to: text)
+            XCTAssertEqual(text.string, "Hello தமிழ்")
+            XCTAssertTrue(NoteTextCodec.encode(text.attributedString()).contains("<strong>"))
+            let decoded = try NoteTextCodec.decode("<h3>தமிழ் heading</h3><p><strong>Bold</strong> and <code>code</code></p><blockquote>Quote</blockquote>")
+            let saved = NoteTextCodec.encode(decoded)
+            XCTAssertTrue(saved.contains("<h3>")); XCTAssertTrue(saved.contains("தமிழ் heading")); XCTAssertTrue(saved.contains("<blockquote>"))
+            XCTAssertFalse(saved.contains("FSNOTE"))
+        }
+    }
     func testContinuousEditorCommitsInlineHeadingAndKeepsNotes() async throws {
         try await MainActor.run {
             _ = NSApplication.shared

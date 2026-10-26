@@ -63,6 +63,13 @@ final class ScreenplayEditorController: ObservableObject {
         textView.window?.makeFirstResponder(textView)
         let selection = textView.selectedRange()
         let range = (textView.string as NSString).paragraphRange(for: selection)
+        if range.length > 0, element != .sceneHeading,
+           textView.attributedString().attribute(NSAttributedString.Key("FrontstageSceneHeading"), at: range.location, effectiveRange: nil) != nil {
+            var attributes = ScreenplayTypography.attributes(element, width: contentWidth, settings: typography)
+            if let owner = textView.attributedString().attribute(NSAttributedString.Key("FrontstageBeatOwner"), at: range.location, effectiveRange: nil) { attributes[NSAttributedString.Key("FrontstageBeatOwner")] = owner }
+            textView.insertText(NSAttributedString(string: "\n", attributes: attributes), replacementRange: NSRange(location: NSMaxRange(range), length: 0))
+            textView.setSelectedRange(NSRange(location: NSMaxRange(range), length: 0)); textView.typingAttributes = attributes; activeElement = element; return
+        }
         if range.length > 0 {
             let replacement = NSMutableAttributedString(attributedString: textView.attributedString().attributedSubstring(from: range))
             ScreenplayTypography.apply(element, to: replacement,

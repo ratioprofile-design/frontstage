@@ -16,7 +16,8 @@ extension Project {
         }
     }
     public mutating func setBeatOmitted(_ id: String, omitted: Bool) throws {
-        guard let beat = try whiteboard().beats.first(where: { $0.id == id }), !scenes.contains(where: { $0.id == beat.sceneID && $0.isTextLocked }) else { throw ProjectError.invalidProject("Unlock the scene before changing inclusion") }
+        let board = try whiteboard()
+        guard let beat = board.beats.first(where: { $0.id == id }), !board.isLocked(beat), !scenes.contains(where: { $0.id == beat.sceneID && $0.isTextLocked }) else { throw ProjectError.invalidProject("Unlock the scene before changing inclusion") }
         try updateBoardBeat(id) { $0.omitted = omitted }
     }
     public mutating func pullOutScene(_ sceneID: Decimal) throws {

@@ -5,6 +5,9 @@ public struct ScriptHeadingEdit: Sendable {
     public init(sceneID: Decimal, text: String) { self.sceneID = sceneID; self.text = text }
 }
 extension SceneHeading {
+    public var inlineText: String {
+        [prefix, location, time.isEmpty ? "" : "- " + time].filter { !$0.isEmpty }.joined(separator: " ")
+    }
     public init(inline text: String) {
         let source = text.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         let prefixes = ["INT./EXT.", "EXT./INT.", "INT.", "EXT.", "I/E."]
@@ -40,7 +43,7 @@ extension Project {
         let newScene = candidate.addScene(); try candidate.updateScene(id: newScene, heading: SceneHeading(inline: heading))
         var fragment = original; fragment.id = UUID().uuidString; fragment.sceneID = newScene; fragment.html = afterHTML; fragment.title = "Untitled Beat"; fragment.synopsis = ""
         fragment.order = (original.order + (rank + 1 < ordered.count ? ordered[rank + 1].order : original.order + 2)) / 2
-        fragment.duration = original.duration / 2; fragment.start = original.start + fragment.duration
+        fragment.duration = max(0.05, original.duration / 2); fragment.start = original.start + fragment.duration
         board.beats[index].html = beforeHTML; board.beats[index].duration = fragment.duration
         for next in ordered.dropFirst(rank + 1) {
             guard next.sceneID == original.sceneID else { break }

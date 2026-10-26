@@ -36,20 +36,22 @@ struct ContinuousScriptEditor: NSViewRepresentable {
         let workspace: Workspace; let controller: ScreenplayEditorController
         var committing = false, loading = false, completing = false, lastSignature = ""
         var visible = Set<String>()
+        var headingScenes = Set<Decimal>()
         var pendingPullouts = Set<String>()
         init(_ workspace: Workspace, _ controller: ScreenplayEditorController) { self.workspace = workspace; self.controller = controller }
         func signature() -> String {
-            String(describing: controller.typography) + String(describing: controller.contentWidth) + workspace.whiteboard.orderedBeats.filter { !$0.omitted && !workspace.whiteboard.isUnused($0) && workspace.reader.filters.matches($0, board: workspace.whiteboard, scenes: workspace.project.scenes) }.map { beat in beat.id + beat.html + (workspace.project.scenes.first { $0.id == beat.sceneID }?.heading.text ?? "") }.joined(separator: "\u{1f}")
+            String(describing: controller.typography) + String(describing: controller.contentWidth) + workspace.whiteboard.orderedBeats.filter { !$0.omitted && !workspace.whiteboard.isUnused($0) && workspace.reader.filters.matches($0, board: workspace.whiteboard, scenes: workspace.project.scenes) }.map { beat in beat.id + beat.html + (workspace.project.scenes.first { $0.id == beat.sceneID }?.heading.inlineText ?? "") }.joined(separator: "\u{1f}")
         }
         func load(_ text: NSTextView) {
-            loading = true; defer { loading = false }; visible.removeAll()
+            loading = true; defer { loading = false }; visible.removeAll(); headingScenes.removeAll()
             let result = NSMutableAttributedString(string: "")
             for segment in (try? workspace.project.orderedScript()) ?? [] {
                 let beats = segment.beatIDs.compactMap { id in workspace.whiteboard.beats.first { $0.id == id } }.filter { workspace.reader.filters.matches($0, board: workspace.whiteboard, scenes: workspace.project.scenes) }
                 guard let first = beats.first else { continue }
+                headingScenes.insert(segment.scene.id)
                 var attributes = ScreenplayTypography.attributes(.sceneHeading, width: controller.contentWidth, settings: controller.typography)
                 attributes[ownerKey] = first.id; attributes[headingKey] = NSDecimalNumber(decimal: segment.scene.id).stringValue; attributes[.foregroundColor] = NSColor.black
-                result.append(NSAttributedString(string: segment.scene.heading.text + "\n", attributes: attributes))
+                result.append(NSAttributedString(string: segment.scene.heading.inlineText + "\n", attributes: attributes))
                 for beat in beats {
                     visible.insert(beat.id)
                     let body = (try? ScreenplayTextCodec.decode(beat.html.isEmpty ? "<p class='sc-action'><br></p>" : beat.html, width: controller.contentWidth, printing: true, settings: controller.typography)) ?? NSMutableAttributedString(string: "\n")
@@ -63,33 +65,60 @@ struct ContinuousScriptEditor: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard let text = notification.object as? NSTextView, !loading, !committing, !text.hasMarkedText() else { return }
             committing = true; defer { committing = false }
-            loading = true; ScriptCueNames.capitalize(in: text); loading = false
-            let source = text.attributedString(), string = source.string as NSString
-            var html = Dictionary(uniqueKeysWithValues: visible.map { ($0, "") }), headings = [ScriptHeadingEdit](), owner: String?
-            var location = 0
-            while location < source.length {
-                let range = string.paragraphRange(for: NSRange(location: location, length: 0)), attributes = source.attributes(at: location, effectiveRange: nil)
-                owner = attributes[ownerKey] as? String ?? owner
-                guard let id = owner else { location = NSMaxRange(range); continue }
-                let line = string.substring(with: range).trimmingCharacters(in: .newlines)
-                let kind = ScreenplayElement(rawValue: attributes[.screenplayElement] as? String ?? "action") ?? .action
-                if let scene = attributes[headingKey] as? String, let sceneID = Decimal(string: scene), kind == .sceneHeading {
-                    headings.append(ScriptHeadingEdit(sceneID: sceneID, text: line))
-                } else if kind == .sceneHeading && !line.trimmingCharacters(in: .whitespaces).isEmpty {
-                    let afterRange = NSRange(location: NSMaxRange(range), length: source.length - NSMaxRange(range))
-                    let after = NSMutableAttributedString(string: "")
-                    if afterRange.length > 0 { source.enumerateAttribute(ownerKey, in: afterRange) { value, run, stop in if value as? String == id { after.append(source.attributedSubstring(from: run)) } else if value != nil { stop.pointee = true } } }
-                    workspace.edit("Insert Scene") { project in _ = try project.insertScriptScene(afterSplitting: id, beforeHTML: html[id] ?? "", afterHTML: ScreenplayTextCodec.encode(after), heading: line) }
-                    load(text); return
-                } else {
-                    html[id, default: ""] += ScreenplayTextCodec.encode(source.attributedSubstring(from: range))
-                    text.textStorage?.addAttribute(ownerKey, value: id, range: range)
+            loading = true
+            if let storage = text.textStorage, storage.length > 0 {
+                let position = min(text.selectedRange().location, storage.length - 1)
+                let range = (text.string as NSString).paragraphRange(for: NSRange(location: position, length: 0))
+                let line = (text.string as NSString).substring(with: range)
+                if storage.attribute(.screenplayElement, at: position, effectiveRange: nil) as? String == "action",
+                   line.range(of: #"^(INT\.|EXT\.|INT\./EXT\.|EXT\./INT\.)\s"#, options: [.regularExpression, .caseInsensitive]) != nil {
+                    ScreenplayTypography.apply(.sceneHeading, to: storage, range: range, width: controller.contentWidth, settings: controller.typography)
                 }
-                location = NSMaxRange(range)
             }
-            for id in pendingPullouts { html.removeValue(forKey: id) }
-            workspace.edit("Screenplay", key: "continuous-script") { project in try project.applyScriptDocument(beatHTML: html, headings: headings); if !pendingPullouts.isEmpty { try project.pullOutBeats(pendingPullouts) } }
+            ScriptCueNames.capitalize(in: text); loading = false
+            let source = text.attributedString(), string = source.string as NSString
+            var assignments = [(NSRange, String)](), created = [(NSRange, String, Decimal)](), succeeded = false, missingHeading = false
+            workspace.edit("Screenplay", key: "continuous-script") { project in
+                var html = Dictionary(uniqueKeysWithValues: visible.filter { !pendingPullouts.contains($0) }.map { ($0, "") })
+                var headings = [ScriptHeadingEdit](), owner: String?, redirects = [String: String]()
+                var location = 0
+                while location < source.length {
+                    let range = string.paragraphRange(for: NSRange(location: location, length: 0)), attributes = source.attributes(at: location, effectiveRange: nil)
+                    let original = attributes[ownerKey] as? String ?? owner
+                    owner = original.flatMap { redirects[$0] ?? $0 }
+                    guard let id = owner, !pendingPullouts.contains(id) else { location = NSMaxRange(range); continue }
+                    let line = string.substring(with: range).trimmingCharacters(in: .newlines)
+                    let kind = ScreenplayElement(rawValue: attributes[.screenplayElement] as? String ?? "action") ?? .action
+                    if let scene = attributes[headingKey] as? String, let sceneID = Decimal(string: scene) {
+                        headings.append(ScriptHeadingEdit(sceneID: sceneID, text: line))
+                    } else if kind == .sceneHeading && !line.trimmingCharacters(in: .whitespaces).isEmpty {
+                        let newID = try project.insertScriptScene(afterSplitting: id, beforeHTML: html[id] ?? "", afterHTML: "", heading: line)
+                        guard let newBeat = try project.whiteboard().beats.first(where: { $0.id == newID }) else { throw ProjectError.sceneNotFound }
+                        if let original { redirects[original] = newID }; redirects[id] = newID
+                        owner = newID; html[newID] = ""; created.append((range, newID, newBeat.sceneID))
+                    } else {
+                        html[id, default: ""] += ScreenplayTextCodec.encode(source.attributedSubstring(from: range))
+                        assignments.append((range, id))
+                    }
+                    location = NSMaxRange(range)
+                }
+                for sceneID in headingScenes where !headings.contains(where: { $0.sceneID == sceneID }) {
+                    if try project.whiteboard().beats.contains(where: { $0.sceneID == sceneID && html[$0.id] != nil }) {
+                        headings.append(ScriptHeadingEdit(sceneID: sceneID, text: "")); missingHeading = true
+                    }
+                }
+                try project.applyScriptDocument(beatHTML: html, headings: headings)
+                if !pendingPullouts.isEmpty { try project.pullOutBeats(pendingPullouts) }
+                succeeded = true
+            }
+            guard succeeded else { pendingPullouts.removeAll(); load(text); return }
+            for (range, id) in assignments { text.textStorage?.addAttribute(ownerKey, value: id, range: range) }
+            for (range, id, sceneID) in created {
+                text.textStorage?.addAttributes([ownerKey: id, headingKey: NSDecimalNumber(decimal: sceneID).stringValue], range: range)
+                visible.insert(id); headingScenes.insert(sceneID)
+            }
             visible.subtract(pendingPullouts); pendingPullouts.removeAll()
+            if missingHeading { load(text) }
             lastSignature = signature(); controller.selectionChanged(); text.scrollRangeToVisible(text.selectedRange())
             if !completing, !(completionChoices[controller.activeElement] ?? []).isEmpty {
                 completing = true; text.complete(nil); completing = false

@@ -29,3 +29,10 @@ export function restorePulledOutBeats(document,ids,blockID=null){
  p.frontstagePullouts=archive.filter(item=>!ids.has(item.id));validateBoard(b,new Set(p.beats.map(s=>s.id)));return next;
 }
 export function replaceDocument(target,value){for(const key of Object.keys(target))delete target[key];Object.assign(target,value);}
+
+export function validateInclusion(document) {
+ const p=project(document),active=new Set((p.frontstageWhiteboard?.beats||[]).map(beat=>beat.id)),archived=new Set();
+ if(p.frontstagePullouts==null)return;
+ if(!Array.isArray(p.frontstagePullouts))throw Error('Unsupported pulled-out beat archive.');
+ for(const entry of p.frontstagePullouts){if(!entry?.id||entry.beat?.id!==entry.id||active.has(entry.id)||archived.has(entry.id))throw Error('A beat cannot be both active and pulled out, or archived twice.');archived.add(entry.id);}
+}

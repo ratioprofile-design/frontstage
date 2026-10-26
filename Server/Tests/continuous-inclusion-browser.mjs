@@ -22,5 +22,23 @@ try{
  await page.locator('#view-mode').selectOption('edit');assert.equal(await page.locator('.continuous-editor [data-beat-id="beat-1"]').count(),0);
  await page.locator('#view-mode').selectOption('board');await page.locator('#blocks [data-beat-id="beat-1"]').click({button:'right'});await page.getByRole('menuitem',{name:'Pull Out Beat',exact:true}).click();assert.equal(await page.locator('#blocks [data-beat-id="beat-1"]').count(),0);
  await page.locator('#view-mode').selectOption('studio');await page.getByLabel('Workspace',{exact:true}).selectOption('pulledOut');await page.getByRole('button',{name:'Restore Beat',exact:true}).click();await page.locator('#view-mode').selectOption('board');assert.equal(await page.locator('#blocks [data-beat-id="beat-1"]').count(),1);
+ const fixture=JSON.parse(await readFile(path.join(root,'Tests/Fixtures/write-panels.frontstage'),'utf8'));
+ const transaction=await page.evaluate(async fixture=>{
+   const {mountContinuousScript}=await import('/continuous-script.js');
+   let doc=structuredClone(fixture),reject=false;
+   const sheet=document.createElement('div');document.body.append(sheet);
+   mountContinuousScript(sheet,{document:()=>doc,readonly:()=>false,matches:()=>true,cleanHTML:html=>{const n=document.createElement('div');n.innerHTML=html;for(const p of n.querySelectorAll('*')){p.removeAttribute('data-beat-id');p.removeAttribute('data-heading-scene');}return n.innerHTML;},status:()=>{},select:()=>{},change:action=>{if(reject)return false;const next=structuredClone(doc);action(next);doc=next;return true;}});
+   const first=sheet.querySelector('[data-beat-id="beat-1"]:not([data-heading-scene])');
+   first.textContent='Before both inserted scenes.';
+   let after=first;
+   for(const [kind,text]of [['slugline','INT. HALL - DAY'],['action','First inserted scene.'],['slugline','EXT. BEACH - NIGHT'],['action','Second inserted scene.']]){
+     const p=document.createElement('p');p.className='sc-line sc-'+kind;p.dataset.beatId='beat-1';p.textContent=text;after.after(p);after=p;
+   }
+   first.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertFromPaste'}));
+   const inserted=doc.project.beats.slice(fixture.project.beats.length).map(scene=>({location:scene.slug.location,html:doc.project.frontstageWhiteboard.beats.filter(b=>b.sceneID===scene.id).map(b=>b.html).join('')}));
+   reject=true;first.textContent='Must roll back';first.dispatchEvent(new InputEvent('input',{bubbles:true}));const rolledBack=first.isConnected?first.textContent:sheet.querySelector('[data-beat-id="beat-1"]:not([data-heading-scene])').textContent;
+   sheet.remove();return {inserted,rolledBack};
+ },fixture);
+ assert.deepEqual(transaction.inserted.map(s=>s.location),['HALL','BEACH']);assert.ok(transaction.inserted[0].html.includes('First inserted scene.'));assert.ok(!transaction.inserted[0].html.includes('Second inserted scene.'));assert.ok(transaction.inserted[1].html.includes('Second inserted scene.'));assert.equal(transaction.rolledBack,'Before both inserted scenes.');
  await page.screenshot({path:path.join(output,'continuous-inclusion.png')});assert.deepEqual(errors,[]);console.log('PASS: continuous screenplay, inline headings, toolbar, live Markdown, omission and Research restoration');
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}

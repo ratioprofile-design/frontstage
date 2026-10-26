@@ -66,6 +66,10 @@ extension Project {
         let savedSnippets: [BoardBeat]?
         if let raw = version["frontstageSnippets"] { savedSnippets = try JSONDecoder().decode([BoardBeat].self, from: JSONEncoder().encode(raw)) }
         else { savedSnippets = nil }
+        let archivedIDs = Set(pulledOutBeats.map(\.id))
+        if savedSnippets?.contains(where: { archivedIDs.contains($0.id) }) == true {
+            throw ProjectError.invalidProject("Restore the pulled-out beats from Research before restoring this snapshot")
+        }
         let currentSnippets = native ? try whiteboard().beats.filter { $0.sceneID == sceneID } : []
         if native {
             let board = try whiteboard()

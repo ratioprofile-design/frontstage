@@ -47,6 +47,7 @@ export function restoreRevision(document,id,revisionID) {
   if(s.frontstageTextLocked||current.some(beat=>beat.locked||blockLocked(b,beat.blockID))) throw Error('Unlock the scene and its beats before restoring a revision.');
   if(revision.frontstageSnippets&&revision.frontstageSnippets.some(beat=>beat.sceneID!==id||!b.blocks.some(block=>block.id===beat.blockID)))throw Error('A saved beat container is missing or belongs to another scene. Restore the container before restoring this snapshot.');
   if(!revision.frontstageSnippets&&current.length>1) throw Error('This older revision has no snippet boundaries.');
+  if(revision.frontstageSnippets?.some(beat=>(document.project.frontstagePullouts||[]).some(entry=>entry.id===beat.id)))throw Error('Restore pulled-out beats from Research before restoring this snapshot.');
   captureRevision(document,id,`Before restoring ${revision.frontstageLabel||'revision'}`);
   s.title=revision.title??s.title;s.summary=revision.summary??s.summary;
   if(revision.frontstageEditorial) for(const key of ['slug','sceneNumber']) { if(revision.frontstageEditorial[key]==null) delete s[key]; else s[key]=structuredClone(revision.frontstageEditorial[key]); }

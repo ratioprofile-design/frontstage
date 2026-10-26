@@ -21,6 +21,18 @@ final class ScriptInclusionTests: XCTestCase {
         let before = p; XCTAssertThrowsError(try p.restorePulledOutBeats(["beat-1"])); XCTAssertEqual(p, before)
         try p.restorePulledOutBeats(["beat-1"], into: "block-2"); XCTAssertTrue(p.pulledOutBeats.isEmpty)
     }
+    func testRevisionCannotDuplicatePulledOutBeat() throws {
+        var p = try fixture()
+        try p.saveRevision(sceneID: 1, label: "Before pull out")
+        let revision = try XCTUnwrap(p.revisions(for: 1).first)
+        try p.pullOutBeats(["beat-1"])
+        let before = p
+        XCTAssertThrowsError(try p.restoreRevision(sceneID: 1, revisionID: revision.id))
+        XCTAssertEqual(p, before)
+        try p.restorePulledOutBeats(["beat-1"])
+        try p.restoreRevision(sceneID: 1, revisionID: revision.id)
+        XCTAssertEqual(try p.whiteboard().beats.filter { $0.id == "beat-1" }.count, 1)
+    }
     func testContinuousTextAndHeadingEdits() throws {
         var p = try fixture(); let notes = p.writingNotes(sceneID: 1)
         try p.applyScriptDocument(beatHTML: ["beat-1": "<p>தமிழ்</p>"], headings: [.init(sceneID: 1, text: "ext. river - night")])

@@ -64,6 +64,15 @@ public struct Project: Equatable, Sendable {
         guard let beats = state["beats"]?.array else {
             throw ProjectError.invalidProject("beats must be an array")
         }
+        let activeIDs = Set((state["frontstageWhiteboard"]?.object?["beats"]?.array ?? []).compactMap { $0.object?["id"]?.string })
+        var archivedIDs = Set<String>()
+        for entry in state["frontstagePullouts"]?.array ?? [] {
+            guard let record = entry.object, let id = record["id"]?.string, !id.isEmpty,
+                  record["beat"]?.object?["id"]?.string == id,
+                  !activeIDs.contains(id), archivedIDs.insert(id).inserted else {
+                throw ProjectError.invalidProject("A beat cannot be both active and pulled out, or archived twice")
+            }
+        }
         var ids = Set<Decimal>()
         for beat in beats {
             guard let fields = beat.object, case .number(let id) = fields["id"],

@@ -10,3 +10,13 @@ applyScriptDocument(doc,{'beat-1':'<p>தமிழ்</p>'},{1:'EXT. RIVER - NIG
 const id=insertScriptScene(doc,'beat-1','<p>Before</p>','<p>After</p>','INT. HOME - DAY');assert.ok(doc.project.frontstageWhiteboard.beats.some(b=>b.id===id&&b.sceneID!==1));
 const omitted=structuredClone(base);omitted.project.frontstageWhiteboard.beats[0].omitted=true;let pulled=pullOutBeats(omitted,new Set(['beat-1']));pulled.project.frontstageWhiteboard.blocks=pulled.project.frontstageWhiteboard.blocks.filter(b=>b.id!=='block-1');assert.throws(()=>restorePulledOutBeats(pulled,new Set(['beat-1'])));assert.equal(restorePulledOutBeats(pulled,new Set(['beat-1']),'block-2').project.frontstageWhiteboard.beats.find(b=>b.id==='beat-1').omitted,true);
 console.log('PASS: archive preservation, omitted restoration, missing destinations, inline headings and scene insertion');
+// Snapshot restoration must not duplicate a record that is still in Research.
+const {captureRevision,restoreRevision}=await import('../Public/workspace-model.js');
+const {validateInclusion}=await import('../Public/script-inclusion.js');
+const snap=structuredClone(base),revision=captureRevision(snap,1,'Before pull out');
+const archived=pullOutBeats(snap,new Set(['beat-1']));
+assert.throws(()=>restoreRevision(archived,1,revision),/Research/);
+const invalid=structuredClone(archived);invalid.project.frontstageWhiteboard.beats.push(structuredClone(base.project.frontstageWhiteboard.beats[0]));
+assert.throws(()=>validateInclusion(invalid),/both active/);
+validateInclusion(restorePulledOutBeats(archived,new Set(['beat-1'])));
+console.log('PASS: revision restoration and archive collision guards');

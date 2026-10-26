@@ -183,12 +183,19 @@ struct NoteRichEditor: NSViewRepresentable {
             if let decoded = try? NoteTextCodec.decode(safeHTML(html)) { text.textStorage?.setAttributedString(decoded) }
         }
         private func safeHTML(_ html: String) -> String {
-            let allowed: Set<String> = ["p", "div", "br", "b", "strong", "i", "em", "u", "s", "ul", "ol", "li", "blockquote", "h1", "h2", "h3", "pre", "code", "hr"]
+            let allowed: Set<String> = ["p", "div", "br", "b", "strong", "i", "em", "u", "s", "ul", "ol", "li", "blockquote", "h1", "h2", "h3", "pre", "code", "hr", "a"]
             guard let regex = try? NSRegularExpression(pattern: "<[^>]*>") else { return "" }
             var result = html
             for match in regex.matches(in: html, range: NSRange(html.startIndex..., in: html)).reversed() {
                 guard let range = Range(match.range, in: result) else { continue }
                 let tag = String(result[range]), name = tag.dropFirst().drop(while: { $0 == "/" || $0.isWhitespace }).prefix(while: { $0.isLetter }).lowercased()
+                if name == "a", !tag.hasPrefix("</"),
+                   let expression = try? NSRegularExpression(pattern: #"(?i)\bhref\s*=\s*["']([^"']+)["']"#),
+                   let match = expression.firstMatch(in: tag, range: NSRange(tag.startIndex..., in: tag)),
+                   let linkRange = Range(match.range(at: 1), in: tag), let url = URL(string: String(tag[linkRange])),
+                   ["http", "https", "mailto"].contains(url.scheme?.lowercased() ?? "") {
+                    result.replaceSubrange(range, with: "<a href=\"\(NoteTextCodec.escape(url.absoluteString))\">"); continue
+                }
                 result.replaceSubrange(range, with: allowed.contains(name) ? "<" + (tag.hasPrefix("</") ? "/" : "") + name + ">" : "")
             }
             return result
@@ -257,7 +264,7 @@ struct WriteHistoryPanel: View {
             VStack(alignment: .leading) {
                 Text("Scene History").font(.headline)
                 TextField("Snapshot label", text: $label)
-                Button("Capture Snapshot") { guard !workspace.whiteboard.beats.filter({ $0.sceneID == sceneID }).contains(where: { workspace.scriptController($0.id).textView?.hasMarkedText() == true }) else { workspace.errorMessage = "Finish the current text composition before taking a snapshot."; return }; workspace.edit("Capture Snapshot") { try $0.saveRevision(sceneID: sceneID, label: label) } }
+                Button("Capture Snapshot") { guard workspace.scriptController("write-continuous").textView?.hasMarkedText() != true, !workspace.whiteboard.beats.filter({ $0.sceneID == sceneID }).contains(where: { workspace.scriptController($0.id).textView?.hasMarkedText() == true }) else { workspace.errorMessage = "Finish the current text composition before taking a snapshot."; return }; workspace.edit("Capture Snapshot") { try $0.saveRevision(sceneID: sceneID, label: label) } }
                 ForEach(workspace.project.revisions(for: sceneID)) { revision in
                     DisclosureGroup(revision.label) {
                         Text(revision.date, style: .date); Text(revision.date, style: .time)
