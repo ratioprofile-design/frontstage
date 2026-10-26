@@ -1,3 +1,5 @@
+import {webcrypto} from 'node:crypto';
+globalThis.crypto ||= webcrypto;
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import * as m from '../Public/write-panel-model.js';

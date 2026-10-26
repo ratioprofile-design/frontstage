@@ -17,21 +17,35 @@ jobs:
           node-version: 22
       - name: Validate shared design and browser workspaces
         run: |
-          npm install --prefix Server/Tests --no-save --no-package-lock playwright@1.56.1
-          Server/Tests/node_modules/.bin/playwright install chromium
-          node scripts/generate-workspace-design.mjs --check
-          node Server/Tests/story-timeline.mjs
-          node Server/Tests/workspace-model.mjs
-          node Server/Tests/write-panel-model.mjs
-          node Server/Tests/write-panels-browser.mjs
-          node Server/Tests/workspace-parity.mjs
-          node Server/Tests/timeline-layout.mjs
-          node Server/Tests/whiteboard-text-layout.mjs
-          node Server/Tests/script-filter.mjs
-          node Server/Tests/filter-reader.mjs
-          node Server/Tests/whiteboard-delete.mjs
-          node Server/Tests/whiteboard-delete-browser.mjs
+          set -o pipefail
+          mkdir -p build
+          {
+            npm install --prefix Server/Tests --no-save --no-package-lock playwright@1.56.1
+            Server/Tests/node_modules/.bin/playwright install chromium
+            node scripts/generate-workspace-design.mjs --check
+            node Server/Tests/story-timeline.mjs
+            node Server/Tests/workspace-model.mjs
+            node Server/Tests/write-panel-model.mjs
+            node Server/Tests/write-panels-browser.mjs
+            node Server/Tests/workspace-parity.mjs
+            node Server/Tests/timeline-layout.mjs
+            node Server/Tests/whiteboard-text-layout.mjs
+            node Server/Tests/script-filter.mjs
+            node Server/Tests/filter-reader.mjs
+            node Server/Tests/whiteboard-delete.mjs
+            node Server/Tests/whiteboard-delete-browser.mjs
+          } 2>&1 | tee build/browser-validation.log
+      - name: Report browser validation failure
+        if: failure()
+        run: |
+          python3 - <<'PYREPORT'
+          from pathlib import Path
+          p = Path('build/browser-validation.log')
+          if p.exists():
+              print('::error::' + p.read_text()[-6000:].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'))
+          PYREPORT
       - name: Test project model and persistence
+        if: ${{ !cancelled() }}
         env:
           FRONTSTAGE_PARITY_OUTPUT: ${{ github.workspace }}/build/parity
           FRONTSTAGE_PARITY_DOCUMENT: ${{ github.workspace }}/build/parity/browser-edited.frontstage
@@ -61,6 +75,7 @@ jobs:
           path: |
             build/test-results.xml
             build/test.log
+            build/browser-validation.log
             build/build.log
             build/test-artifacts/
       - uses: actions/upload-artifact@v4
