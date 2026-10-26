@@ -16,6 +16,7 @@ struct ScriptWritingWorkspace: View {
     @State private var activeController: ScreenplayEditorController?
     @State private var headingID: Decimal?
     @State private var toggled: Set<String> = []
+    @State private var hiddenTarget: String?
     private var segments: [ScriptSegment] { (try? workspace.project.orderedScript(includeInactive: true)) ?? [] }
     private var plain: Bool { display == "Final Script" || display == "Content Only" }
     private var inset: CGFloat { margin == "Full Margins" ? workspace.paper.leftMargin : margin == "Compact Margins" ? 16 : margin == "Squeezed" ? 8 : 3 }
@@ -53,6 +54,13 @@ struct ScriptWritingWorkspace: View {
         }.frame(height: 40).background(Color(white: 0.2)).accessibilityIdentifier("dedicated-script-tools")
     }
     var body: some View {
+        ScrollViewReader { proxy in
+        WritePagePanels(workspace: workspace, navigate: { sceneID, beatID in
+            if let beatID, let beat = workspace.whiteboard.beats.first(where: { $0.id == beatID }) {
+                if !matches(beat) { hiddenTarget = beatID; return }
+                workspace.selectBoardBeat(beatID); proxy.scrollTo(beatID, anchor: .top)
+            } else { workspace.selectedSceneID = sceneID; proxy.scrollTo("scene-\(sceneID)", anchor: .top) }
+        }) {
         VStack(spacing: 0) {
             tools
             ScrollView([.vertical, .horizontal]) {
@@ -79,16 +87,26 @@ struct ScriptWritingWorkspace: View {
                         .shadow(color: .black.opacity(0.25), radius: 5, y: 3).padding(24)
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).background(Color(white: 0.47))
+        }
+        }
+        .alert("This beat is hidden by screenplay filters", isPresented: Binding(get: { hiddenTarget != nil }, set: { if !$0 { hiddenTarget = nil } })) {
+            Button("Reset filters and reveal") { if let id = hiddenTarget { workspace.reader.filters = ScriptFilters(); filter = ""; workspace.selectBoardBeat(id); DispatchQueue.main.async { proxy.scrollTo(id, anchor: .top) } }; hiddenTarget = nil }
+            Button("Cancel", role: .cancel) { hiddenTarget = nil }
+        }
         }.onChange(of: display) { _, _ in toggled.removeAll(); activeController = nil }
         .onReceive(NotificationCenter.default.publisher(for: NSText.didBeginEditingNotification)) { _ in
             guard let controller = workspace.focusedScreenplayController else { return }
             let keys = segments.flatMap { $0.beatIDs.isEmpty ? ["scene-\($0.scene.id)"] : $0.beatIDs }
-            if keys.contains(where: { workspace.scriptController($0) === controller }) { activeController = controller }
+            if let key = keys.first(where: { workspace.scriptController($0) === controller }) { activeController = controller; if let beat = workspace.whiteboard.beats.first(where: { $0.id == key }) { workspace.selectBoardBeat(beat.id)
+                if let text = controller.textView, text.selectedRange().length > 0, NSMaxRange(text.selectedRange()) <= (text.string as NSString).length { workspace.writingSelectedQuote = (beat.sceneID, (text.string as NSString).substring(with: text.selectedRange())) }
+            } }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSTextView.didChangeSelectionNotification)) { _ in
             guard let controller = workspace.focusedScreenplayController else { return }
             let keys = segments.flatMap { $0.beatIDs.isEmpty ? ["scene-\($0.scene.id)"] : $0.beatIDs }
-            if keys.contains(where: { workspace.scriptController($0) === controller }) { activeController = controller }
+            if let key = keys.first(where: { workspace.scriptController($0) === controller }) { activeController = controller; if let beat = workspace.whiteboard.beats.first(where: { $0.id == key }) { workspace.selectBoardBeat(beat.id)
+                if let text = controller.textView, text.selectedRange().length > 0, NSMaxRange(text.selectedRange()) <= (text.string as NSString).length { workspace.writingSelectedQuote = (beat.sceneID, (text.string as NSString).substring(with: text.selectedRange())) }
+            } }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSControl.textDidBeginEditingNotification)) { _ in activeController = nil }
     }
@@ -103,7 +121,7 @@ struct ScriptWritingWorkspace: View {
             }.buttonStyle(.plain).accessibilityLabel("Edit scene heading: " + segment.scene.heading.text)
             if headingID == segment.scene.id {
                 TextField("Scene title", text: Binding(get: { workspace.project.scenes.first { $0.id == segment.scene.id }?.title ?? "" }, set: { workspace.updateScene(id: segment.scene.id, title: $0) }))
-                TextField("Synopsis", text: Binding(get: { workspace.project.scenes.first { $0.id == segment.scene.id }?.summary ?? "" }, set: { workspace.updateScene(id: segment.scene.id, summary: $0) }))
+                TextField("Synopsis", text: Binding(get: { workspace.project.scenes.first { $0.id == segment.scene.id }?.summary ?? "" }, set: { value in workspace.edit("Scene Summary") { try $0.updateSceneSummary(segment.scene.id, summary: value) } }))
                 SceneHeadingFields(scene: segment.scene, workspace: workspace)
                 Button("Done") { headingID = nil }
             }
@@ -123,7 +141,7 @@ struct ScriptWritingWorkspace: View {
             }
             if display != "Index Cards", plain || expanded { snippet(sceneID: beat.sceneID, beatID: beat.id, key: beat.id) }
             if display == "Content Only" { Color.gray.frame(height: 6).padding(.vertical, 8) }
-        }.contextMenu {
+        }.id(beat.id).contextMenu {
             Button("Split at Cursor") { workspace.splitBoardBeat(beat.id, controller: workspace.scriptController(beat.id)) }.disabled(workspace.whiteboard.isLocked(beat) || activeController !== workspace.scriptController(beat.id))
             Button("Open Beat Editor") { workspace.popup.open(beat.id, workspace: workspace) }
             Button("Select on Whiteboard") { workspace.selectBoardBeat(beat.id); workspace.mode = .board }

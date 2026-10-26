@@ -81,6 +81,7 @@ final class Workspace: ObservableObject {
         case board = "Whiteboard", edit = "Write", pages = "Pages", revisions = "Revisions", people = "People", breakdown = "Breakdown", production = "Production", writingTools = "Writing Tools", studio = "Research & Studio", shared = "Shared Projects"
     }
     @Published private(set) var project = Project()
+    var writingSelectedQuote: (sceneID: Decimal, text: String)?
     @Published var selectedSceneID: Decimal? {
         didSet { if oldValue != selectedSceneID { editor.textView?.undoManager?.removeAllActions() } }
     }
@@ -173,6 +174,7 @@ final class Workspace: ObservableObject {
     }
 
     func edit(_ label: String, key: String? = nil, _ operation: (inout Project) throws -> Void) {
+        guard sharedProjects.linked?.access != "reader" else { errorMessage = "This shared project is read-only."; return }
         let previous = project
         do {
             try operation(&project)
@@ -436,7 +438,9 @@ struct WorkspaceView: View {
             }
             }.background(Color(boardHex: WorkspaceDesign.panelColor))
         }
-        .onChange(of: workspace.showBoardScript) { visible in columns = visible ? .all : .detailOnly }
+        .onAppear { if workspace.mode == .edit { columns = .detailOnly } }
+        .onChange(of: workspace.mode) { old, mode in if mode == .edit { columns = .detailOnly } else if old == .edit { columns = workspace.showBoardScript ? .all : .detailOnly } }
+        .onChange(of: workspace.showBoardScript) { visible in columns = workspace.mode != .edit && visible ? .all : .detailOnly }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             HStack {
                 Text(workspace.hasChanges ? "Unsaved project changes" : "No pending changes")

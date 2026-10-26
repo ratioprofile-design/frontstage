@@ -6,6 +6,7 @@ public struct SceneRevision: Identifiable, Equatable, Sendable {
     public let date: Date
     public let title: String
     public let html: String
+    public let summary: String
 }
 
 extension Project {
@@ -26,7 +27,7 @@ extension Project {
             if case .number(let number) = item["timestamp"] { milliseconds = NSDecimalNumber(decimal: number).doubleValue }
             else { milliseconds = 0 }
             return SceneRevision(id: id, label: item["frontstageLabel"]?.string ?? item["title"]?.string ?? "Revision",
-                date: Date(timeIntervalSince1970: milliseconds / 1000), title: item["title"]?.string ?? "", html: html)
+                date: Date(timeIntervalSince1970: milliseconds / 1000), title: item["title"]?.string ?? "", html: html, summary: item["summary"]?.string ?? "")
         }.reversed()
     }
 
@@ -55,6 +56,7 @@ extension Project {
     }
 
     public mutating func restoreRevision(sceneID: Decimal, revisionID: String) throws {
+        guard scenes.first(where: { $0.id == sceneID })?.isTextLocked == false else { throw ProjectError.invalidProject("Unlock the scene before restoring") }
         let beat = state["beats"]?.array?.first { $0.object?["id"] == .number(sceneID) }?.object
         guard let version = beat?["versions"]?.array?.first(where: { $0.object?["id"] == .string(revisionID) })?.object,
               version["content"]?.string != nil else { throw ProjectError.invalidProject("revision not found") }

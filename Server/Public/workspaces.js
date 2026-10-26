@@ -1,3 +1,4 @@
+import {mountWritePanels} from './write-panels.js';
 import {createScriptFilter,mountScriptFilter,matchesScriptFilter,gapLabel} from './script-filter.js';
 import { workspaceDesign as design } from './workspace-design.js';
 import * as model from './workspace-model.js';
@@ -13,6 +14,7 @@ export function mountWorkspaces(api) {
   let mode='board',sceneID=null,roleID=null,actorID=null,revisionID=null,dayID=null,recordID=null,kind='research',search='',writing=false,projectID=null,paper='letter';
   const root=$('workspace-page'),selector=$('view-mode');
   const scriptDefaults={display:'Final Script',margin:'Full Margins',zoom:1,characters:true,tags:true,synopsis:false,boundaries:false,filter:''};
+  let writePanels=null;
   let scriptView={...scriptDefaults},headingScene=null,activeEditor=null;const expandedBeats=new Set();
   try{const saved=JSON.parse(localStorage.getItem('frontstage-script-dedicated'));if(saved&&['Final Script','Content Only','Expand All','Collapse All','Index Cards'].includes(saved.display))scriptView={...scriptDefaults,...saved};}catch{}
   const scriptPreference=(key,value)=>{scriptView[key]=value;try{localStorage.setItem('frontstage-script-dedicated',JSON.stringify(scriptView));}catch{}render();};
@@ -44,14 +46,14 @@ export function mountWorkspaces(api) {
     if(!scenes().some(s=>s.id===sceneID))sceneID=api.selectedScene()??scenes()[0]?.id;
     $('workspace').dataset.page=mode;$('workspace').classList.toggle('document-mode',mode!=='board');
     $('board-shell').hidden=mode!=='board';root.hidden=mode==='board';$('project-toolbar').hidden=false;
-    renderSidebar();if(writing)return;root.replaceChildren();
+    renderSidebar();if(writing)return;writePanels?.destroy();writePanels=null;root.replaceChildren();
     const title=design.pages.find(p=>p.id===mode).title;root.setAttribute('aria-label',title);document.title=`${doc().name||'Frontstage'} · ${title}`;
     try { ({edit:writePage,pages:pagesPage,revisions:revisionsPage,people:peoplePage,breakdown:breakdownPage,production:productionPage,writingTools:toolsPage,studio:studioPage,shared:sharedPage}[mode])?.(); }
     catch(e){root.replaceChildren(empty('This page could not be opened',e.message));api.status(e.message);}
   }
   function writePage(){
     activeEditor=null;
-    const wrap=el('div',null,'writing-workspace');root.append(wrap);
+    const outer=el('div',null,'writing-panels-host'),wrap=el('div',null,'writing-workspace');root.append(outer);outer.append(wrap);
     const tools=el('nav',null,'dedicated-script-tools');tools.setAttribute('aria-label','Script toolbar');wrap.append(tools);
     const menu=title=>{const detail=el('details'),summary=el('summary',title);detail.append(summary);tools.append(detail);detail.append(el('div',null,'script-menu-items'));return detail;};
     const option=(menu,title,run)=>{const b=button(title,()=>{run();menu.open=false;});b.onpointerdown=e=>e.preventDefault();menu.querySelector('.script-menu-items').append(b);return b;};
@@ -69,7 +71,7 @@ export function mountWorkspaces(api) {
     const presets=menu('Presets');option(presets,'Reading',()=>{scriptView={...scriptDefaults};scriptPreference('display','Final Script');});option(presets,'Story Review',()=>scriptPreference('display','Expand All'));option(presets,'Index Cards',()=>scriptPreference('display','Index Cards'));
     const options=menu('Options');option(options,'Full Screen',()=>{if(document.fullscreenElement)document.exitFullscreen?.();else root.requestFullscreen?.();});option(options,'Writing Settings',()=>navigate('writingTools'));
     tools.append(el('span',scriptView.display,'script-mode-label'));
-    const segments=model.scriptSegments(doc(),{includeInactive:true});if(!segments.length){wrap.append(empty('Your next story starts here','Add a scene or a beat to begin.'),button('Add Scene',()=>api.addScene(),true));return;}
+    const segments=model.scriptSegments(doc(),{includeInactive:true});if(!segments.length){wrap.append(empty('Your next story starts here','Add a scene or a beat to begin.'),button('Add Scene',()=>api.addScene(),true));}
     const desk=el('div',null,'continuous-desk'),sheet=el('div',null,'continuous-paper');desk.append(sheet);wrap.append(desk);applyTypography(sheet);sheet.dataset.display=scriptView.display;sheet.dataset.margin=scriptView.margin;sheet.style.zoom=scriptView.zoom;
     const plain=['Final Script','Content Only'].includes(scriptView.display);
     let filteredGap=[];
@@ -77,7 +79,7 @@ export function mountWorkspaces(api) {
       const s=segment.scene,beats=segment.beatIDs.map(id=>model.board(doc()).beats.find(b=>b.id===id)).filter(Boolean).filter(b=>matchesScriptFilter(b,model.board(doc()),scenes(),scriptFilter.state));
       if(segment.beatIDs.length&&!beats.length){filteredGap.push(...segment.beatIDs.map(id=>model.board(doc()).beats.find(b=>b.id===id)));continue;}
       if(scriptView.display!=='Index Cards'&&!scriptFilter.state.hideHeadings){
-        const heading=el('button',`${segment.number}  ${model.heading(s)}${segment.continuation?' (CONTINUED)':''}`,'script-heading');heading.setAttribute('aria-label','Edit scene heading: '+model.heading(s));sheet.append(heading);
+        const heading=el('button',`${segment.number}  ${model.heading(s)}${segment.continuation?' (CONTINUED)':''}`,'script-heading');heading.setAttribute('aria-label','Edit scene heading: '+model.heading(s));heading.dataset.sceneId=s.id;sheet.append(heading);
         heading.onclick=()=>{headingScene=headingScene===s.id?null:s.id;sceneID=s.id;render();};
         if(headingScene===s.id){const fields=el('div',null,'writing-scene-fields');fields.append(field('Scene title',s.title,(v,d)=>model.scene(d,s.id).title=v),field('Synopsis',s.summary,(v,d)=>model.scene(d,s.id).summary=v),sluglineFields(()=>model.scene(doc(),s.id),()=>scenes(),action=>change(()=>action(),true),!readonly()),button('Done',()=>{headingScene=null;render();}));sheet.append(fields);}
       }
@@ -98,13 +100,15 @@ export function mountWorkspaces(api) {
           const behavior=screenplayToolbar(text,changed,text.contentEditable==='true',()=>characterNames(doc())).editor;
           behavior.split=()=>{const [first,last]=splitAtCaret(text);change(d=>model.splitBeat(d,id,first,last),true);};behavior.open=()=>api.openBeat(id);
           text.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'&&!e.isComposing){e.preventDefault();try{behavior.split();}catch(error){api.status(error.message);}}});
-          text.onfocus=()=>{activeEditor=behavior;enableFormatting(text.isContentEditable);};
+          text.onfocus=()=>{activeEditor=behavior;sceneID=s.id;api.selectScene(s.id,id);writePanels?.select(s.id,id);enableFormatting(text.isContentEditable);};
           text.oncontextmenu=e=>{e.preventDefault();activeEditor=behavior;enableFormatting(text.isContentEditable);behavior.remember();styling.open=true;};
           block.append(text);
         }sheet.append(block);
       }
       if(!segment.beatIDs.length){const p=el('div',null,'script-text');p.innerHTML=api.cleanHTML(segment.html);sheet.append(p);}
     }
+    const reveal=(sid,bid)=>{const node=bid?[...sheet.querySelectorAll('[data-script-beat-id]')].find(n=>n.dataset.scriptBeatId===bid):[...sheet.querySelectorAll('[data-scene-id]')].find(n=>n.dataset.sceneId===String(sid));if(!node)return false;sceneID=sid;api.selectScene(sid,bid);node.scrollIntoView({block:'nearest'});return true;};
+    writePanels=mountWritePanels(outer,wrap,{document:doc,selection:()=>({sceneID,beatID:api.selectedBeat()}),readonly,change:action=>change(action),status:api.status,plain:api.plain,rebuild:render,reveal,resetReveal:(sid,bid)=>{scriptFilter.clear();sceneID=sid;render();requestAnimationFrame(()=>root.querySelector(`[data-script-beat-id="${CSS.escape(bid)}"]`)?.scrollIntoView({block:'nearest'}));}});
   }
   function applyTypography(node){const t=state().frontstageScriptLayout||{};node.style.setProperty('--script-font',t.fontName||'Courier');node.style.setProperty('--script-size',`${t.fontSize||12}px`);node.style.setProperty('--script-line',`${t.lineHeight||14}px`);node.style.setProperty('--script-spacing',`${t.paragraphSpacing??10}px`);}
   function pagesPage(){

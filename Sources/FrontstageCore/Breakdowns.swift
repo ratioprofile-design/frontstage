@@ -20,6 +20,10 @@ public struct BreakdownEntry: Identifiable, Equatable, Sendable {
 }
 
 extension Project {
+    private func requireBreakdownWritable(_ sceneID: Decimal) throws {
+        guard let scene = scenes.first(where: { $0.id == sceneID }) else { throw ProjectError.sceneNotFound }
+        guard !scene.isTextLocked else { throw ProjectError.invalidProject("Unlock the scene before editing breakdown") }
+    }
     private static func breakdownStorageKey(_ beat: [String: JSONValue]) -> String {
         beat["breakdownData"]?.object != nil ? "breakdownData" : "breakdown"
     }
@@ -46,7 +50,8 @@ extension Project {
     }
 
     public mutating func addBreakdownItem(sceneID: Decimal, category: BreakdownCategory,
-        name: String, count: Int = 1, notes: String = "") throws {
+        name: String, count: Int = 1, notes: String = "", sourceQuote: String? = nil) throws {
+        try requireBreakdownWritable(sceneID)
         let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty, (1...100_000).contains(count) else { throw ProjectError.invalidProject("enter an item name and a positive quantity") }
         try editBeat(sceneID) { fields in
@@ -54,7 +59,7 @@ extension Project {
             var breakdown = fields[key]?.object ?? [:]
             var items = breakdown[category.rawValue]?.array ?? []
             items.append(.object(["id": .string(UUID().uuidString), "name": .string(clean), "count": .number(Decimal(count)),
-                                   "category": .string(category.rawValue), "description": .string(notes)]))
+                                   "category": .string(category.rawValue), "description": .string(notes), "sourceQuote": sourceQuote.map(JSONValue.string) ?? .null]))
             breakdown[category.rawValue] = .array(items)
             fields[key] = .object(breakdown)
         }
@@ -62,6 +67,7 @@ extension Project {
 
     public mutating func updateBreakdownItem(sceneID: Decimal, itemID: String, name: String? = nil,
         count: Int? = nil, notes: String? = nil) throws {
+        try requireBreakdownWritable(sceneID)
         guard let entry = breakdownItems(for: sceneID).first(where: { $0.id == itemID }) else { throw ProjectError.invalidProject("breakdown item not found") }
         if let count, !(1...100_000).contains(count) { throw ProjectError.invalidProject("quantity must be positive") }
         if let name, name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { throw ProjectError.invalidProject("item name cannot be empty") }
@@ -79,6 +85,7 @@ extension Project {
     }
 
     public mutating func removeBreakdownItem(sceneID: Decimal, itemID: String) throws {
+        try requireBreakdownWritable(sceneID)
         guard let entry = breakdownItems(for: sceneID).first(where: { $0.id == itemID }) else { throw ProjectError.invalidProject("breakdown item not found") }
         try editBeat(sceneID) { fields in
             var breakdown = fields[entry.storageKey]?.object ?? [:]
@@ -86,6 +93,23 @@ extension Project {
             items.remove(at: entry.index)
             breakdown[entry.bucket] = .array(items)
             fields[entry.storageKey] = .object(breakdown)
+        }
+    }
+}
+
+extension Project {
+    public mutating func moveBreakdownItem(sceneID: Decimal, itemID: String, category: BreakdownCategory) throws {
+        try requireBreakdownWritable(sceneID)
+        guard let entry = breakdownItems(for: sceneID).first(where: { $0.id == itemID }) else { throw ProjectError.invalidProject("Breakdown item not found") }
+        try editBeat(sceneID) { fields in
+            var data = fields[entry.storageKey]?.object ?? [:]
+            var source = data[entry.bucket]?.array ?? []
+            var item = source.remove(at: entry.index).object ?? ["name": .string(entry.name)]
+            item["category"] = .string(category.rawValue)
+            data[entry.bucket] = .array(source)
+            var destination = data[category.rawValue]?.array ?? []
+            destination.append(.object(item)); data[category.rawValue] = .array(destination)
+            fields[entry.storageKey] = .object(data)
         }
     }
 }

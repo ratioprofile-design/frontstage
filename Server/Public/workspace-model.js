@@ -18,7 +18,7 @@ export function scriptSegments(document,{includeInactive=false}={}) {
     const last=result.at(-1); if(last?.scene.id===s.id) { last.html+=beat.html; last.beatIDs.push(beat.id); }
     else { result.push({scene:s,html:beat.html,beatIDs:[beat.id],number:result.find(r=>r.scene.id===s.id)?.number||s.sceneNumber||String(seen.size+1),continuation:seen.has(s.id)}); seen.add(s.id); }
   }
-  for(const s of scenes) if(!s.isDisabled&&!seen.has(s.id)&&s.content) result.push({scene:s,html:s.content,beatIDs:[],number:s.sceneNumber||String(new Set(result.map(r=>r.scene.id)).size+1),continuation:false});
+  for(const s of scenes) if((includeInactive||!s.isDisabled)&&!seen.has(s.id)&&(includeInactive||s.content)) result.push({scene:s,html:s.content,beatIDs:[],number:s.sceneNumber||String(new Set(result.map(r=>r.scene.id)).size+1),continuation:false});
   return result;
 }
 export function heading(s) { const h=s.slug||{}; return `${h.prefix||'INT.'} ${(h.location||'UNTITLED SCENE').trim()} - ${h.time||'DAY'}`.toUpperCase(); }

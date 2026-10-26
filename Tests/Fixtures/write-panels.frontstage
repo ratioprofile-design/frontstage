@@ -1,0 +1,304 @@
+{
+  "format": "frontstage",
+  "version": 1,
+  "name": "The Invitation",
+  "project": {
+    "nextId": 3,
+    "customFuture": {
+      "preserve": true
+    },
+    "beats": [
+      {
+        "id": 1,
+        "title": "The Invitation",
+        "content": "<p class=\"sc-action\">தமிழ் — an invitation arrives.</p>",
+        "summary": "The story begins",
+        "slug": {
+          "prefix": "INT.",
+          "location": "STATION",
+          "time": "DAY"
+        },
+        "characters": [],
+        "breakdown": {
+          "PROPS": [
+            {
+              "id": "e39e816b-773e-48f1-9b72-27758f53df95",
+              "name": "Invitation",
+              "category": "PROPS",
+              "count": 2,
+              "description": "Sealed envelope"
+            }
+          ],
+          "props": [
+            {
+              "id": "legacy-prop",
+              "name": "Legacy lamp",
+              "future": 42
+            }
+          ],
+          "VFX": [
+            "Fog"
+          ]
+        },
+        "versions": [
+          {
+            "id": "5a2a48af-4b70-4ebd-a940-9638965ca729",
+            "frontstageLabel": "Before the reply",
+            "timestamp": 1792607904608,
+            "title": "The Invitation",
+            "content": "<p class=\"sc-action\">தமிழ் — an invitation arrives.</p>",
+            "summary": "The story begins",
+            "frontstageEditorial": {
+              "slug": {
+                "prefix": "INT.",
+                "location": "STATION",
+                "time": "DAY"
+              },
+              "sceneNumber": null
+            },
+            "frontstageSnippets": [
+              {
+                "id": "beat-1",
+                "sceneID": 1,
+                "blockID": "block-1",
+                "title": "The Invitation",
+                "synopsis": "The story begins",
+                "html": "<p class=\"sc-action\">தமிழ் — an invitation arrives.</p>",
+                "kind": "story",
+                "color": "#39798c",
+                "characters": [],
+                "tags": [],
+                "mustBeCaused": false,
+                "omitted": false,
+                "locked": false,
+                "order": 0,
+                "start": 0,
+                "duration": 2
+              }
+            ]
+          }
+        ],
+        "frontstageParallel": [
+          {
+            "id": "parallel-1",
+            "left": "The invitation",
+            "right": "அழைப்பு"
+          }
+        ],
+        "notes": [
+          {
+            "id": "note-import",
+            "content": "<p>Imported <b>தமிழ்</b></p>",
+            "color": "#fff4bc",
+            "timestamp": 10,
+            "future": {
+              "keep": true
+            }
+          },
+          {
+            "id": "audio-import",
+            "type": "audio",
+            "audioUrl": "legacy-recording",
+            "content": "Transcript",
+            "timestamp": 12
+          }
+        ],
+        "scratchpad": "Legacy scratchpad"
+      },
+      {
+        "id": 2,
+        "title": "The Decision",
+        "content": "<p class=\"sc-character\">MAYA</p><p class=\"sc-dialogue\">I will go.</p>",
+        "slug": {
+          "prefix": "EXT.",
+          "location": " station ",
+          "time": "NIGHT"
+        },
+        "characters": [
+          "MAYA"
+        ]
+      }
+    ],
+    "frontstageWhiteboard": {
+      "version": 1,
+      "viewport": {
+        "origin": {
+          "x": 0,
+          "y": 0
+        },
+        "zoom": 1
+      },
+      "layers": [
+        {
+          "id": "main",
+          "name": "Main Layer",
+          "height": 300,
+          "collapsed": false,
+          "locked": false,
+          "unused": false
+        }
+      ],
+      "blocks": [
+        {
+          "id": "block-1",
+          "name": "The Invitation",
+          "layerID": "main",
+          "position": {
+            "x": 70,
+            "y": 70
+          },
+          "width": 224,
+          "collapsed": false,
+          "locked": false,
+          "standalone": false
+        },
+        {
+          "id": "block-2",
+          "name": "The Decision",
+          "layerID": "main",
+          "position": {
+            "x": 360,
+            "y": 70
+          },
+          "width": 224,
+          "collapsed": false,
+          "locked": false,
+          "standalone": true
+        }
+      ],
+      "beats": [
+        {
+          "id": "beat-1",
+          "sceneID": 1,
+          "blockID": "block-1",
+          "title": "The Invitation",
+          "synopsis": "The story begins",
+          "html": "<p class=\"sc-action\">தமிழ் — an invitation arrives.</p>",
+          "kind": "story",
+          "color": "#39798c",
+          "characters": [],
+          "tags": [],
+          "mustBeCaused": false,
+          "omitted": false,
+          "locked": false,
+          "order": 0,
+          "start": 0,
+          "duration": 2
+        },
+        {
+          "id": "beat-2",
+          "sceneID": 2,
+          "blockID": "block-2",
+          "title": "The Decision",
+          "synopsis": "",
+          "html": "<p class=\"sc-character\">MAYA</p><p class=\"sc-dialogue\">I will go.</p>",
+          "kind": "story",
+          "color": "#a34eae",
+          "characters": [
+            "MAYA"
+          ],
+          "tags": [],
+          "mustBeCaused": true,
+          "omitted": false,
+          "locked": false,
+          "order": 1,
+          "start": 3,
+          "duration": 2
+        }
+      ],
+      "dependencies": [
+        {
+          "id": "cause-1",
+          "cause": "beat-1",
+          "effect": "beat-2",
+          "reason": "The invitation forces a decision",
+          "reference": false
+        }
+      ],
+      "strokes": []
+    },
+    "characterData": {
+      "MAYA": {
+        "id": "0ab00e6d-0d76-406c-8865-3d08d242d79c",
+        "name": "MAYA",
+        "backstory": "",
+        "artists": [
+          {
+            "id": "dd35b8a5-bc51-4ee5-87ec-a253b9d5782b",
+            "name": "Anika",
+            "rank": 1,
+            "status": "idea",
+            "notes": "",
+            "contact": {
+              "email": "anika@example.test",
+              "phone": "555-0100"
+            }
+          }
+        ],
+        "relationships": [],
+        "images": [],
+        "confirmedArtistId": "dd35b8a5-bc51-4ee5-87ec-a253b9d5782b"
+      }
+    },
+    "frontstageProduction": {
+      "schemaVersion": 1,
+      "days": [
+        {
+          "id": "b9f080bb-f9fe-4c49-81ab-31c7a91c3261",
+          "number": 1,
+          "date": "2026-10-22",
+          "callTime": "06:00",
+          "wrapTime": "18:00",
+          "sceneIDs": [
+            1,
+            2
+          ],
+          "castCalls": {
+            "MAYA": {
+              "onSetTime": "07:00",
+              "notes": "Platform entrance"
+            }
+          },
+          "locationName": "Station"
+        }
+      ]
+    },
+    "frontstageStudio": {
+      "version": 1,
+      "records": [
+        {
+          "id": "106cf16b-9c43-4c52-8a21-24f4b16104f7",
+          "kind": "research",
+          "title": "Station reference",
+          "body": "Keep the original invitation.",
+          "fields": {},
+          "assetIDs": [
+            "96889948-726c-43cc-a65c-8175cdeaffe3"
+          ],
+          "sceneID": 1
+        }
+      ],
+      "assets": [
+        {
+          "id": "96889948-726c-43cc-a65c-8175cdeaffe3",
+          "filename": "reference.txt",
+          "data": "UmVmZXJlbmNlIHRleHQ="
+        }
+      ]
+    },
+    "frontstageScriptLayout": {
+      "fontName": "Courier",
+      "fontSize": 12,
+      "lineHeight": 14,
+      "paragraphSpacing": 10
+    },
+    "globalNotes": [
+      {
+        "id": "project-note",
+        "content": "<p>Project note</p>",
+        "color": "#ffffff",
+        "timestamp": 11
+      }
+    ]
+  }
+}

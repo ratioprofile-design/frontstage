@@ -1,0 +1,37 @@
+import { createServer } from 'node:http';
+import { createRequire } from 'node:module';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+const require=createRequire(import.meta.url),{chromium}=require(process.env.FRONTSTAGE_PLAYWRIGHT_MODULE||'playwright');
+const root=fileURLToPath(new URL('../../',import.meta.url)),publicDir=path.join(root,'Server/Public'),output=path.join(root,'build/parity');await mkdir(output,{recursive:true});
+const server=createServer(async(req,res)=>{try{const relative=req.url==='/'?'index.html':decodeURIComponent(req.url.slice(1));if(relative.includes('/')||relative.includes('..')){res.writeHead(404);res.end();return;}const content=await readFile(path.join(publicDir,relative));res.setHeader('Content-Type',relative.endsWith('.js')?'application/javascript':relative.endsWith('.css')?'text/css':'text/html');res.end(content);}catch{res.writeHead(404);res.end();}});
+await new Promise(resolve=>server.listen(17845,'127.0.0.1',resolve));let browser;
+try{
+ browser=await chromium.launch({executablePath:process.env.FRONTSTAGE_CHROMIUM||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':chromium.executablePath()),headless:true,args:['--no-sandbox']});
+ const context=await browser.newContext({viewport:{width:1440,height:950}}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('http://127.0.0.1:17845');await page.locator('#local-mode').click();await page.locator('#back').click();
+ await page.locator('#import-project').setInputFiles(path.join(root,'Tests/Fixtures/write-panels.frontstage'));await page.waitForSelector('#workspace:not([hidden])');
+ await page.locator('#view-mode').selectOption('edit');
+ const left=page.locator('.write-left'),right=page.locator('.write-right'),editor=page.locator('.continuous-paper [data-beat-id="beat-1"]');
+ assert.equal(await left.locator('.scene-summary-card').count(),2);assert.ok(await right.isVisible());
+ await editor.evaluate(node=>{window.retainedWriteEditor=node;node.focus();const r=document.createRange();r.selectNodeContents(node);r.collapse(false);getSelection().removeAllRanges();getSelection().addRange(r);});
+ await left.getByLabel('Scene summary',{exact:true}).first().fill('தமிழ் '.repeat(100));await left.getByLabel('Scene summary',{exact:true}).first().blur();
+ assert.ok(await editor.evaluate(node=>node===window.retainedWriteEditor));
+ await right.getByRole('button',{name:'Add Note',exact:true}).click();const note=right.getByRole('textbox',{name:'Note text',exact:true}).last();await note.fill('A note for scene one');
+ await page.locator('.continuous-paper [data-beat-id="beat-2"]').focus();assert.equal(await right.getByText('A note for scene one',{exact:true}).count(),0);
+ await editor.focus();assert.equal(await right.getByText('A note for scene one',{exact:true}).count(),1);
+ await right.getByLabel('Note scope',{exact:true}).selectOption('Project');assert.equal(await right.getByText('Project note',{exact:true}).count(),1);
+ await right.getByRole('button',{name:'Breakdown',exact:true}).click();assert.equal(await right.locator('details').count(),16);
+ await right.getByLabel('Item name',{exact:true}).fill('Test prop');await right.getByLabel('Quantity',{exact:true}).fill('3');await right.getByRole('button',{name:'Add Requirement',exact:true}).click();
+ const props=right.locator('details').filter({has:page.locator('summary').filter({hasText:/^PROPS|^Props/})});await props.locator('summary').click();assert.ok(await props.getByLabel('Requirement name',{exact:true}).count()>0);
+ const card=props.locator('.workspace-card').filter({has:page.getByLabel('Requirement name',{exact:true}).filter({hasText:''})});
+ await props.getByLabel('Move to category',{exact:true}).last().selectOption('SAFETY');
+ await right.getByRole('button',{name:'History',exact:true}).click();await right.getByLabel('Snapshot label',{exact:true}).fill('Panel snapshot');await right.getByRole('button',{name:'Capture Snapshot',exact:true}).click();assert.equal(await right.getByText('Panel snapshot',{exact:true}).count(),1);
+ await page.screenshot({path:path.join(output,'browser-write-panels.png')});
+ await page.setViewportSize({width:850,height:850});await page.locator('.write-panel-switches').getByRole('button',{name:'Scenes / Locations',exact:true}).click();await page.locator('.write-panel-switches').getByRole('button',{name:'Notes / Breakdown / History',exact:true}).click();assert.equal(await left.isVisible(),false);assert.equal(await right.isVisible(),true);
+ await page.screenshot({path:path.join(output,'browser-write-panels-narrow.png')});
+ assert.deepEqual(errors,[]);console.log('PASS: Write panels, Tamil summaries, retained editor, scoped notes, category movement, snapshots and drawers');
+}finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}
