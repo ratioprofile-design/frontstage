@@ -80,7 +80,7 @@ struct WriteScenePanel: View {
             TextEditor(text: Binding(get: { workspace.project.scenes.first { $0.id == id }?.summary ?? "" }, set: { value in workspace.edit("Scene Summary", key: "summary-\(id)") { try $0.updateSceneSummary(id, summary: value) } }))
                 .frame(height: expandedSummary.contains(id) ? 240 : 76).disabled(card.scene.isTextLocked).accessibilityLabel("Scene summary")
             Button("Expand / collapse summary") { if !expandedSummary.insert(id).inserted { expandedSummary.remove(id) } }.font(.caption)
-            Text(Array(Set(card.beats.flatMap(\.characters))).sorted().joined(separator: " · ")).font(.caption)
+            Text(Array(Set(card.beats.flatMap(\.characters) + ScriptCueNames.characters(in: card.scene.html))).sorted().joined(separator: " · ")).font(.caption)
             DisclosureGroup("Beats (\(card.beats.count))", isExpanded: Binding(get: { expanded.contains(id) }, set: { if $0 { expanded.insert(id) } else { expanded.remove(id) } })) {
                 ForEach(card.beats) { beat in Button(beat.title) { navigate(id, beat.id) }.buttonStyle(.plain).padding(4) }
             }

@@ -8,6 +8,7 @@ export function mountWritePanels(host,center,api) {
   const save=()=>localStorage.setItem('frontstage-write-panels',JSON.stringify(pref));
   const layout=el('div',null,'write-panel-layout'),left=el('aside',null,'write-panel write-left'),right=el('aside',null,'write-panel write-right'),bar=el('nav',null,'write-panel-switches');
   host.append(bar,layout);layout.append(left,center,right);center.classList.add('write-center');
+  let drawer=null;
   let current=api.selection(),search='',breakdownSearch='',expanded=new Set(),quote='',quoteScene=null;
   const run=action=>{try{return action();}catch(e){api.status(e.message);}};
   const button=(title,action,write=false)=>{const b=el('button',title);b.type='button';b.disabled=write&&api.readonly();b.onclick=()=>run(action);return b;};
@@ -15,8 +16,8 @@ export function mountWritePanels(host,center,api) {
   const scene=()=>api.document().project.beats.find(s=>s.id===current.sceneID);
   const input=(label,value,change,multiline=false)=>{const field=el('label',label),i=el(multiline?'textarea':'input');i.value=value??'';i.setAttribute('aria-label',label);i.disabled=api.readonly();i.onchange=()=>run(()=>change(i.value));field.append(i);return field;};
   const select=(label,value,options,change)=>{const field=el('label',label),s=el('select');s.setAttribute('aria-label',label);for(const option of options){const o=el('option',option);o.value=option;s.append(o);}s.value=value;s.onchange=()=>run(()=>change(s.value));field.append(s);return field;};
-  function widths(){layout.style.setProperty('--write-left',pref.left+'px');layout.style.setProperty('--write-right',pref.right+'px');layout.dataset.left=String(pref.leftOpen);layout.dataset.right=String(pref.rightOpen);}
-  function toggle(side){pref[side+'Open']=!pref[side+'Open'];if(window.innerWidth<900&&pref[side+'Open'])pref[side==='left'?'rightOpen':'leftOpen']=false;save();widths();}
+  function widths(){layout.style.setProperty('--write-left',pref.left+'px');layout.style.setProperty('--write-right',pref.right+'px');layout.dataset.left=String(window.innerWidth<900?drawer==='left':pref.leftOpen);layout.dataset.right=String(window.innerWidth<1180?drawer==='right':pref.rightOpen);}
+  function toggle(side){if(window.innerWidth<(side==='left'?900:1180))drawer=drawer===side?null:side;else pref[side+'Open']=!pref[side+'Open'];save();widths();}
   bar.append(button('Scenes / Locations',()=>toggle('left')),button('Notes / Breakdown / History',()=>toggle('right')));
   for(const [panel,side]of[[left,'left'],[right,'right']]){const handle=el('div',null,'write-resizer');handle.tabIndex=0;handle.setAttribute('role','separator');handle.setAttribute('aria-label','Resize '+side+' panel');handle.onkeydown=e=>{if(['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();pref[side]=Math.max(side==='left'?220:260,Math.min(480,pref[side]+(e.key==='ArrowRight'?10:-10)*(side==='left'?1:-1)));save();widths();}};handle.onpointerdown=e=>{e.preventDefault();const start=e.clientX,width=pref[side];handle.setPointerCapture(e.pointerId);handle.onpointermove=event=>{pref[side]=Math.max(side==='left'?220:260,Math.min(480,width+(event.clientX-start)*(side==='left'?1:-1)));widths();};handle.onpointerup=()=>{handle.onpointermove=null;save();};};panel.append(handle);}
   const leftBody=el('div',null,'write-panel-body'),rightBody=el('div',null,'write-panel-body');left.append(leftBody);right.append(rightBody);
@@ -25,7 +26,7 @@ export function mountWritePanels(host,center,api) {
   function cardView(card){const s=card.scene,id=s.id,box=el('article',null,'scene-summary-card');box.dataset.sceneId=id;box.classList.toggle('selected',id===current.sceneID);
     box.append(button(`${card.number} · ${model.heading(s)}`,()=>navigate(card)),el('strong',s.title||'Untitled Scene'),el('small',`${s.frontstageTextLocked?'Locked':s.status==='ready'?'Ready':'Work in progress'} · ${card.beats.length} beats · ${(s.versions||[]).length} versions`));
     const summary=input('Scene summary',s.summary,value=>mutate(d=>data.updateSceneSummary(d,id,value),false),true);summary.querySelector('textarea').disabled=api.readonly()||!!s.frontstageTextLocked;box.append(summary);box.append(button('Expand / collapse summary',()=>summary.classList.toggle('expanded')));
-    box.append(el('small',[...new Set([...(s.characters||[]),...card.beats.flatMap(b=>b.characters||[])])].join(' · ')));
+    const script=document.createElement('template');script.innerHTML=s.content||'';const cues=[...script.content.querySelectorAll('.sc-character')].map(n=>n.textContent.trim().toUpperCase().replace(/\s*\([^)]*\)\s*$/,''));box.append(el('small',[...new Set([...(s.characters||[]),...card.beats.flatMap(b=>b.characters||[]),...cues])].filter(Boolean).join(' · ')));
     box.append(button(`${expanded.has(id)?'▾':'▸'} Beats (${card.beats.length})`,()=>{expanded.has(id)?expanded.delete(id):expanded.add(id);renderLeft();}));
     if(expanded.has(id))for(const beat of card.beats)box.append(button(beat.title,()=>navigate(card,beat.id)));
     box.draggable=!api.readonly();box.ondragstart=e=>{if(e.target.closest('textarea,input')){e.preventDefault();return;}e.dataTransfer.setData('text/frontstage-scene',String(id));};box.ondragover=e=>{if([...e.dataTransfer.types].includes('text/frontstage-scene'))e.preventDefault();};box.ondrop=e=>{e.preventDefault();const idText=e.dataTransfer.getData('text/frontstage-scene'),source=api.document().project.beats.find(s=>String(s.id)===idText);if(source&&source.id!==id)run(()=>{api.change(d=>data.reorderScene(d,source.id,id));api.rebuild();});};return box;
@@ -54,9 +55,9 @@ export function mountWritePanels(host,center,api) {
   function refreshPanels(){renderLeft();renderRight();}
   function captureSelection(){const selection=window.getSelection(),node=selection?.anchorNode?.parentElement,script=node?.closest('.script-text[data-beat-id]');if(script&&selection.toString()){quote=selection.toString();quoteScene=model.board(api.document()).beats.find(b=>b.id===script.dataset.beatId)?.sceneID;}}
   center.addEventListener('mouseup',captureSelection);center.addEventListener('keyup',captureSelection);
-  if(window.innerWidth<1180)pref.rightOpen=false;if(window.innerWidth<900)pref.leftOpen=false;
+  
   let lastWidth=window.innerWidth;
-  const resize=new ResizeObserver(()=>{const width=window.innerWidth;if(width<1180&&lastWidth>=1180)pref.rightOpen=false;if(width<900&&lastWidth>=900){pref.leftOpen=false;pref.rightOpen=false;}lastWidth=width;widths();});resize.observe(host);
+  const resize=new ResizeObserver(()=>{const width=window.innerWidth;if((width<1180&&lastWidth>=1180)||(width<900&&lastWidth>=900))drawer=null;lastWidth=width;widths();});resize.observe(host);
   widths();refreshPanels();
   return {destroy(){resize.disconnect();},select(sceneID,beatID){if(current.sceneID===sceneID&&current.beatID===beatID)return;current={sceneID,beatID};refreshPanels();},refresh:refreshPanels};
 }
