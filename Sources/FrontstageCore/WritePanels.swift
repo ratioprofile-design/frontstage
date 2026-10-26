@@ -33,7 +33,7 @@ extension Project {
     public mutating func updateSceneSummary(_ sceneID: Decimal, summary: String) throws {
         guard let scene = scenes.first(where: { $0.id == sceneID }) else { throw ProjectError.sceneNotFound }
         guard !scene.isTextLocked else { throw ProjectError.invalidProject("Unlock the scene before editing its summary") }
-        try editBeat(sceneID) { $0["summary"] = .string(summary) }
+        if usesOneBeatPerScene { try updateScene(id: sceneID, summary: summary) } else { try editBeat(sceneID) { $0["summary"] = .string(summary) } }
     }
     private func noteOwner(_ sceneID: Decimal?) -> [String: JSONValue] {
         if let sceneID { return state["beats"]?.array?.first { $0.object?["id"]?.decimal == sceneID }?.object ?? [:] }

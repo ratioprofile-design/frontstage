@@ -52,52 +52,132 @@ struct WriteScenePanel: View {
     let navigate: (Decimal, String?) -> Void
     @AppStorage("write-left-tab") private var tab = "Scenes"
     @State private var search = ""
-    @State private var expanded: Set<Decimal> = []
-    @State private var expandedSummary: Set<Decimal> = []
-    private var cards: [SceneCard] { ((try? workspace.project.sceneCards()) ?? []).filter { search.isEmpty || [$0.number, $0.scene.heading.text, $0.scene.title, $0.scene.summary].joined(separator: " ").localizedCaseInsensitiveContains(search) } }
+    @State private var conversion = false
+    private var cards: [SceneCard] { ((try? workspace.project.sceneCards()) ?? []).filter { search.isEmpty || [$0.number, $0.scene.heading.text] .joined(separator: " ").localizedCaseInsensitiveContains(search) || $0.beats.contains { ($0.title + " " + $0.synopsis).localizedCaseInsensitiveContains(search) } } }
     var body: some View {
         VStack {
             Picker("Navigation", selection: $tab) { Text("Scenes").tag("Scenes"); Text("Locations").tag("Locations") }.pickerStyle(.segmented)
-            Button("Pulled Out · Research") { workspace.mode = .studio }
             TextField("Search scenes", text: $search)
+            if !workspace.project.usesOneBeatPerScene { Button("Review Converted Copy") { conversion = true } }
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
                     if tab == "Locations" {
                         let groups = Dictionary(grouping: cards) { $0.scene.heading.location.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() }
                         ForEach(groups.keys.sorted(), id: \.self) { key in
-                            DisclosureGroup("\(key.isEmpty ? "Unspecified" : key) (\(groups[key]?.count ?? 0))") { ForEach(groups[key] ?? []) { card in sceneCard(card) } }
+                            DisclosureGroup(key.isEmpty ? "Unspecified" : key) { ForEach(groups[key] ?? []) { card in beatCards(card) } }
                         }
-                    } else { ForEach(cards) { card in sceneCard(card) } }
+                    } else { ForEach(cards) { card in beatCards(card) } }
                 }
             }
         }.padding(10).frame(maxHeight: .infinity)
+            .sheet(isPresented: $conversion) { SceneConversionReview(workspace: workspace) }
     }
-    private func sceneCard(_ card: SceneCard) -> some View {
-        let id = card.id
-        return VStack(alignment: .leading, spacing: 8) {
-            Button("\(card.number) · \(card.scene.heading.text)") { navigate(id, card.beats.first?.id) }.buttonStyle(.plain)
-            Text(card.scene.title).bold()
-            Text("\(card.scene.isTextLocked ? "Locked" : workspace.project.sceneReadiness(id)) · \(card.beats.count) beats · \(card.versionCount) versions").font(.caption).foregroundStyle(.secondary)
-            TextEditor(text: Binding(get: { workspace.project.scenes.first { $0.id == id }?.summary ?? "" }, set: { value in workspace.edit("Scene Summary", key: "summary-\(id)") { try $0.updateSceneSummary(id, summary: value) } }))
-                .frame(height: expandedSummary.contains(id) ? 240 : 76).disabled(card.scene.isTextLocked).accessibilityLabel("Scene summary")
-            Button("Expand / collapse summary") { if !expandedSummary.insert(id).inserted { expandedSummary.remove(id) } }.font(.caption)
-            Text(Array(Set(card.beats.flatMap(\.characters) + ScriptCueNames.characters(in: card.scene.html))).sorted().joined(separator: " · ")).font(.caption)
-            DisclosureGroup("Beats (\(card.beats.count))", isExpanded: Binding(get: { expanded.contains(id) }, set: { if $0 { expanded.insert(id) } else { expanded.remove(id) } })) {
-                ForEach(card.beats) { beat in
-                    HStack {
-                        Button(beat.title + (beat.omitted ? " · Omitted" : "")) { navigate(id, beat.id) }.buttonStyle(.plain).padding(4)
-                        if beat.omitted { Button("Include") { workspace.edit("Include Beat") { try $0.setBeatOmitted(beat.id, omitted: false) } } }
-                    }
+    @ViewBuilder private func beatCards(_ card: SceneCard) -> some View {
+        ForEach(card.beats.filter { !$0.omitted && !workspace.whiteboard.isUnused($0) }) { beat in
+            SimpleWriteBeatCard(workspace: workspace, beat: beat, scene: card.scene, number: card.number, navigate: navigate)
+        }
+    }
+}
+struct SimpleWriteBeatCard: View {
+    @ObservedObject var workspace: Workspace
+    let beat: BoardBeat
+    let scene: FrontstageCore.Scene
+    let number: String
+    let navigate: (Decimal, String?) -> Void
+    @State private var editing: String?
+    @State private var draft = ""
+    @State private var expanded = false
+    @State private var dropBefore = false
+    @State private var dropAfter = false
+    @FocusState private var focused: Bool
+    private var locked: Bool { workspace.whiteboard.isLocked(beat) || scene.isTextLocked || workspace.sharedProjects.linked?.access == "reader" }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top, spacing: 8) {
+                Text(number).bold().padding(7).background(.orange.opacity(0.8)).foregroundStyle(.black)
+                VStack(alignment: .leading, spacing: 4) {
+                    if editing == "title" { TextField("Beat title", text: $draft).focused($focused).onSubmit { finish(true) } }
+                    else { Text(beat.title.isEmpty ? "Untitled Beat" : beat.title).bold().fixedSize(horizontal: false, vertical: true).onTapGesture(count: 2) { begin("title") } }
+                    Text(scene.heading.text).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            }.padding(10)
+            Divider()
+            if editing == "synopsis" {
+                TextEditor(text: $draft).frame(minHeight: 130).focused($focused).accessibilityLabel("Beat summary")
+                    .onKeyPress(.return) { press in if press.modifiers.contains(.command) || press.modifiers.contains(.control) { finish(true); return .handled }; return .ignored }
+            } else {
+                Text(beat.synopsis.isEmpty ? "Double-click to add a summary…" : beat.synopsis)
+                    .font(.callout).foregroundStyle(beat.synopsis.isEmpty ? .secondary : .primary)
+                    .lineLimit(expanded ? nil : 4).fixedSize(horizontal: false, vertical: true).padding(10)
+                    .onTapGesture(count: 2) { begin("synopsis") }
+                if beat.synopsis.count > 220 { Button(expanded ? "Show less" : "Show more") { expanded.toggle() }.font(.caption).padding(.horizontal, 10) }
+            }
+            Rectangle().fill(dropAfter ? Color.accentColor : .clear).frame(height: 12)
+                .dropDestination(for: String.self) { values, _ in move(values, after: true) } isTargeted: { dropAfter = $0 }
+        }.background(.secondary.opacity(0.07))
+            .overlay(RoundedRectangle(cornerRadius: 4).stroke(workspace.selectedBoardBeatID == beat.id ? Color.accentColor : .gray.opacity(0.35)))
+            .overlay(alignment: .top) { if dropBefore { Rectangle().fill(Color.accentColor).frame(height: 3) } }
+            .onTapGesture { if editing == nil { navigate(scene.id, beat.id) } }
+            .contextMenu { Button("Edit title") { begin("title") }.disabled(locked); Button("Edit summary") { begin("synopsis") }.disabled(locked); Button("Pull Out Scene") { workspace.edit("Pull Out Scene") { try $0.pullOutBeats([beat.id]) } }.disabled(locked) }
+            .onDrag { NSItemProvider(object: "frontstage-card:\(beat.id)" as NSString) }
+            .dropDestination(for: String.self) { values, _ in move(values, after: false) } isTargeted: { dropBefore = $0 }
+            .onExitCommand { finish(false) }
+            .onChange(of: focused) { _, value in if !value { finish(true) } }
+    }
+    private func begin(_ field: String) { guard !locked else { return }; editing = field; draft = field == "title" ? beat.title : beat.synopsis; focused = true }
+    private func finish(_ save: Bool) {
+        guard let field = editing else { return }
+        if let text = NSApp.keyWindow?.firstResponder as? NSTextView, text.hasMarkedText() { return }
+        editing = nil
+        if save { workspace.edit("Beat Card", key: "card-\(beat.id)-\(field)") { try $0.updateBeatCard(beat.id, title: field == "title" ? draft : nil, synopsis: field == "synopsis" ? draft : nil) } }
+    }
+    private func move(_ values: [String], after: Bool) -> Bool {
+        guard let value = values.first, value.hasPrefix("frontstage-card:") else { return false }
+        let id = String(value.dropFirst("frontstage-card:".count)); guard id != beat.id else { return false }
+        let ordered = workspace.whiteboard.orderedBeats.filter { $0.id != id }, index = ordered.firstIndex { $0.id == beat.id }!
+        let target = after ? (index + 1 < ordered.count ? ordered[index + 1].id : nil) : beat.id
+        workspace.edit("Reorder Scene") { project in
+            let board = try project.whiteboard()
+            guard !project.scenes.contains(where: { scene in scene.isTextLocked && board.beats.contains { ($0.id == id || $0.id == target) && $0.sceneID == scene.id } }) else { throw ProjectError.invalidProject("Unlock the scene before reordering") }
+            try project.reorderTimelineBeats([id], before: target)
+        }; return true
+    }
+}
+struct SceneConversionReview: View {
+    @ObservedObject var workspace: Workspace
+    @Environment(\.dismiss) private var dismiss
+    @State private var choices: [Decimal: [String: Set<String>]] = [:]
+    @State private var original: Project?
+    private var source: Project { original ?? workspace.project }
+    var body: some View {
+        VStack(alignment: .leading) {
+            Text("Review Converted Copy").font(.title2)
+            Text("The original stays unchanged. Select destinations for shared data; selecting more than one explicitly copies it. Original history and unknown fields remain in legacy reference.")
+            ScrollView {
+                ForEach((try? source.sceneConversionGroups()) ?? []) { group in
+                    VStack(alignment: .leading) {
+                        Text(group.scene.title).font(.headline)
+                        if group.conflict { Text("Titles or summaries differ. The converted scenes use each whiteboard beat's title and synopsis.").foregroundStyle(.orange) }
+                        ForEach(group.beats) { beat in Text(beat.title + " — " + (beat.synopsis.isEmpty ? "No summary" : beat.synopsis)) }
+                        ForEach(["notes", "breakdown", "attachments", "production"], id: \.self) { category in
+                            DisclosureGroup(category.capitalized) {
+                                ForEach(group.beats) { beat in
+                                    Toggle(beat.title, isOn: Binding(get: { (choices[group.id]?[category] ?? Set(group.beats.prefix(1).map(\.id))).contains(beat.id) }, set: { included in
+                                        var selected = choices[group.id]?[category] ?? Set(group.beats.prefix(1).map(\.id))
+                                        if included { selected.insert(beat.id) } else { selected.remove(beat.id) }
+                                        choices[group.id, default: [:]][category] = selected
+                                    }))
+                                }
+                            }
+                        }
+                    }.padding(10)
                 }
             }
-            Button("Pull Out Scene") { workspace.edit("Pull Out Scene") { try $0.pullOutScene(id) } }
-        }.padding(10).background(RoundedRectangle(cornerRadius: 6).fill(.secondary.opacity(0.08)))
-            .overlay(RoundedRectangle(cornerRadius: 6).stroke(workspace.selectedSceneID == id ? Color.accentColor : .gray.opacity(0.4)))
-            .onDrag { NSItemProvider(object: "frontstage-scene:\(id)" as NSString) }
-            .dropDestination(for: String.self) { values, _ in
-                guard let raw = values.first, raw.hasPrefix("frontstage-scene:"), let source = Decimal(string: String(raw.dropFirst(17))), source != id else { return false }
-                workspace.edit("Reorder Scene") { try $0.reorderSceneCard(source, before: id) }; return true
-            }
+            HStack { Button("Cancel") { dismiss() }; Spacer(); Button("Create Converted Copy") {
+                do { let copy = try source.convertedSceneCopy(choices: choices); workspace.loadCopy(copy); workspace.mode = .edit; dismiss() }
+                catch { workspace.errorMessage = error.localizedDescription }
+            }.disabled(workspace.sharedProjects.linked?.access == "reader") }
+        }.padding(20).frame(width: 660, height: 600).onAppear { original = workspace.project }
     }
 }
 
@@ -146,17 +226,26 @@ struct WriteNoteCard: View {
             if note.editable {
                 NoteRichEditor(html: Binding(get: { workspace.project.writingNotes(sceneID: sceneID).first { $0.id == note.id }?.content ?? note.content }, set: { value in workspace.edit("Note Text", key: "note-\(note.id)") { try $0.updateWritingNote(sceneID: sceneID, id: note.id, content: value) } }))
                     .frame(height: 150).accessibilityLabel("Note text")
-                Picker("Note color", selection: Binding(get: { note.color }, set: { color in workspace.edit("Note Color") { try $0.updateWritingNote(sceneID: sceneID, id: note.id, color: color) } })) {
-                    ForEach(["#fff4bc", "#d9edff", "#e1f4dc", "#f8dce7", "#ffffff"], id: \.self) { Text($0) }
+                HStack(spacing: 5) {
+                    Menu { Button("Move Up") { move(-1) }; Button("Move Down") { move(1) } } label: { Image(systemName: "line.3.horizontal") }
+                        .accessibilityLabel("Move note").onDrag { NSItemProvider(object: "frontstage-note:\(note.id)" as NSString) }
+                    ForEach(["#fff4bc", "#d9edff", "#e1f4dc", "#f8dce7", "#ffffff"], id: \.self) { color in
+                        Button { workspace.edit("Note Color") { try $0.updateWritingNote(sceneID: sceneID, id: note.id, color: color) } } label: { Rectangle().fill(Color(boardHex: color)).frame(width: 13, height: 13) }.buttonStyle(.plain).accessibilityLabel("Note color " + color)
+                    }
+                    Spacer()
+                    Button { workspace.edit("Delete Note") { try $0.removeWritingNote(sceneID: sceneID, id: note.id) } } label: { Image(systemName: "trash") }.buttonStyle(.plain).accessibilityLabel("Delete Note")
                 }
-                HStack {
-                    Button("↑") { workspace.edit("Move Note") { try $0.moveWritingNote(sceneID: sceneID, id: note.id, offset: -1) } }.accessibilityLabel("Move Note Up")
-                    Button("↓") { workspace.edit("Move Note") { try $0.moveWritingNote(sceneID: sceneID, id: note.id, offset: 1) } }.accessibilityLabel("Move Note Down")
-                    Button("Delete Note") { workspace.edit("Delete Note") { try $0.removeWritingNote(sceneID: sceneID, id: note.id) } }
-                }
+
             } else { Text("Imported note · preserved read-only"); Text(note.content.localizedCaseInsensitiveContains("<audio") ? "Audio recording retained in the project" : note.content).textSelection(.enabled) }
         }.disabled(workspace.sharedProjects.linked?.access == "reader" || (sceneID != nil && workspace.project.scenes.first { $0.id == sceneID }?.isTextLocked == true)).padding(8).background(Color(boardHex: note.color).opacity(0.25)).clipShape(RoundedRectangle(cornerRadius: 6))
+        .dropDestination(for: String.self) { values, _ in
+            guard let value = values.first, value.hasPrefix("frontstage-note:") else { return false }
+            let id = String(value.dropFirst("frontstage-note:".count)), notes = workspace.project.writingNotes(sceneID: sceneID)
+            guard let from = notes.firstIndex(where: { $0.id == id }), let to = notes.firstIndex(where: { $0.id == note.id }) else { return false }
+            workspace.edit("Move Note") { try $0.moveWritingNote(sceneID: sceneID, id: id, offset: to - from) }; return true
+        }
     }
+    private func move(_ offset: Int) { workspace.edit("Move Note") { try $0.moveWritingNote(sceneID: sceneID, id: note.id, offset: offset) } }
 }
 final class NoteTextView: NSTextView {
     override func mouseDown(with event: NSEvent) {

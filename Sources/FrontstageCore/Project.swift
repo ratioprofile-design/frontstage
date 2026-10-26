@@ -33,9 +33,10 @@ public struct Project: Equatable, Sendable {
     public var name: String
     var state: [String: JSONValue]
 
-    public init(name: String = "Untitled Screenplay") {
+    public init(name: String = "Untitled Screenplay", oneBeatPerScene: Bool = false) {
         self.name = name
         state = ["beats": .array([]), "nextId": .number(1)]
+        if oneBeatPerScene { state["frontstageSceneModel"] = .string("oneBeatPerScene") }
     }
 
     public init(data: Data, fallbackName: String = "Imported Screenplay") throws {
@@ -57,6 +58,7 @@ public struct Project: Equatable, Sendable {
             state = root
         }
         try validate()
+        try validateSceneModel()
         state = JSONValue.object(state).removingLegacyCredentials().object ?? [:]
     }
 
@@ -162,6 +164,7 @@ public struct Project: Equatable, Sendable {
     }
 
     public func encoded() throws -> Data {
+        try validateSceneModel()
         let envelope = JSONValue.object([
             "format": .string("frontstage"), "version": .number(1),
             "name": .string(name), "project": .object(state)

@@ -352,6 +352,7 @@ extension Project {
             guard var fields = rawScenes[i].object, let id = fields["id"]?.decimal, let linked = snippets[id] else { continue }
             let active = linked.filter { !$0.omitted && !unusedBlocks.contains($0.blockID) }, html = active.map(\.html).joined()
             guard fields["frontstageTextLocked"] != .bool(true) || fields["content"]?.string == html else { throw ProjectError.invalidProject("unlock \(fields["title"]?.string ?? "this scene")'s script before changing its snippet text or inclusion") }
+            if usesOneBeatPerScene, let beat = linked.first { fields["title"] = .string(beat.title); fields["summary"] = .string(beat.synopsis) }
             fields["content"] = .string(html); fields["isDisabled"] = .bool(active.isEmpty)
             fields["characters"] = .array(Array(Set(active.flatMap(\.characters))).sorted().map(JSONValue.string))
             rawScenes[i] = .object(fields)
@@ -367,10 +368,10 @@ extension Project {
         guard existing.layers.contains(where: { $0.id == layerID }), !existing.layers.first(where: { $0.id == layerID })!.locked else { throw ProjectError.invalidProject("unlock the destination layer") }
         if let blockID { guard existing.blocks.contains(where: { $0.id == blockID }), !existing.isBlockLocked(blockID) else { throw ProjectError.invalidProject("unlock the destination block") } }
         let sceneID: Decimal
-        if let targetSceneID {
+        if let targetSceneID, !usesOneBeatPerScene || !existing.beats.contains(where: { $0.sceneID == targetSceneID }) {
             guard candidate.scenes.contains(where: { $0.id == targetSceneID }) else { throw ProjectError.sceneNotFound }
             sceneID = targetSceneID
-        } else if let blockID, let owner = existing.beats.first(where: { $0.blockID == blockID }) { sceneID = owner.sceneID }
+        } else if !usesOneBeatPerScene, let blockID, let owner = existing.beats.first(where: { $0.blockID == blockID }) { sceneID = owner.sceneID }
         else { sceneID = candidate.addScene(); try candidate.updateScene(id: sceneID, title: title) }
         // Preserve the projection taken before addScene, which otherwise introduces a duplicate legacy beat.
         var board = existing
@@ -437,6 +438,10 @@ extension Project {
 
     @discardableResult
     public mutating func splitBoardBeat(_ id: String, firstHTML: String, secondHTML: String) throws -> String {
+        if usesOneBeatPerScene {
+            guard let beat = try whiteboard().beats.first(where: { $0.id == id }), let scene = scenes.first(where: { $0.id == beat.sceneID }) else { throw ProjectError.sceneNotFound }
+            return try insertScriptScene(afterSplitting: id, beforeHTML: firstHTML, afterHTML: secondHTML, heading: scene.heading.inlineText)
+        }
         let nextID = UUID().uuidString
         try editWhiteboard { board in
             guard let i = board.beats.firstIndex(where: { $0.id == id }), !board.isLocked(board.beats[i]) else { throw ProjectError.invalidProject("select an unlocked beat") }
@@ -617,6 +622,7 @@ extension Project {
     }
 
     public mutating func mergeBoardBeats(_ ids: Set<String>) throws {
+        guard !usesOneBeatPerScene else { throw ProjectError.invalidProject("Scenes remain separate. Use a beat group to organize them.") }
         try editWhiteboard { board in
             let chosen = board.orderedBeats.filter { ids.contains($0.id) }
             guard chosen.count == ids.count, chosen.count > 1, Set(chosen.map(\.sceneID)).count == 1,

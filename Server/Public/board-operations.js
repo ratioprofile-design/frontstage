@@ -290,8 +290,8 @@ export function splitBlockAt(source,id,x){
 }
 export function reorderTimelineBeats(source,ids,targetID){
  const board=copy(source),ordered=[...board.beats].sort((a,b)=>a.order-b.order),moving=ordered.filter(b=>ids.has(b.id)),locked=lockedBlockIDs(board);
- if(!moving.length||moving.length!==ids.size||ids.has(targetID)||!ordered.some(b=>b.id===targetID)||moving.some(b=>b.locked||locked.has(b.blockID)))throw Error('Choose unlocked beats and a different insertion point.');
- const sequence=ordered.filter(b=>!ids.has(b.id));sequence.splice(sequence.findIndex(b=>b.id===targetID),0,...moving);
+ if(!moving.length||moving.length!==ids.size||(targetID!=null&&(ids.has(targetID)||!ordered.some(b=>b.id===targetID)))||moving.some(b=>b.locked||locked.has(b.blockID)))throw Error('Choose unlocked beats and a different insertion point.');
+ const sequence=ordered.filter(b=>!ids.has(b.id));sequence.splice(targetID==null?sequence.length:sequence.findIndex(b=>b.id===targetID),0,...moving);
  for(const group of board.blocks.filter(b=>b.containerKind==='beatGroup')){const indices=sequence.flatMap((b,i)=>b.blockID===group.id?[i]:[]);if(indices.length&&indices.at(-1)-indices[0]+1!==indices.length)throw Error("Keep a group's beats together, or convert it to free beats before intercutting.");}
  sequence.forEach((b,i)=>{if(b.order!==i&&(b.locked||locked.has(b.blockID)))throw Error('This reorder would move a locked beat.');b.order=i;});
  for(const block of board.blocks){const descendants=descendantBlocks(board,new Set([block.id])),members=board.beats.filter(b=>descendants.has(b.blockID));if(!members.length)continue;const first=Math.min(...members.map(b=>b.order)),x=40+first*60;if(x!==block.position.x&&locked.has(block.id))throw Error('This reorder would move a locked container.');block.position.x=x;

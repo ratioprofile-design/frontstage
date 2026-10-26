@@ -80,7 +80,7 @@ final class Workspace: ObservableObject {
     enum Mode: String, CaseIterable {
         case board = "Whiteboard", edit = "Write", pages = "Pages", revisions = "Revisions", people = "People", breakdown = "Breakdown", production = "Production", writingTools = "Writing Tools", studio = "Research & Studio", shared = "Shared Projects"
     }
-    @Published private(set) var project = Project()
+    @Published private(set) var project = Project(oneBeatPerScene: true)
     var writingSelectedQuote: (sceneID: Decimal, text: String)?
     @Published var selectedSceneID: Decimal? {
         didSet { if oldValue != selectedSceneID { editor.textView?.undoManager?.removeAllActions() } }
@@ -115,7 +115,7 @@ final class Workspace: ObservableObject {
     let popup = BeatPopupPresenter()
     let sharedProjects = SharedProjectClient()
     private var saveURL: URL?
-    private var savedProject: Project? = Project()
+    private var savedProject: Project? = Project(oneBeatPerScene: true)
     private let recoveryStore: RecoveryStore?
     private var recoveryTask: Task<Void, Never>?
     private var checkedRecovery = false
@@ -178,6 +178,7 @@ final class Workspace: ObservableObject {
         let previous = project
         do {
             try operation(&project)
+            try project.validateSceneModel()
             guard project != previous else { return }
             history.record(previous, label: label, key: key)
             changed()
@@ -231,7 +232,7 @@ final class Workspace: ObservableObject {
             catch { errorMessage = error.localizedDescription; return }
         }
         editor.textView?.undoManager?.removeAllActions()
-        project = Project()
+        project = Project(oneBeatPerScene: true)
         whiteboardCache = nil
         savedProject = project
         history = ProjectHistory()

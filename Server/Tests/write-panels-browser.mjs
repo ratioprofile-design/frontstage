@@ -18,7 +18,7 @@ try{
  const left=page.locator('.write-left'),right=page.locator('.write-right'),editor=page.locator('.continuous-editor [data-beat-id="beat-1"]:not([data-heading-scene])').first();
  assert.equal(await left.locator('.scene-summary-card').count(),2);assert.ok(await right.isVisible());
  await editor.evaluate(node=>{window.retainedWriteEditor=node;node.focus();const r=document.createRange();r.selectNodeContents(node);r.collapse(false);getSelection().removeAllRanges();getSelection().addRange(r);});
- await left.getByLabel('Scene summary',{exact:true}).first().fill('தமிழ் '.repeat(100));await left.getByLabel('Scene summary',{exact:true}).first().blur();
+ await left.locator('.beat-card-synopsis').first().dblclick();await left.getByLabel('Beat summary',{exact:true}).first().fill('தமிழ் '.repeat(100));await left.getByLabel('Beat summary',{exact:true}).first().blur();
  assert.ok(await editor.evaluate(node=>node===window.retainedWriteEditor));
  await right.getByRole('button',{name:'Add Note',exact:true}).click();const note=right.getByRole('textbox',{name:'Note text',exact:true}).last();await note.fill('A note for scene one');
  await page.locator('.continuous-editor [data-beat-id="beat-2"]:not([data-heading-scene])').first().click();assert.equal(await right.getByText('A note for scene one',{exact:true}).count(),0);

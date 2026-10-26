@@ -124,7 +124,7 @@ struct ScriptWritingWorkspace: View {
             Button("Reset filters and reveal") { if let id = hiddenTarget { workspace.reader.filters = ScriptFilters(); filter = ""; workspace.selectBoardBeat(id); if let beat = workspace.whiteboard.beats.first(where: { $0.id == id }), beat.omitted || workspace.whiteboard.isUnused(beat) { workspace.popup.open(id, workspace: workspace) } else { DispatchQueue.main.async { proxy.scrollTo(id, anchor: .top) } } }; hiddenTarget = nil }
             Button("Cancel", role: .cancel) { hiddenTarget = nil }
         }
-        }.onChange(of: display) { _, _ in toggled.removeAll(); activeController = nil }
+        }.onAppear { display = "Final Script" }.onChange(of: display) { _, _ in toggled.removeAll(); activeController = nil }
         .onReceive(NotificationCenter.default.publisher(for: NSText.didBeginEditingNotification)) { _ in
             guard let controller = workspace.focusedScreenplayController else { return }
             let keys = ["write-continuous"] + segments.flatMap { $0.beatIDs.isEmpty ? ["scene-\($0.scene.id)"] : $0.beatIDs }

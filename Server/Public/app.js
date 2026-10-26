@@ -1,3 +1,4 @@
+import {isSceneModel,syncSceneMetadata,validateSceneModel,convertSceneCopy} from './scene-model.js';
 import {pullOutBeats,validateInclusion} from './script-inclusion.js';
 import {createScriptFilter,mountScriptFilter,matchesScriptFilter,gapLabel} from './script-filter.js';
 import { timelineModel, mountTimeline, timelinePreferences } from './story-timeline.js';
@@ -109,7 +110,7 @@ async function recoverSharedDrafts() {
   status(copies.length?'Recovery creates a separate local project. Sign in to resume sharing; the original draft is retained.':'No shared drafts have been saved on this device.');
 }
 $('recover-shared').onclick=()=>recoverSharedDrafts().catch(e=>status(e.message));
-function emptyDocument(name) { return initializeBoard({ format: 'frontstage', version: 1, name, project: { beats: [], nextId: 1 } }); }
+function emptyDocument(name) { return initializeBoard({ format: 'frontstage', version: 1, name, project: { beats: [], nextId: 1, frontstageSceneModel: 'oneBeatPerScene' } }); }
 async function createLocalProject(name, document = emptyDocument(name)) {
   const id = 'local-' + uuid(), db = await database;
   await new Promise((resolve, reject) => { const tx = db.transaction('projects', 'readwrite'); tx.objectStore('projects').put({ id, doc: document, base: clone(document), revision: 0, dirty: false, local: true, name: document.name }); tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
@@ -143,7 +144,7 @@ function initializeBoard(document) {
     };
   }
   if (document.project.frontstageWhiteboard.version !== 1) throw Error('Unsupported whiteboard version');
-  validateInclusion(document);
+  validateInclusion(document);validateSceneModel(document);
   validateBoard(document.project.frontstageWhiteboard, new Set(document.project.beats.map(b => b.id)));
   const native = document.project.frontstageWhiteboard, unused = new Set(native.layers.filter(l => l.unused).map(l => l.id)), inactive = new Set(native.blocks.filter(b => unused.has(b.layerID)).map(b => b.id));
   const projections = new Map();
@@ -170,7 +171,7 @@ function compileSnippets() {
 function edit(action) {
   if (!doc || current.access === 'reader') return false;
   const previous = clone(doc);
-  try { action(); validateInclusion(doc); validateBoard(board(), new Set(doc.project.beats.map(s => s.id))); compileSnippets(); if (equal(previous, doc)) return true; history.push(previous); future.length = 0; if (history.length > 40) history.shift(); dirty = true; saveLocal().catch(e => status(`Local save failed: ${e.message}`)); render(); clearTimeout(timer); timer = setTimeout(sync, 800); return true; }
+  try { action(); syncSceneMetadata(doc);validateSceneModel(doc);validateInclusion(doc); validateBoard(board(), new Set(doc.project.beats.map(s => s.id))); compileSnippets(); if (equal(previous, doc)) return true; history.push(previous); future.length = 0; if (history.length > 40) history.shift(); dirty = true; saveLocal().catch(e => status(`Local save failed: ${e.message}`)); render(); clearTimeout(timer); timer = setTimeout(sync, 800); return true; }
   catch (error) { doc = previous; render(); status(error.message); return false; }
 }
 function restoreHistory(from, to) {
@@ -611,7 +612,8 @@ function openEditor(id) {
 }
 function addBeat(standalone = false, afterID = null, asGroup = false) {
   edit(() => {
-    const previous=board().beats.find(b=>b.id===afterID),previousBlock=board().blocks.find(b=>b.id===previous?.blockID);const owner = standalone ? null : board().beats.find(b => b.id === selected); let blockID = owner?.blockID, sceneID = previous?.sceneID??owner?.sceneID;
+    const previous=board().beats.find(b=>b.id===afterID),previousBlock=board().blocks.find(b=>b.id===previous?.blockID);const owner = standalone ? null : board().beats.find(b => b.id === selected); let blockID = owner?.blockID, sceneID = isSceneModel(doc)?null:previous?.sceneID??owner?.sceneID;
+    if(isSceneModel(doc)){sceneID=Math.max(0,...doc.project.beats.map(s=>s.id))+1;doc.project.beats.push({id:sceneID,title:'Untitled Beat',summary:'',content:'',slug:{prefix:'INT.',location:'',time:'DAY'}});doc.project.nextId=sceneID+1;}
     if((owner&&locked(owner))||(previous&&locked(previous)))throw Error('Unlock the destination before adding a beat.');
     if (!blockID) {
       blockID = uuid(); if(sceneID==null){ sceneID = Math.max(0, ...doc.project.beats.map(b => Number(b.id))) + 1;
@@ -799,6 +801,7 @@ setInterval(async () => {
 }, 5000);
 
 const workspaces = mountWorkspaces({
+  createConvertedCopy: document=>createLocalProject(document.name,document),
   document: () => doc, current: () => current, edit, status, cleanHTML, plain,
   selectedBeat: () => selected,
   selectedScene: () => board().beats.find(b => b.id === selected)?.sceneID,

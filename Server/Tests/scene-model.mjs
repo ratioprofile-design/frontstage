@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {webcrypto} from 'node:crypto';
+import {convertSceneCopy,validateSceneModel,syncSceneMetadata,updateBeatCard} from '../Public/scene-model.js';
+import {splitBeat} from '../Public/workspace-model.js';
+import {pullOutBeats,restorePulledOutBeats} from '../Public/script-inclusion.js';
+import {reorderTimelineBeats} from '../Public/board-operations.js';
+globalThis.crypto ||= webcrypto;
+const original=JSON.parse(await readFile(new URL('../../Tests/Fixtures/write-panels.frontstage',import.meta.url))),legacy=structuredClone(original);
+const extra=structuredClone(legacy.project.frontstageWhiteboard.beats[0]);extra.id='extra';extra.order=.5;extra.title='Second scene';extra.synopsis='Own summary';legacy.project.frontstageWhiteboard.beats.push(extra);
+const before=structuredClone(legacy),copy=convertSceneCopy(legacy,{1:{notes:['extra']}});assert.deepEqual(legacy,before);validateSceneModel(copy);
+assert.equal(new Set(copy.project.frontstageWhiteboard.beats.map(b=>b.sceneID)).size,3);const extraScene=copy.project.beats.find(s=>s.id===copy.project.frontstageWhiteboard.beats.find(b=>b.id==='extra').sceneID);assert.ok(extraScene.notes.length);assert.equal(copy.project.beats.find(s=>s.id===1).notes,undefined);assert.deepEqual(copy.project.frontstageLegacyScenes,legacy.project);
+updateBeatCard(copy,'extra',{title:'தமிழ் scene',synopsis:'New summary'});validateSceneModel(copy);assert.equal(extraScene.title,'தமிழ் scene');assert.equal(extraScene.summary,'New summary');
+const id=splitBeat(copy,'extra','<p>Before</p>','<p>After</p>');syncSceneMetadata(copy);validateSceneModel(copy);assert.notEqual(copy.project.frontstageWhiteboard.beats.find(b=>b.id===id).sceneID,extraScene.id);
+let archive=pullOutBeats(copy,new Set([id]));validateSceneModel(archive);archive=restorePulledOutBeats(archive,new Set([id]));validateSceneModel(archive);
+archive.project.frontstageWhiteboard=reorderTimelineBeats(archive.project.frontstageWhiteboard,new Set([id]),null);validateSceneModel(archive);assert.equal([...archive.project.frontstageWhiteboard.beats].sort((a,b)=>a.order-b.order).at(-1).id,id);
+const invalid=structuredClone(copy);invalid.project.frontstageWhiteboard.beats[1].sceneID=invalid.project.frontstageWhiteboard.beats[0].sceneID;assert.throws(()=>validateSceneModel(invalid));
+console.log('PASS: reviewed conversion, independent scene identities, metadata, splitting, archive and ordering');

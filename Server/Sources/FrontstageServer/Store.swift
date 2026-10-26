@@ -103,6 +103,8 @@ actor ProjectStore {
         if current.changes.contains(changeID.uuidString) { return UpdateResult(conflict: false, snapshot: try snapshot(current, user: user)) }
         guard current.revision == expected else { return UpdateResult(conflict: true, snapshot: try snapshot(current, user: user)) }
         let project = try validated(document)
+        let prior = try validated(current.document)
+        guard !prior.usesOneBeatPerScene || project.usesOneBeatPerScene else { throw Abort(.badRequest, reason: "Update Frontstage: the scene model cannot be downgraded") }
         current.document = try JSONDecoder().decode(JSONValue.self, from: project.encoded())
         current.name = project.name; current.revision += 1; current.modifiedBy = user
         current.changes = Array((current.changes + [changeID.uuidString]).suffix(100))

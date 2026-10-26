@@ -1,3 +1,4 @@
+import {validateSceneModel} from './scene-model.js';
 import {validateInclusion} from './script-inclusion.js';
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 export function mergeJSON(base, local, remote) {
@@ -48,7 +49,7 @@ export function mergeJSON(base, local, remote) {
 }
 
 function snippetDocument(value) {
-  try{validateInclusion(value?.format==='frontstage'?value:{project:value});}catch{return null;}
+  try{validateSceneModel(value?.format==='frontstage'?value:{project:value});validateInclusion(value?.format==='frontstage'?value:{project:value});}catch{return null;}
   const enclosed = value?.format === 'frontstage', state = enclosed ? value.project : value, board = state?.frontstageWhiteboard;
   if (!board || board.version !== 1 || !Array.isArray(state.beats) || !['layers', 'blocks', 'beats', 'dependencies'].every(k => Array.isArray(board[k]))) return null;
   const unique = rows => rows.every(r => r && typeof r.id === 'string' && r.id) && new Set(rows.map(r => r.id)).size === rows.length;

@@ -71,12 +71,12 @@ extension Project {
 }
 
 extension Project {
-    public mutating func reorderTimelineBeats(_ ids: Set<String>, before targetID: String) throws {
+    public mutating func reorderTimelineBeats(_ ids: Set<String>, before targetID: String?) throws {
         try editWhiteboard { board in
             let ordered = board.orderedBeats, moving = ordered.filter { ids.contains($0.id) }
-            guard !moving.isEmpty, moving.count == ids.count, !ids.contains(targetID), ordered.contains(where: { $0.id == targetID }), !moving.contains(where: { board.isLocked($0) }) else { throw ProjectError.invalidProject("Choose unlocked beats and a different insertion point") }
+            guard !moving.isEmpty, moving.count == ids.count, targetID.map({ target in !ids.contains(target) && ordered.contains(where: { $0.id == target }) }) ?? true, !moving.contains(where: { board.isLocked($0) }) else { throw ProjectError.invalidProject("Choose unlocked beats and a different insertion point") }
             var sequence = ordered.filter { !ids.contains($0.id) }
-            let index = sequence.firstIndex { $0.id == targetID }!
+            let index = targetID.flatMap { target in sequence.firstIndex { $0.id == target } } ?? sequence.count
             sequence.insert(contentsOf: moving, at: index)
             let ranks = Dictionary(uniqueKeysWithValues: sequence.enumerated().map { ($0.element.id, Double($0.offset)) })
             for group in board.blocks where group.containerKind == "beatGroup" {
