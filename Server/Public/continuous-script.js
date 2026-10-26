@@ -83,7 +83,11 @@ export function mountContinuousScript(sheet, api) {
           const original = node.dataset.beatId || owner || lastOwner;
           owner = redirects.get(original) || original;
           if (!owner || pendingPullouts.has(owner)) continue;
-          if (node.dataset.headingScene) { headings[node.dataset.headingScene] = node.textContent; continue; }
+          if (node.dataset.headingScene) {
+            const id=node.dataset.headingScene,scene=document.project.beats.find(scene=>String(scene.id)===id);
+            if (!(id in headings) || node.textContent !== inlineHeading(scene)) headings[id]=node.textContent;
+            continue;
+          }
           if (node.classList.contains('sc-slugline') && node.textContent.trim()) {
             const newID = insertScriptScene(document, owner, html[owner] || '', '', node.textContent);
             const beat = model.board(document).beats.find(beat => beat.id === newID);
@@ -105,6 +109,11 @@ export function mountContinuousScript(sheet, api) {
         visible.add(id); headingIDs.add(String(sceneID));
       }
       for (const id of pendingPullouts) visible.delete(id);
+      const editing = paragraph();
+      for (const node of sheet.querySelectorAll('[data-heading-scene]')) {
+        const scene=api.document().project.beats.find(scene=>String(scene.id)===node.dataset.headingScene);
+        if(scene && node!==editing && node.textContent!==inlineHeading(scene)) node.textContent=inlineHeading(scene);
+      }
       acceptedHTML = sheet.innerHTML;
     } catch (error) { sheet.innerHTML = acceptedHTML; api.status(error.message); }
     finally { pendingPullouts.clear(); committing = false; select(); }

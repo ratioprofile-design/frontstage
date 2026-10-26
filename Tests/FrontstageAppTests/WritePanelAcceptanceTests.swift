@@ -40,6 +40,19 @@ final class WritePanelAcceptanceTests: XCTestCase {
             XCTAssertEqual(workspace.project.pulledOutBeats.count, 1)
             workspace.undoProject()
             XCTAssertTrue(workspace.project.pulledOutBeats.isEmpty)
+            workspace.edit("Repeated Scene") { project in
+                try project.setBeatOmitted("beat-1", omitted: false)
+                try project.editWhiteboard { board in
+                    var repeated = board.beats.first { $0.id == "beat-1" }!
+                    repeated.id = "repeat"; repeated.order = 100; board.beats.append(repeated)
+                }
+            }
+            coordinator.load(text)
+            let firstHeading = (text.string as NSString).paragraphRange(for: NSRange(location: 0, length: 0))
+            text.textStorage?.replaceCharacters(in: firstHeading, with: "EXT. PIER - NIGHT\n")
+            coordinator.textDidChange(Notification(name: NSText.didChangeNotification, object: text))
+            XCTAssertEqual(workspace.project.scenes[0].heading.location, "PIER")
+            XCTAssertEqual(text.string.components(separatedBy: "EXT. PIER - NIGHT").count - 1, 2)
         }
     }
     func testPanelsKeepEditorControllerAndTargetNotesAcrossSceneChanges() async throws {

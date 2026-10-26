@@ -26,8 +26,11 @@ try{
  const transaction=await page.evaluate(async fixture=>{
    const {mountContinuousScript}=await import('/continuous-script.js');
    let doc=structuredClone(fixture),reject=false;
+   const repeated=structuredClone(doc.project.frontstageWhiteboard.beats[0]);repeated.id='repeated-beat';repeated.order=100;doc.project.frontstageWhiteboard.beats.push(repeated);
    const sheet=document.createElement('div');document.body.append(sheet);
    mountContinuousScript(sheet,{document:()=>doc,readonly:()=>false,matches:()=>true,cleanHTML:html=>{const n=document.createElement('div');n.innerHTML=html;for(const p of n.querySelectorAll('*')){p.removeAttribute('data-beat-id');p.removeAttribute('data-heading-scene');}return n.innerHTML;},status:()=>{},select:()=>{},change:action=>{if(reject)return false;const next=structuredClone(doc);action(next);doc=next;return true;}});
+   const heading=sheet.querySelector('[data-heading-scene="1"]');heading.textContent='EXT. REPEATED - NIGHT';heading.dispatchEvent(new InputEvent('input',{bubbles:true}));
+   const repeatedHeadings=[...sheet.querySelectorAll('[data-heading-scene="1"]')].map(node=>node.textContent);
    const first=sheet.querySelector('[data-beat-id="beat-1"]:not([data-heading-scene])');
    first.textContent='Before both inserted scenes.';
    let after=first;
@@ -42,8 +45,9 @@ try{
    const nodes=[...sheet.children].filter(node=>node.dataset.beatId===removedBeat.id),range=document.createRange();range.setStart(nodes[0],0);range.setEnd(nodes.at(-1),nodes.at(-1).childNodes.length);getSelection().removeAllRanges();getSelection().addRange(range);
    sheet.dispatchEvent(new InputEvent('beforeinput',{bubbles:true,cancelable:true,inputType:'deleteContentBackward'}));range.deleteContents();sheet.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'deleteContentBackward'}));
    const archived=doc.project.frontstagePullouts?.find(entry=>entry.id===removedBeat.id)?.beat.html;
-   sheet.remove();return {inserted,rolledBack,archived};
+   sheet.remove();return {inserted,rolledBack,archived,repeatedHeadings};
  },fixture);
+ assert.deepEqual(transaction.repeatedHeadings,['EXT. REPEATED - NIGHT','EXT. REPEATED - NIGHT']);
  assert.deepEqual(transaction.inserted.map(s=>s.location),['HALL','BEACH']);assert.ok(transaction.inserted[0].html.includes('First inserted scene.'));assert.ok(!transaction.inserted[0].html.includes('Second inserted scene.'));assert.ok(transaction.inserted[1].html.includes('Second inserted scene.'));assert.equal(transaction.rolledBack,'Before both inserted scenes.');assert.ok(transaction.archived?.includes('First inserted scene.'));
  await page.screenshot({path:path.join(output,'continuous-inclusion.png')});assert.deepEqual(errors,[]);console.log('PASS: continuous screenplay, inline headings, toolbar, live Markdown, omission and Research restoration');
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}

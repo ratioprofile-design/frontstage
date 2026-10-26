@@ -77,7 +77,7 @@ struct ContinuousScriptEditor: NSViewRepresentable {
             }
             ScriptCueNames.capitalize(in: text); loading = false
             let source = text.attributedString(), string = source.string as NSString
-            var assignments = [(NSRange, String)](), created = [(NSRange, String, Decimal)](), succeeded = false, missingHeading = false
+            var assignments = [(NSRange, String)](), created = [(NSRange, String, Decimal)](), succeeded = false, missingHeading = false, repeatedHeadingChanged = false
             workspace.edit("Screenplay", key: "continuous-script") { project in
                 var html = Dictionary(uniqueKeysWithValues: visible.filter { !pendingPullouts.contains($0) }.map { ($0, "") })
                 var headings = [ScriptHeadingEdit](), owner: String?, redirects = [String: String]()
@@ -90,7 +90,11 @@ struct ContinuousScriptEditor: NSViewRepresentable {
                     let line = string.substring(with: range).trimmingCharacters(in: .newlines)
                     let kind = ScreenplayElement(rawValue: attributes[.screenplayElement] as? String ?? "action") ?? .action
                     if let scene = attributes[headingKey] as? String, let sceneID = Decimal(string: scene) {
-                        headings.append(ScriptHeadingEdit(sceneID: sceneID, text: line))
+                        let changed = line != project.scenes.first(where: { $0.id == sceneID })?.heading.inlineText
+                        if let existing = headings.firstIndex(where: { $0.sceneID == sceneID }) {
+                            if changed { headings[existing] = ScriptHeadingEdit(sceneID: sceneID, text: line) }
+                            if changed || headings[existing].text != project.scenes.first(where: { $0.id == sceneID })?.heading.inlineText { repeatedHeadingChanged = true }
+                        } else { headings.append(ScriptHeadingEdit(sceneID: sceneID, text: line)) }
                     } else if kind == .sceneHeading && !line.trimmingCharacters(in: .whitespaces).isEmpty {
                         let newID = try project.insertScriptScene(afterSplitting: id, beforeHTML: html[id] ?? "", afterHTML: "", heading: line)
                         guard let newBeat = try project.whiteboard().beats.first(where: { $0.id == newID }) else { throw ProjectError.sceneNotFound }
@@ -118,7 +122,7 @@ struct ContinuousScriptEditor: NSViewRepresentable {
                 visible.insert(id); headingScenes.insert(sceneID)
             }
             visible.subtract(pendingPullouts); pendingPullouts.removeAll()
-            if missingHeading { load(text) }
+            if missingHeading || repeatedHeadingChanged { load(text) }
             lastSignature = signature(); controller.selectionChanged(); text.scrollRangeToVisible(text.selectedRange())
             if !completing, !(completionChoices[controller.activeElement] ?? []).isEmpty {
                 completing = true; text.complete(nil); completing = false
