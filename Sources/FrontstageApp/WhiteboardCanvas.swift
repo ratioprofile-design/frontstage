@@ -197,7 +197,7 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
             return a.id < b.id
         }
         for block in sortedBlocks {
-            if block.standalone == true && memberCounts[block.id] == 1 && !groups.contains(block.id) { continue }
+            if block.standalone == true && (memberCounts[block.id] ?? 0) <= 1 && !groups.contains(block.id) { continue }
             guard var rect = geometry.blockRects[block.id], rect.intersects(viewport) else { continue }
             if resizingBlock == block.id { rect.width = resizeWidth }
             if movingBlocks && expandedDragBlocks.contains(block.id) { rect.x += dragDelta.x; rect.y += dragDelta.y }
@@ -218,7 +218,7 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
             if movingBeat != nil && selection.contains(id) { rect.x += dragDelta.x; rect.y += dragDelta.y }
             let frame = NSRect(x: rect.x, y: rect.y, width: rect.width, height: rect.height)
             let color = NSColor(boardHex: beat.color)
-            (beat.omitted || board.isUnused(beat) ? color.withAlphaComponent(0.25) : color).setFill()
+            (beat.omitted ? NSColor.gray : board.isUnused(beat) ? color.withAlphaComponent(0.25) : color).setFill()
             let path = NSBezierPath(roundedRect: frame, xRadius: 4, yRadius: 4); path.fill()
             (selection.contains(id) ? NSColor.white : NSColor(calibratedWhite: 1, alpha: 0.3)).setStroke()
             path.lineWidth = selection.contains(id) ? 2 / zoom : 1; path.stroke()
@@ -484,8 +484,8 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
             let ids = selection
             if !blockSelection.isEmpty {
                 let blocks = blockSelection
-                workspace?.edit("Delete Blocks") { try $0.removeBoardBlocks(blocks) }
-            } else { workspace?.edit("Delete Beats") { try $0.removeBoardBeats(ids) } }
+                workspace?.edit("Pull Out Container Contents") { try $0.pullOutContainerContents(blocks) }
+            } else { workspace?.edit("Pull Out Beats") { try $0.pullOutBeats(ids) } }
             selected?([], []); return
         }
         if event.modifierFlags.contains(.command), event.charactersIgnoringModifiers == "a" {
@@ -529,14 +529,14 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
             item("Insert Beat Before", #selector(insertBeforeContext)); item("Insert Beat After", #selector(insertAfterContext))
             item("Characters & Tags…", #selector(editContextBeat)); menu.addItem(.separator())
             item("Split Group Here", #selector(splitGroupContext))
-            item("Omit / Include Beat", #selector(toggleOmitted)); item("Delete Beat", #selector(deleteContext))
+            item("Omit / Include Beat", #selector(toggleOmitted)); item("Pull Out Beat", #selector(deleteContext))
         } else if contextBlock != nil {
             item("Add Beat", #selector(insertContext)); item("Collapse / Expand Block", #selector(collapseContext))
             item("Container Synopsis…", #selector(synopsisContext))
             item("Split Block Here", #selector(splitBlockContext))
             item("Lock / Unlock Block", #selector(lockContext))
             if board.blocks.contains(where: { $0.parentID == contextBlock || ($0.id == contextBlock && $0.containerKind == "beatGroup") }) { item("Ungroup", #selector(ungroupContext)) }
-            item("Delete Block and Contents", #selector(deleteBlockContext))
+            item("Pull Out Container Contents", #selector(deleteBlockContext))
         } else { item("Add Beat Here", #selector(insertContext)) }
         menu.addItem(.separator())
         item(board.usesBlocks(layerAt(contextPoint).id) ? "Disable Use Blocks" : "Enable Use Blocks", #selector(toggleLayerBlocks))
@@ -588,13 +588,13 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
         workspace?.addWhiteboardBeat(blockID: beat.blockID, layerID: layer, before: before)
     }
     @objc private func toggleOmitted() { if let id = contextBeat { workspace?.edit("Beat Inclusion") { try $0.updateBoardBeat(id) { $0.omitted.toggle() } } } }
-    @objc private func deleteContext() { if let id = contextBeat { workspace?.edit("Delete Beat") { try $0.removeBoardBeats([id]) } } }
+    @objc private func deleteContext() { if let id = contextBeat { workspace?.edit("Pull Out Beat") { try $0.pullOutBeats([id]) } } }
     @objc private func collapseContext() { if let id = contextBlock { workspace?.edit("Block Display") { try $0.editWhiteboard { board in if let i = board.blocks.firstIndex(where: { $0.id == id }) { board.blocks[i].collapsed.toggle() } } } } }
     @objc private func lockContext() { if let id = contextBlock { workspace?.edit("Block Lock") { try $0.editWhiteboard { board in if let i = board.blocks.firstIndex(where: { $0.id == id }) { board.blocks[i].locked.toggle() } } } } }
     @objc private func groupBeatContext() { workspace?.edit("Group Beats") { try $0.groupBoardBeats(selection.isEmpty ? Set([contextBeat].compactMap { $0 }) : selection) } }
     @objc private func groupContext() { let ids = blockSelection; workspace?.edit("Group Blocks") { try $0.groupBoardBlocks(ids, name: "New Group") } }
     @objc private func ungroupContext() { if let id = contextBlock { workspace?.edit("Ungroup Blocks") { try $0.ungroupBoardBlocks([id]) } } }
-    @objc private func deleteBlockContext() { if let id = contextBlock { workspace?.edit("Delete Block") { try $0.removeBoardBlocks([id]) } } }
+    @objc private func deleteBlockContext() { if let id = contextBlock { workspace?.edit("Pull Out Container Contents") { try $0.pullOutContainerContents([id]) } } }
 }
 
 extension NSColor {

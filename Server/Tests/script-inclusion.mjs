@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {webcrypto} from 'node:crypto';import {readFile} from 'node:fs/promises';
+import {pullOutBeats,restorePulledOutBeats} from '../Public/script-inclusion.js';
+import {applyScriptDocument,insertScriptScene} from '../Public/continuous-script.js';
+globalThis.crypto ||= webcrypto;
+const base=JSON.parse(await readFile(new URL('../../Tests/Fixtures/write-panels.frontstage',import.meta.url)));
+let doc=pullOutBeats(base,new Set(['beat-1']));assert.equal(doc.project.frontstageWhiteboard.beats.length,1);assert.equal(doc.project.frontstagePullouts.length,1);assert.deepEqual(doc.project.beats[0].notes,base.project.beats[0].notes);
+doc=restorePulledOutBeats(doc,new Set(['beat-1']));assert.equal(doc.project.frontstageWhiteboard.beats.length,2);assert.deepEqual(doc.project.beats[0].breakdown,base.project.beats[0].breakdown);
+applyScriptDocument(doc,{'beat-1':'<p>தமிழ்</p>'},{1:'EXT. RIVER - NIGHT'});assert.equal(doc.project.beats[0].slug.location,'RIVER');
+const id=insertScriptScene(doc,'beat-1','<p>Before</p>','<p>After</p>','INT. HOME - DAY');assert.ok(doc.project.frontstageWhiteboard.beats.some(b=>b.id===id&&b.sceneID!==1));
+const omitted=structuredClone(base);omitted.project.frontstageWhiteboard.beats[0].omitted=true;let pulled=pullOutBeats(omitted,new Set(['beat-1']));pulled.project.frontstageWhiteboard.blocks=pulled.project.frontstageWhiteboard.blocks.filter(b=>b.id!=='block-1');assert.throws(()=>restorePulledOutBeats(pulled,new Set(['beat-1'])));assert.equal(restorePulledOutBeats(pulled,new Set(['beat-1']),'block-2').project.frontstageWhiteboard.beats.find(b=>b.id==='beat-1').omitted,true);
+console.log('PASS: archive preservation, omitted restoration, missing destinations, inline headings and scene insertion');

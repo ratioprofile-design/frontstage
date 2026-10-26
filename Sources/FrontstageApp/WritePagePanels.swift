@@ -58,6 +58,7 @@ struct WriteScenePanel: View {
     var body: some View {
         VStack {
             Picker("Navigation", selection: $tab) { Text("Scenes").tag("Scenes"); Text("Locations").tag("Locations") }.pickerStyle(.segmented)
+            Button("Pulled Out · Research") { workspace.mode = .studio }
             TextField("Search scenes", text: $search)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
@@ -82,8 +83,14 @@ struct WriteScenePanel: View {
             Button("Expand / collapse summary") { if !expandedSummary.insert(id).inserted { expandedSummary.remove(id) } }.font(.caption)
             Text(Array(Set(card.beats.flatMap(\.characters) + ScriptCueNames.characters(in: card.scene.html))).sorted().joined(separator: " · ")).font(.caption)
             DisclosureGroup("Beats (\(card.beats.count))", isExpanded: Binding(get: { expanded.contains(id) }, set: { if $0 { expanded.insert(id) } else { expanded.remove(id) } })) {
-                ForEach(card.beats) { beat in Button(beat.title) { navigate(id, beat.id) }.buttonStyle(.plain).padding(4) }
+                ForEach(card.beats) { beat in
+                    HStack {
+                        Button(beat.title + (beat.omitted ? " · Omitted" : "")) { navigate(id, beat.id) }.buttonStyle(.plain).padding(4)
+                        if beat.omitted { Button("Include") { workspace.edit("Include Beat") { try $0.setBeatOmitted(beat.id, omitted: false) } } }
+                    }
+                }
             }
+            Button("Pull Out Scene") { workspace.edit("Pull Out Scene") { try $0.pullOutScene(id) } }
         }.padding(10).background(RoundedRectangle(cornerRadius: 6).fill(.secondary.opacity(0.08)))
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(workspace.selectedSceneID == id ? Color.accentColor : .gray.opacity(0.4)))
             .onDrag { NSItemProvider(object: "frontstage-scene:\(id)" as NSString) }
@@ -173,10 +180,10 @@ struct NoteRichEditor: NSViewRepresentable {
         init(_ binding: Binding<String>) { self.binding = binding }
         func load(_ html: String, _ text: NSTextView) {
             last = html
-            if let decoded = try? ScreenplayTextCodec.decode(safeHTML(html), width: 260, settings: ScriptLayoutSettings()) { text.textStorage?.setAttributedString(decoded) }
+            if let decoded = try? NoteTextCodec.decode(safeHTML(html)) { text.textStorage?.setAttributedString(decoded) }
         }
         private func safeHTML(_ html: String) -> String {
-            let allowed: Set<String> = ["p", "div", "br", "b", "strong", "i", "em", "u", "s", "ul", "ol", "li", "blockquote"]
+            let allowed: Set<String> = ["p", "div", "br", "b", "strong", "i", "em", "u", "s", "ul", "ol", "li", "blockquote", "h1", "h2", "h3", "pre", "code", "hr"]
             guard let regex = try? NSRegularExpression(pattern: "<[^>]*>") else { return "" }
             var result = html
             for match in regex.matches(in: html, range: NSRange(html.startIndex..., in: html)).reversed() {
@@ -188,7 +195,8 @@ struct NoteRichEditor: NSViewRepresentable {
         }
         func textDidChange(_ notification: Notification) {
             guard let text = notification.object as? NSTextView, !text.hasMarkedText() else { return }
-            last = ScreenplayTextCodec.encode(text.attributedString()); binding.wrappedValue = last
+            LiveNoteFormatting.apply(to: text)
+            last = NoteTextCodec.encode(text.attributedString()); binding.wrappedValue = last
         }
     }
 }

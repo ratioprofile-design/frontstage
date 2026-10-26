@@ -6,6 +6,7 @@ import FrontstageCore
 
 struct StudioView: View {
     @ObservedObject var workspace: Workspace
+    @State private var showPulledOut = false
     @State private var kind = StudioKind.research
     @State private var selected: String?
     @State private var search = ""
@@ -16,6 +17,7 @@ struct StudioView: View {
         HSplitView {
             VStack(alignment: .leading, spacing: 12) {
                 Picker("Workspace", selection: $kind) { ForEach(StudioKind.allCases, id: \.self) { Text($0.label).tag($0) } }
+                Button("Pulled Out") { showPulledOut = true }
                 TextField("Search records", text: $search)
                 List(records, selection: $selected) { Text($0.title).tag($0.id) }
                 HStack {
@@ -67,7 +69,7 @@ struct StudioView: View {
                     }.padding(WorkspaceDesign.padding).textFieldStyle(.roundedBorder)
                 }.frame(minWidth: 350)
             } else { ContentUnavailableView("Select or add a record", systemImage: "books.vertical") }
-        }.onChange(of: kind) { _, _ in selected = records.first?.id }
+        }.sheet(isPresented: $showPulledOut) { VStack { PulledOutShelf(workspace: workspace); Button("Close") { showPulledOut = false }.padding() } }.onChange(of: kind) { _, _ in selected = records.first?.id }
             .onAppear { if let id = workspace.selectedResearchID { selected = id; kind = studio.records.first { $0.id == id }?.kind ?? .research; workspace.selectedResearchID = nil } else if selected == nil { selected = records.first?.id } }
     }
     private var detailFields: [String] {

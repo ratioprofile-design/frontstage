@@ -15,14 +15,14 @@ try{
  await page.goto('http://127.0.0.1:17845');await page.locator('#local-mode').click();await page.locator('#back').click();
  await page.locator('#import-project').setInputFiles(path.join(root,'Tests/Fixtures/write-panels.frontstage'));await page.waitForSelector('#workspace:not([hidden])');
  await page.locator('#view-mode').selectOption('edit');
- const left=page.locator('.write-left'),right=page.locator('.write-right'),editor=page.locator('.continuous-paper [data-beat-id="beat-1"]');
+ const left=page.locator('.write-left'),right=page.locator('.write-right'),editor=page.locator('.continuous-editor [data-beat-id="beat-1"]:not([data-heading-scene])').first();
  assert.equal(await left.locator('.scene-summary-card').count(),2);assert.ok(await right.isVisible());
  await editor.evaluate(node=>{window.retainedWriteEditor=node;node.focus();const r=document.createRange();r.selectNodeContents(node);r.collapse(false);getSelection().removeAllRanges();getSelection().addRange(r);});
  await left.getByLabel('Scene summary',{exact:true}).first().fill('தமிழ் '.repeat(100));await left.getByLabel('Scene summary',{exact:true}).first().blur();
  assert.ok(await editor.evaluate(node=>node===window.retainedWriteEditor));
  await right.getByRole('button',{name:'Add Note',exact:true}).click();const note=right.getByRole('textbox',{name:'Note text',exact:true}).last();await note.fill('A note for scene one');
- await page.locator('.continuous-paper [data-beat-id="beat-2"]').focus();assert.equal(await right.getByText('A note for scene one',{exact:true}).count(),0);
- await editor.focus();assert.equal(await right.getByText('A note for scene one',{exact:true}).count(),1);
+ await page.locator('.continuous-editor [data-beat-id="beat-2"]:not([data-heading-scene])').first().click();assert.equal(await right.getByText('A note for scene one',{exact:true}).count(),0);
+ await editor.click();assert.equal(await right.getByText('A note for scene one',{exact:true}).count(),1);
  await right.getByLabel('Note scope',{exact:true}).selectOption('Project');assert.equal(await right.getByText('Project note',{exact:true}).count(),1);
  await right.getByRole('button',{name:'Breakdown',exact:true}).click();assert.equal(await right.locator('details').count(),16);
  await right.getByLabel('Item name',{exact:true}).fill('Test prop');await right.getByLabel('Quantity',{exact:true}).fill('3');await right.getByRole('button',{name:'Add Requirement',exact:true}).click();
@@ -31,7 +31,7 @@ try{
  await right.getByRole('button',{name:'History',exact:true}).click();await right.getByLabel('Snapshot label',{exact:true}).fill('Panel snapshot');await right.getByRole('button',{name:'Capture Snapshot',exact:true}).click();assert.equal(await right.getByText('Panel snapshot',{exact:true}).count(),1);
  await page.locator('#undo').click();assert.equal(await right.getByText('Panel snapshot',{exact:true}).count(),0);await page.locator('#redo').click();assert.equal(await right.getByText('Panel snapshot',{exact:true}).count(),1);
  await editor.evaluate(node=>{node.focus();const selection=getSelection(),r=document.createRange();r.selectNodeContents(node);r.collapse(false);selection.removeAllRanges();selection.addRange(r);node.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}));node.append(document.createTextNode(' தமிழ்'));window.retainedWriteEditor=node;});
- await page.locator('.write-resizer').first().dispatchEvent('keydown',{key:'ArrowRight'});assert.ok(await editor.evaluate(node=>node===window.retainedWriteEditor&&node.isComposing));await editor.dispatchEvent('compositionend');
+ await page.locator('.write-resizer').first().dispatchEvent('keydown',{key:'ArrowRight'});assert.ok(await editor.evaluate(node=>node===window.retainedWriteEditor&&node.closest('.continuous-editor').isComposing));await editor.dispatchEvent('compositionend');
  const snapshot=right.locator('details').filter({has:page.locator('summary').filter({hasText:/^Panel snapshot$/})});await snapshot.locator('summary').click();page.once('dialog',d=>d.accept());await snapshot.getByRole('button',{name:'Restore This Snapshot',exact:true}).click();assert.equal(await right.getByText('Before restoring Panel snapshot',{exact:true}).count(),1);
  const downloadEvent=page.waitForEvent('download');await page.locator('#download').click();const downloaded=await downloadEvent;await downloaded.saveAs(path.join(output,'write-panels-edited.frontstage'));const exported=JSON.parse(await readFile(path.join(output,'write-panels-edited.frontstage'),'utf8'));assert.ok(exported.project.beats[0].notes.some(n=>n.content.includes('A note for scene one')));assert.equal(exported.project.beats[0].notes.find(n=>n.id==='note-import').future.keep,true);assert.equal(exported.project.beats[0].breakdown.SAFETY.find(n=>n.name==='Test prop').count,3);
  await page.screenshot({path:path.join(output,'browser-write-panels.png')});

@@ -72,7 +72,7 @@ extension Project {
         guard writingNotes(sceneID: sceneID).contains(where: { $0.id == id && $0.editable }) else { throw ProjectError.invalidProject("This imported note is read-only or no longer exists") }
         try editNotes(sceneID: sceneID) { notes in
             guard let i = notes.firstIndex(where: { $0.object?["id"]?.string == id }), var item = notes[i].object else { throw ProjectError.invalidProject("Note not found") }
-            if let content { item["content"] = .string(content) }; if let color { item["color"] = .string(color) }; notes[i] = .object(item)
+            if let content { item["content"] = .string(content); item["frontstageMarkdown"] = .string(NoteMarkdown.source(fromHTML: content)) }; if let color { item["color"] = .string(color) }; notes[i] = .object(item)
         }
     }
     public mutating func removeWritingNote(sceneID: Decimal?, id: String) throws {

@@ -323,7 +323,7 @@ extension Project {
         }
     }
 
-    private mutating func storeWhiteboard(_ board: Whiteboard) throws {
+    mutating func storeWhiteboard(_ board: Whiteboard) throws {
         let encoded = try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(board))
         var fields = state["frontstageWhiteboard"]?.object ?? [:]
         for (key, value) in encoded.object ?? [:] {

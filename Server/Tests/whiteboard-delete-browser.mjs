@@ -17,10 +17,10 @@ try{
  await page.locator('#view-mode').selectOption('board');const before=await page.locator('#blocks>[data-block-id]').count();
  await page.locator('#add-beat').click();const popup=page.locator('.beat-popup.active');await popup.getByLabel('Beat name',{exact:true}).fill('Delete this loose beat');const id=await popup.getAttribute('data-beat-id');await popup.getByRole('button',{name:'Close editor',exact:true}).click();
  const tile=page.locator(`#blocks [data-beat-id="${id}"]`);assert.equal(await tile.count(),1);assert.equal(await page.locator('#blocks>[data-block-id]').count(),before+1);
- await tile.click({button:'right'});await page.getByRole('menuitem',{name:'Delete Beat',exact:true}).click();assert.equal(await tile.count(),0);assert.equal(await page.locator('#blocks>[data-block-id]').count(),before);
+ await tile.click({button:'right'});await page.getByRole('menuitem',{name:'Pull Out Beat',exact:true}).click();assert.equal(await tile.count(),0);assert.equal(await page.locator('#blocks>[data-block-id]').count(),before);
  await page.locator('#undo').click();assert.equal(await tile.count(),1);assert.equal(await page.locator('#blocks>[data-block-id]').count(),before+1);
  await page.locator('#redo').click();assert.equal(await tile.count(),0);assert.equal(await page.locator('#blocks>[data-block-id]').count(),before);
  await page.locator('#undo').click();await tile.click();await page.locator('#canvas').focus();await page.keyboard.press('Delete');assert.equal(await tile.count(),0);assert.equal(await page.locator('#blocks>[data-block-id]').count(),before);
  await page.reload();await page.locator('#local-mode').click();await page.getByRole('button',{name:/The Invitation/}).first().click();await page.locator('#view-mode').selectOption('board');assert.equal(await tile.count(),0);assert.equal(await page.locator('#blocks>[data-block-id]').count(),before);
- assert.deepEqual(errors,[]);console.log('PASS: fresh loose beat deletion by context menu and keyboard leaves no block; undo/redo and reload preserve the correct containers');
+ assert.deepEqual(errors,[]);console.log('PASS: fresh loose beat pull-out by context menu and keyboard leaves no block; undo/redo and reload preserve the correct containers');
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}

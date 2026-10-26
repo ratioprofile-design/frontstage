@@ -12,6 +12,7 @@ struct ScriptWritingWorkspace: View {
     @AppStorage("frontstage-script-dedicated-tags") private var showTags = true
     @AppStorage("frontstage-script-dedicated-synopsis") private var showSynopsis = false
     @AppStorage("frontstage-script-dedicated-boundaries") private var showBoundaries = false
+    @AppStorage("frontstage-script-show-omitted") private var showOmitted = false
     @State private var filter = ""
     @State private var activeController: ScreenplayEditorController?
     @State private var headingID: Decimal?
@@ -29,6 +30,7 @@ struct ScriptWritingWorkspace: View {
                     Picker("Beat Display", selection: $display) { ForEach(["Expand All", "Index Cards", "Collapse All", "Content Only", "Final Script"], id: \.self) { Text($0) } }
                     Divider()
                     Toggle("Show Characters", isOn: $showCharacters); Toggle("Show Tags", isOn: $showTags)
+                    Toggle("Show Omitted Preview", isOn: $showOmitted)
                     Toggle("Show Synopsis", isOn: $showSynopsis); Toggle("Show Block/Group Beginnings", isOn: $showBoundaries)
                     Picker("Margins", selection: $margin) { ForEach(["Full Margins", "Compact Margins", "Squeezed", "Super Squeezed"], id: \.self) { Text($0) } }
                     Button("Zoom In") { zoom = min(2, zoom + 0.1) }; Button("Zoom Out") { zoom = max(0.5, zoom - 0.1) }; Button("100%") { zoom = 1 }
@@ -57,12 +59,40 @@ struct ScriptWritingWorkspace: View {
         ScrollViewReader { proxy in
         WritePagePanels(workspace: workspace, navigate: { sceneID, beatID in
             if let beatID, let beat = workspace.whiteboard.beats.first(where: { $0.id == beatID }) {
-                if !matches(beat) { hiddenTarget = beatID; return }
-                workspace.selectBoardBeat(beatID); proxy.scrollTo(beatID, anchor: .top)
+                if !matches(beat) || beat.omitted || workspace.whiteboard.isUnused(beat) { hiddenTarget = beatID; return }
+                workspace.selectBoardBeat(beatID)
+                if plain, let text = workspace.scriptController("write-continuous").textView {
+                    var found: NSRange?
+                    text.attributedString().enumerateAttribute(NSAttributedString.Key("FrontstageBeatOwner"), in: NSRange(location: 0, length: text.attributedString().length)) { value, range, stop in if value as? String == beatID { found = range; stop.pointee = true } }
+                    if let found { text.scrollRangeToVisible(found) }
+                } else { proxy.scrollTo(beatID, anchor: .top) }
             } else { workspace.selectedSceneID = sceneID; proxy.scrollTo("scene-\(sceneID)", anchor: .top) }
         }) {
         VStack(spacing: 0) {
             tools
+            ScrollView(.horizontal, showsIndicators: false) { HStack {
+                ForEach([ScreenplayElement.sceneHeading] + ScreenplayElement.editable.filter { $0 != .sceneHeading }, id: \.self) { element in
+                    Button(element.label) { (plain ? workspace.scriptController("write-continuous") : activeController)?.format(element) }
+                }
+            }.padding(6) }.frame(height: 38)
+            if showOmitted {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Omitted beats — outside the active screenplay").bold()
+                        ForEach(workspace.whiteboard.orderedBeats.filter { $0.omitted }) { beat in
+                            VStack(alignment: .leading) {
+                                Text(beat.title).bold()
+                                Text((try? ScreenplayTextCodec.decode(beat.html).string) ?? "").textSelection(.enabled)
+                                Button("Include Beat") { workspace.edit("Include Beat") { try $0.setBeatOmitted(beat.id, omitted: false) } }
+                            }.padding(10).frame(maxWidth: .infinity, alignment: .leading).background(.gray.opacity(0.15))
+                        }
+                    }.padding(12)
+                }.frame(maxHeight: 220)
+            }
+            if plain {
+                ContinuousScriptEditor(workspace: workspace, controller: workspace.scriptController("write-continuous"), width: contentWidth, zoom: zoom)
+                    .onAppear { activeController = workspace.scriptController("write-continuous") }
+            } else {
             ScrollView([.vertical, .horizontal]) {
                 if segments.isEmpty { ContentUnavailableView("Your next story starts here", systemImage: "doc.richtext", description: Text("Add a scene or a beat to begin.")) }
                 else {
@@ -87,23 +117,24 @@ struct ScriptWritingWorkspace: View {
                         .shadow(color: .black.opacity(0.25), radius: 5, y: 3).padding(24)
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).background(Color(white: 0.47))
+            }
         }
         }
         .alert("This beat is hidden by screenplay filters", isPresented: Binding(get: { hiddenTarget != nil }, set: { if !$0 { hiddenTarget = nil } })) {
-            Button("Reset filters and reveal") { if let id = hiddenTarget { workspace.reader.filters = ScriptFilters(); filter = ""; workspace.selectBoardBeat(id); DispatchQueue.main.async { proxy.scrollTo(id, anchor: .top) } }; hiddenTarget = nil }
+            Button("Reset filters and reveal") { if let id = hiddenTarget { workspace.reader.filters = ScriptFilters(); filter = ""; workspace.selectBoardBeat(id); if let beat = workspace.whiteboard.beats.first(where: { $0.id == id }), beat.omitted || workspace.whiteboard.isUnused(beat) { workspace.popup.open(id, workspace: workspace) } else { DispatchQueue.main.async { proxy.scrollTo(id, anchor: .top) } } }; hiddenTarget = nil }
             Button("Cancel", role: .cancel) { hiddenTarget = nil }
         }
         }.onChange(of: display) { _, _ in toggled.removeAll(); activeController = nil }
         .onReceive(NotificationCenter.default.publisher(for: NSText.didBeginEditingNotification)) { _ in
             guard let controller = workspace.focusedScreenplayController else { return }
-            let keys = segments.flatMap { $0.beatIDs.isEmpty ? ["scene-\($0.scene.id)"] : $0.beatIDs }
+            let keys = ["write-continuous"] + segments.flatMap { $0.beatIDs.isEmpty ? ["scene-\($0.scene.id)"] : $0.beatIDs }
             if let key = keys.first(where: { workspace.scriptController($0) === controller }) { activeController = controller; if let beat = workspace.whiteboard.beats.first(where: { $0.id == key }) { workspace.selectBoardBeat(beat.id)
                 if let text = controller.textView, text.selectedRange().length > 0, NSMaxRange(text.selectedRange()) <= (text.string as NSString).length { workspace.writingSelectedQuote = (beat.sceneID, (text.string as NSString).substring(with: text.selectedRange())) }
             } }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSTextView.didChangeSelectionNotification)) { _ in
             guard let controller = workspace.focusedScreenplayController else { return }
-            let keys = segments.flatMap { $0.beatIDs.isEmpty ? ["scene-\($0.scene.id)"] : $0.beatIDs }
+            let keys = ["write-continuous"] + segments.flatMap { $0.beatIDs.isEmpty ? ["scene-\($0.scene.id)"] : $0.beatIDs }
             if let key = keys.first(where: { workspace.scriptController($0) === controller }) { activeController = controller; if let beat = workspace.whiteboard.beats.first(where: { $0.id == key }) { workspace.selectBoardBeat(beat.id)
                 if let text = controller.textView, text.selectedRange().length > 0, NSMaxRange(text.selectedRange()) <= (text.string as NSString).length { workspace.writingSelectedQuote = (beat.sceneID, (text.string as NSString).substring(with: text.selectedRange())) }
             } }
@@ -114,18 +145,8 @@ struct ScriptWritingWorkspace: View {
         ContinuousSnippet(workspace: workspace, sceneID: sceneID, beatID: beatID, controller: workspace.scriptController(key), readerWidth: contentWidth * zoom, showControls: false, displayScale: zoom)
     }
     private func heading(_ segment: ScriptSegment) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Button { headingID = headingID == segment.scene.id ? nil : segment.scene.id; workspace.selectedSceneID = segment.scene.id; if let first = segment.beatIDs.first { workspace.selectBoardBeat(first) } } label: {
-                Text("\(segment.number)  \(segment.scene.heading.text)\(segment.isContinuation ? " (CONTINUED)" : "")")
-                    .font(.custom(workspace.project.scriptLayout.fontName, size: workspace.project.scriptLayout.fontSize * zoom).weight(.bold)).frame(maxWidth: .infinity, alignment: .leading)
-            }.buttonStyle(.plain).accessibilityLabel("Edit scene heading: " + segment.scene.heading.text)
-            if headingID == segment.scene.id {
-                TextField("Scene title", text: Binding(get: { workspace.project.scenes.first { $0.id == segment.scene.id }?.title ?? "" }, set: { workspace.updateScene(id: segment.scene.id, title: $0) }))
-                TextField("Synopsis", text: Binding(get: { workspace.project.scenes.first { $0.id == segment.scene.id }?.summary ?? "" }, set: { value in workspace.edit("Scene Summary") { try $0.updateSceneSummary(segment.scene.id, summary: value) } }))
-                SceneHeadingFields(scene: segment.scene, workspace: workspace)
-                Button("Done") { headingID = nil }
-            }
-        }.padding(.vertical, 12)
+        Text("\(segment.number)  \(segment.scene.heading.text)\(segment.isContinuation ? " (CONTINUED)" : "")")
+            .font(.custom(workspace.project.scriptLayout.fontName, size: workspace.project.scriptLayout.fontSize * zoom).weight(.bold)).frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 12)
     }
     private func beatView(_ beat: BoardBeat) -> some View {
         let expanded = (display != "Collapse All") != toggled.contains(beat.id)

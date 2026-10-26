@@ -1,3 +1,4 @@
+import {pullOutBeats} from './script-inclusion.js';
 import {createScriptFilter,mountScriptFilter,matchesScriptFilter,gapLabel} from './script-filter.js';
 import { timelineModel, mountTimeline, timelinePreferences } from './story-timeline.js';
 import { mountWorkspaces } from './workspaces.js';
@@ -166,10 +167,10 @@ function compileSnippets() {
   }
 }
 function edit(action) {
-  if (!doc || current.access === 'reader') return;
+  if (!doc || current.access === 'reader') return false;
   const previous = clone(doc);
-  try { action(); validateBoard(board(), new Set(doc.project.beats.map(s => s.id))); compileSnippets(); if (equal(previous, doc)) return; history.push(previous); future.length = 0; if (history.length > 40) history.shift(); dirty = true; saveLocal().catch(e => status(`Local save failed: ${e.message}`)); render(); clearTimeout(timer); timer = setTimeout(sync, 800); }
-  catch (error) { doc = previous; render(); status(error.message); }
+  try { action(); validateBoard(board(), new Set(doc.project.beats.map(s => s.id))); compileSnippets(); if (equal(previous, doc)) return true; history.push(previous); future.length = 0; if (history.length > 40) history.shift(); dirty = true; saveLocal().catch(e => status(`Local save failed: ${e.message}`)); render(); clearTimeout(timer); timer = setTimeout(sync, 800); return true; }
+  catch (error) { doc = previous; render(); status(error.message); return false; }
 }
 function restoreHistory(from, to) {
   if (!doc || current.access === 'reader' || !from.length) return;
@@ -313,6 +314,7 @@ function render() {
   }
   const blockOrder = [...board().blocks].sort((a, b) => { const x = g.blocks.get(a.id), y = g.blocks.get(b.id); return (y ? y.width * y.height : 0) - (x ? x.width * x.height : 0); });
   for (const block of blockOrder) {
+    if(block.standalone&&!board().beats.some(b=>b.blockID===block.id)&&!board().blocks.some(b=>b.parentID===block.id))continue;
     const rect = g.blocks.get(block.id); if (!rect) continue;
     const node = element('div', undefined, `block${selectedBlocks.has(block.id) ? ' selected-block' : ''}`); node.dataset.blockId = block.id; position(node, rect);
     const loose = block.standalone && board().beats.filter(b => b.blockID === block.id).length === 1 && !board().blocks.some(b => b.parentID === block.id);
@@ -349,7 +351,7 @@ function render() {
         const hit=e.target.closest('[data-beat-id]');if(hit&&hit.dataset.beatId!==id){doc.project.frontstageWhiteboard=spatialOrder(dropBeats(board(),new Set([id]),hit.dataset.beatId));return;}if(!hit){const frame=node.getBoundingClientRect();moving.position={x:Math.max(6,(e.clientX-frame.left)/boardZoom),y:Math.max(24,(e.clientY-frame.top)/boardZoom)};}else delete moving.position; doc.project.frontstageWhiteboard=spatialOrder(pruneEmptyBeatContainers(board())); });
     };
     if (!block.collapsed) for (const beat of board().beats.filter(b => b.blockID === block.id).sort((a, b) => a.order - b.order)) {
-      const tile = element('div', undefined, `beat${selectedBeats.has(beat.id) ? ' selected' : ''}`); tile.style.backgroundColor = /^#[a-f0-9]{6}$/i.test(beat.color) ? beat.color : '#a34eae';
+      const tile = element('div', undefined, `beat${selectedBeats.has(beat.id) ? ' selected' : ''}`); tile.style.backgroundColor = beat.omitted ? '#777777' : /^#[a-f0-9]{6}$/i.test(beat.color) ? beat.color : '#a34eae';tile.classList.toggle('omitted',beat.omitted);tile.setAttribute('aria-label',beat.title+(beat.omitted?' · Omitted':''));
       tile.dataset.beatId = beat.id;
       const card=g.beats.get(beat.id);if(card){tile.style.position='absolute';position(tile,{...card,x:card.x-rect.x,y:card.y-rect.y});}
       tile.append(element('span', beat.title, 'beat-text')); tile.draggable = current.access !== 'reader' && !locked(beat);
@@ -720,7 +722,7 @@ $('canvas').addEventListener('contextmenu',event=>{
     if(block?.containerKind==='beatGroup')item('Split Group Here',()=>edit(()=>{doc.project.frontstageWhiteboard=splitGroupAt(board(),beat.id);}),uneditable||beat.locked);
     item('Group Selected Beats',()=>edit(()=>{doc.project.frontstageWhiteboard=groupBeats(board(),selectedBeats,uuid());}),uneditable||beat.locked);
     item('Create Dependency From',()=>{source=beat.id;status('Select the effect beat');},uneditable||beat.locked);
-    item(selectedBeats.size>1?'Delete Selected Beats':'Delete Beat',()=>edit(()=>{doc=deleteBeats(doc,selectedBeats);}),uneditable||[...selectedBeats].some(id=>locked(board().beats.find(b=>b.id===id))));
+    item(selectedBeats.size>1?'Pull Out Selected Beats':'Pull Out Beat',()=>edit(()=>{doc=pullOutBeats(doc,selectedBeats);}),uneditable||[...selectedBeats].some(id=>locked(board().beats.find(b=>b.id===id))));
     item(beat.omitted?'Include Beat':'Omit Beat',()=>edit(()=>{beat.omitted=!beat.omitted;}),uneditable||beat.locked);
   }
   if(block&&!block.standalone){
@@ -730,7 +732,7 @@ $('canvas').addEventListener('contextmenu',event=>{
     if(block.containerKind!=='beatGroup')item('Split Block Here',()=>edit(()=>{doc.project.frontstageWhiteboard=splitBlockAt(board(),block.id,x-110);}),uneditable);
     if(selectedBlocks.size>1)item('Merge Groups / Blocks',()=>edit(()=>{doc.project.frontstageWhiteboard=mergeContainers(board(),selectedBlocks);}),uneditable);
     item('Ungroup Container',()=>edit(()=>{doc.project.frontstageWhiteboard=ungroupBlocks(board(),new Set([block.id]));}),uneditable);
-    item('Delete Container and Contents',()=>edit(()=>{doc=deleteBlocks(doc,new Set([block.id]));}),uneditable);
+    item('Pull Out Container Contents',()=>edit(()=>{const containers=descendantBlocks(board(),new Set([block.id]));doc=pullOutBeats(doc,new Set(board().beats.filter(b=>containers.has(b.blockID)).map(b=>b.id)));}),uneditable);
   }
   const position={x:Math.max(0,x-110),y:Math.max(32,y-g.layers.get(layer.id).y)},parent=block&&!block.standalone?block.id:null;
   for(const kind of ['beat','group','block','lane'])item('Add '+kind[0].toUpperCase()+kind.slice(1)+' Here',()=>createPalette(kind,layer.id,position,['beat','group'].includes(kind)?parent:null),uneditable||(kind==='block'&&!usesBlocks(board(),layer.id))||(['beat','group'].includes(kind)&&usesBlocks(board(),layer.id)&&!parent));
@@ -764,7 +766,7 @@ $('board-actions').onchange = () => {
   }
   if (action === 'ungroup') edit(() => { doc.project.frontstageWhiteboard = ungroupBlocks(board(), selectedBlocks); });
   if (action === 'compact') edit(() => { doc.project.frontstageWhiteboard = compactCausalTime(board()); });
-  if (action === 'delete') edit(() => { doc = deleteBlocks(doc, selectedBlocks); });
+  if (action === 'delete') edit(() => { const ids=descendantBlocks(board(),selectedBlocks);doc=pullOutBeats(doc,new Set(board().beats.filter(b=>ids.has(b.blockID)).map(b=>b.id))); });
 };
 $('timeline-toggle').onclick = () => { $('timeline').hidden = !$('timeline').hidden; };
 $('properties-toggle').onclick = () => { $('properties').hidden = !$('properties').hidden; };
@@ -822,4 +824,4 @@ document.fonts?.addEventListener('loadingdone', () => { if (doc) render(); });
 
 document.addEventListener('keydown',event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='l'&&selectedBeats.size&&(event.target===$('canvas')||$('script').contains(event.target))&&!event.target.isContentEditable&&!['INPUT','TEXTAREA'].includes(event.target.tagName)){event.preventDefault();scriptFilter.set({...scriptFilter.state,facets:{...scriptFilter.state.facets,Beats:{values:[...selectedBeats],hide:false,all:false}}});render();}});
 
-$('canvas').addEventListener('keydown',event=>{if(event.target===$('canvas')&&['Delete','Backspace'].includes(event.key)&&!event.isComposing){event.preventDefault();if(selectedBlocks.size)edit(()=>{doc=deleteBlocks(doc,selectedBlocks);});else if(selectedBeats.size)edit(()=>{doc=deleteBeats(doc,selectedBeats);});}});
+$('canvas').addEventListener('keydown',event=>{if(event.target===$('canvas')&&['Delete','Backspace'].includes(event.key)&&!event.isComposing){event.preventDefault();if(selectedBlocks.size)edit(()=>{const ids=descendantBlocks(board(),selectedBlocks);doc=pullOutBeats(doc,new Set(board().beats.filter(b=>ids.has(b.blockID)).map(b=>b.id)));});else if(selectedBeats.size)edit(()=>{doc=pullOutBeats(doc,selectedBeats);});}});

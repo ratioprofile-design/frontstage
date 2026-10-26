@@ -1,3 +1,5 @@
+import {mountContinuousScript} from './continuous-script.js';
+import {pulledOutBeats,pullOutBeats,restorePulledOutBeats,replaceDocument} from './script-inclusion.js';
 import {mountWritePanels} from './write-panels.js';
 import {createScriptFilter,mountScriptFilter,matchesScriptFilter,gapLabel} from './script-filter.js';
 import { workspaceDesign as design } from './workspace-design.js';
@@ -10,10 +12,10 @@ const el=(tag,text,className)=>{const e=document.createElement(tag);if(text!=nul
 const $=id=>document.getElementById(id);
 const download=(name,data,type='text/plain')=>{const url=URL.createObjectURL(new Blob([data],{type})),a=el('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 export function mountWorkspaces(api) {
-  const scriptFilter=createScriptFilter();
+  const scriptFilter=createScriptFilter();scriptFilter.state.hideDisabled=true;
   let mode='board',sceneID=null,roleID=null,actorID=null,revisionID=null,dayID=null,recordID=null,kind='research',search='',writing=false,projectID=null,paper='letter';
   const root=$('workspace-page'),selector=$('view-mode');
-  const scriptDefaults={display:'Final Script',margin:'Full Margins',zoom:1,characters:true,tags:true,synopsis:false,boundaries:false,filter:''};
+  const scriptDefaults={display:'Final Script',margin:'Full Margins',zoom:1,characters:true,tags:true,synopsis:false,boundaries:false,showOmitted:false,filter:''};
   let writePanels=null;
   let scriptView={...scriptDefaults},headingScene=null,activeEditor=null;const expandedBeats=new Set();
   try{const saved=JSON.parse(localStorage.getItem('frontstage-script-dedicated'));if(saved&&['Final Script','Content Only','Expand All','Collapse All','Index Cards'].includes(saved.display))scriptView={...scriptDefaults,...saved};}catch{}
@@ -21,7 +23,7 @@ export function mountWorkspaces(api) {
 
   for(const p of design.pages){const o=el('option',p.title);o.value=p.id;selector.append(o);}
   const doc=()=>api.document(),state=()=>doc().project,scenes=()=>state().beats,currentScene=()=>scenes().find(s=>s.id===sceneID),readonly=()=>api.current()?.access==='reader';
-  const change=(action,refresh=false)=>{writing=true;try{api.edit(()=>action(doc()));}finally{writing=false;}if(refresh)render();};
+  const change=(action,refresh=false)=>{writing=true;let result;try{result=api.edit(()=>action(doc()));}finally{writing=false;}if(refresh)render();return result;};
   const button=(text,action,write=false)=>{const b=el('button',text);if(write)b.disabled=readonly();b.onclick=()=>{try{action();}catch(e){api.status(e.message);}};return b;};
   const field=(name,value,action,type='text')=>{const label=el('label',name,'workspace-field'),input=el(type==='textarea'?'textarea':'input');input.setAttribute('aria-label',name);input.placeholder=name;if(type==='textarea')input.rows=1;if(type!=='textarea')input.type=type;input.value=value??'';input.disabled=readonly();input.onchange=()=>change(d=>action(input.type==='number'?Number(input.value):input.value,d));label.append(input);return label;};
   const toggle=(name,value,action)=>{const l=el('label',null,'workspace-toggle'),input=el('input');input.type='checkbox';input.checked=!!value;input.disabled=readonly();input.onchange=()=>change(d=>action(input.checked,d),true);l.append(input,document.createTextNode(name));return l;};
@@ -42,7 +44,7 @@ export function mountWorkspaces(api) {
 
   function render(){
     if(!doc())return;
-    if(projectID!==api.current()?.id){scriptFilter.clear();projectID=api.current()?.id;sceneID=api.selectedScene()??scenes()[0]?.id;roleID=actorID=revisionID=dayID=recordID=null;mode='board';selector.value=mode;}
+    if(projectID!==api.current()?.id){scriptFilter.clear();scriptFilter.state.hideDisabled=true;projectID=api.current()?.id;sceneID=api.selectedScene()??scenes()[0]?.id;roleID=actorID=revisionID=dayID=recordID=null;mode='board';selector.value=mode;}
     if(!scenes().some(s=>s.id===sceneID))sceneID=api.selectedScene()??scenes()[0]?.id;
     $('workspace').dataset.page=mode;$('workspace').classList.toggle('document-mode',mode!=='board');
     $('board-shell').hidden=mode!=='board';root.hidden=mode==='board';$('project-toolbar').hidden=false;
@@ -62,11 +64,12 @@ export function mountWorkspaces(api) {
     for(const [key,label]of [['characters','Show Characters'],['tags','Show Tags'],['synopsis','Show Synopsis'],['boundaries','Show Block/Group Beginnings']])option(display,(scriptView[key]?'✓ ':'')+label,()=>scriptPreference(key,!scriptView[key]));
     for(const margin of ['Full Margins','Compact Margins','Squeezed','Super Squeezed'])option(display,margin,()=>scriptPreference('margin',margin));
     option(display,'Zoom In',()=>scriptPreference('zoom',Math.min(2,scriptView.zoom+.1)));option(display,'Zoom Out',()=>scriptPreference('zoom',Math.max(.5,scriptView.zoom-.1)));option(display,'100%',()=>scriptPreference('zoom',1));
+    option(display,(scriptView.showOmitted?'✓ ':'')+'Show Omitted Preview',()=>scriptPreference('showOmitted',!scriptView.showOmitted));
     const styling=menu('Styling'),formatButtons=[];
     for(const kind of elements)formatButtons.push(option(styling,kind[0].toUpperCase()+kind.slice(1),()=>activeEditor?.format(kind)));
     for(const command of ['bold','italic','underline','strikeThrough'])formatButtons.push(option(styling,command,()=>activeEditor?.inline(command)));
-    formatButtons.push(option(styling,'Split at Cursor',()=>activeEditor?.split()),option(styling,'Open Beat Editor',()=>activeEditor?.open()));
-    const enableFormatting=enabled=>formatButtons.forEach(b=>b.disabled=!enabled);enableFormatting(false);
+    formatButtons.push(option(styling,'Split at Cursor',()=>activeEditor?.split?.()),option(styling,'Open Beat Editor',()=>activeEditor?.open?.()));
+    const enableFormatting=enabled=>formatButtons.forEach(b=>b.disabled=!enabled || (b.textContent==='Split at Cursor'&&!activeEditor?.split) || (b.textContent==='Open Beat Editor'&&!activeEditor?.open));enableFormatting(false);
     const filter=menu('Filter');mountScriptFilter(filter.querySelector('.script-menu-items'),scriptFilter,{board:()=>model.board(doc()),scenes,selection:()=>new Set(api.selectedBeat()?[api.selectedBeat()]:[]),changed:()=>render()});
     const presets=menu('Presets');option(presets,'Reading',()=>{scriptView={...scriptDefaults};scriptPreference('display','Final Script');});option(presets,'Story Review',()=>scriptPreference('display','Expand All'));option(presets,'Index Cards',()=>scriptPreference('display','Index Cards'));
     const options=menu('Options');option(options,'Full Screen',()=>{if(document.fullscreenElement)document.exitFullscreen?.();else root.requestFullscreen?.();});option(options,'Writing Settings',()=>navigate('writingTools'));
@@ -74,14 +77,26 @@ export function mountWorkspaces(api) {
     const segments=model.scriptSegments(doc(),{includeInactive:true});if(!segments.length){wrap.append(empty('Your next story starts here','Add a scene or a beat to begin.'),button('Add Scene',()=>api.addScene(),true));}
     const desk=el('div',null,'continuous-desk'),sheet=el('div',null,'continuous-paper');desk.append(sheet);wrap.append(desk);applyTypography(sheet);sheet.dataset.display=scriptView.display;sheet.dataset.margin=scriptView.margin;sheet.style.zoom=scriptView.zoom;
     const plain=['Final Script','Content Only'].includes(scriptView.display);
+    let continuous=null;
+    const elementBar=el('nav',null,'screenplay-element-bar');elementBar.setAttribute('aria-label','Screenplay elements');tools.after(elementBar);
+    for(const kind of ['slugline',...elements.filter(k=>k!=='slugline')]){const b=button(kind==='slugline'?'Scene Heading':model.label(kind),()=>activeEditor?.format(kind));b.dataset.element=kind;b.onpointerdown=e=>{activeEditor?.remember();e.preventDefault();};elementBar.append(b);}
+    if(plain){continuous=mountContinuousScript(sheet,{document:doc,readonly,cleanHTML:api.cleanHTML,change:action=>change(action),matches:beat=>matchesScriptFilter(beat,model.board(doc()),scenes(),scriptFilter.state),status:api.status,select:(sid,bid)=>{sceneID=sid;api.selectScene(sid,bid);writePanels?.select(sid,bid);activeEditor=continuous;enableFormatting(!readonly());},element:kind=>elementBar.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.element===kind)))});continuous.open=()=>{const id=api.selectedBeat();if(id)api.openBeat(id);};activeEditor=continuous;enableFormatting(!readonly());}
+    if(scriptView.showOmitted){
+      const preview=el('aside',null,'omitted-preview');preview.setAttribute('aria-label','Omitted beats preview');
+      preview.append(el('h3','Omitted beats — outside the active screenplay'));
+      for(const beat of model.board(doc()).beats.filter(beat=>beat.omitted).sort((a,b)=>a.order-b.order)){
+        const card=el('article');card.append(el('h4',beat.title));const text=el('div',null,'script-text');text.innerHTML=api.cleanHTML(beat.html);card.append(text);
+        card.append(button('Include Beat',()=>change(d=>{const b=model.board(d).beats.find(b=>b.id===beat.id);if(b.locked||blockLocked(model.board(d),b.blockID)||model.scene(d,b.sceneID).frontstageTextLocked)throw Error('Unlock the beat and scene first.');b.omitted=false;},true),true));preview.append(card);
+      }
+      wrap.append(preview);
+    }
     let filteredGap=[];
-    for(const segment of segments){
+    for(const segment of (plain?[]:segments)){
       const s=segment.scene,beats=segment.beatIDs.map(id=>model.board(doc()).beats.find(b=>b.id===id)).filter(Boolean).filter(b=>matchesScriptFilter(b,model.board(doc()),scenes(),scriptFilter.state));
       if(segment.beatIDs.length&&!beats.length){filteredGap.push(...segment.beatIDs.map(id=>model.board(doc()).beats.find(b=>b.id===id)));continue;}
       if(scriptView.display!=='Index Cards'&&!scriptFilter.state.hideHeadings){
-        const heading=el('button',`${segment.number}  ${model.heading(s)}${segment.continuation?' (CONTINUED)':''}`,'script-heading');heading.setAttribute('aria-label','Edit scene heading: '+model.heading(s));heading.dataset.sceneId=s.id;sheet.append(heading);
-        heading.onclick=()=>{headingScene=headingScene===s.id?null:s.id;sceneID=s.id;api.selectScene(s.id,segment.beatIDs[0]);render();};
-        if(headingScene===s.id){const fields=el('div',null,'writing-scene-fields');fields.append(field('Scene title',s.title,(v,d)=>model.scene(d,s.id).title=v),field('Synopsis',s.summary,(v,d)=>model.scene(d,s.id).summary=v),sluglineFields(()=>model.scene(doc(),s.id),()=>scenes(),action=>change(()=>action(),true),!readonly()),button('Done',()=>{headingScene=null;render();}));sheet.append(fields);}
+        const heading=el('p',`${segment.number}  ${model.heading(s)}${segment.continuation?' (CONTINUED)':''}`,'script-heading');heading.setAttribute('aria-label','Edit scene heading: '+model.heading(s));heading.dataset.sceneId=s.id;sheet.append(heading);
+
       }
       for(const beat of segment.beatIDs.map(id=>model.board(doc()).beats.find(b=>b.id===id)).filter(Boolean)){
         if(!beats.includes(beat)){filteredGap.push(beat);continue;}
@@ -107,9 +122,9 @@ export function mountWorkspaces(api) {
       }
       if(!segment.beatIDs.length){const p=el('div',null,'script-text');p.innerHTML=api.cleanHTML(segment.html);sheet.append(p);}
     }
-    const reveal=(sid,bid)=>{const node=bid?[...sheet.querySelectorAll('[data-script-beat-id]')].find(n=>n.dataset.scriptBeatId===bid):[...sheet.querySelectorAll('[data-scene-id]')].find(n=>n.dataset.sceneId===String(sid));if(!node)return false;sceneID=sid;api.selectScene(sid,bid);node.scrollIntoView({block:'nearest'});return true;};
+    const reveal=(sid,bid)=>{if(continuous){const found=continuous.reveal(bid);if(found){sceneID=sid;api.selectScene(sid,bid);}return found;}const node=bid?[...sheet.querySelectorAll('[data-script-beat-id]')].find(n=>n.dataset.scriptBeatId===bid):[...sheet.querySelectorAll('[data-scene-id]')].find(n=>n.dataset.sceneId===String(sid));if(!node)return false;sceneID=sid;api.selectScene(sid,bid);node.scrollIntoView({block:'nearest'});return true;};
     const panelProjectID=api.current()?.id;
-    writePanels=mountWritePanels(outer,wrap,{document:doc,selection:()=>({sceneID,beatID:api.selectedBeat()}),readonly,change:action=>{if(api.current()?.id!==panelProjectID)throw Error('The open project changed; select the note again.');change(action);},status:api.status,plain:api.plain,rebuild:render,reveal,resetReveal:(sid,bid)=>{scriptFilter.clear();sceneID=sid;render();requestAnimationFrame(()=>root.querySelector(`[data-script-beat-id="${CSS.escape(bid)}"]`)?.scrollIntoView({block:'nearest'}));}});
+    writePanels=mountWritePanels(outer,wrap,{document:doc,selection:()=>({sceneID,beatID:api.selectedBeat()}),openResearch:()=>{kind='pulledOut';navigate('studio');},readonly,change:action=>{if(api.current()?.id!==panelProjectID)throw Error('The open project changed; select the note again.');change(action);},status:api.status,plain:api.plain,rebuild:render,reveal,resetReveal:(sid,bid)=>{scriptFilter.clear();sceneID=sid;render();requestAnimationFrame(()=>root.querySelector(`[data-script-beat-id="${CSS.escape(bid)}"],.continuous-editor [data-beat-id="${CSS.escape(bid)}"]`)?.scrollIntoView({block:'nearest'}));}});
   }
   function applyTypography(node){const t=state().frontstageScriptLayout||{};node.style.setProperty('--script-font',t.fontName||'Courier');node.style.setProperty('--script-size',`${t.fontSize||12}px`);node.style.setProperty('--script-line',`${t.lineHeight||14}px`);node.style.setProperty('--script-spacing',`${t.paragraphSpacing??10}px`);}
   function pagesPage(){
@@ -170,7 +185,13 @@ export function mountWorkspaces(api) {
     const tamil=section('Bamini → Unicode Tamil'),input=el('textarea'),output=el('pre');input.setAttribute('aria-label','Bamini text');input.oninput=()=>{let result=input.value;for(const[a,b]of baminiPairs)result=result.split(a).join(b);output.textContent=result.normalize('NFC');};tamil.append(el('p','Paste Bamini text explicitly. English letters in the input will be converted too.'),input,output,button('Copy Unicode',()=>navigator.clipboard.writeText(output.textContent).catch(e=>api.status(e.message))));body.append(tamil);
     const parallel=section('Two-column script / translation');if(s){parallel.append(el('h3',s.title));for(const row of s.frontstageParallel||[]){const pair=el('div',null,'parallel-row');for(const key of ['left','right'])pair.append(field(key==='left'?'Original':'Translation',row[key],(v,d)=>model.scene(d,s.id).frontstageParallel.find(r=>r.id===row.id)[key]=v,'textarea'));pair.append(button('Remove Row',()=>change(d=>model.scene(d,s.id).frontstageParallel=model.scene(d,s.id).frontstageParallel.filter(r=>r.id!==row.id),true),true));parallel.append(pair);}parallel.append(button('Add Row',()=>change(d=>(model.scene(d,s.id).frontstageParallel||=[]).push({id:crypto.randomUUID(),left:'',right:''}),true),true),button('Print Two-column Script',()=>{const overlay=el('section',null,'report-preview');overlay.id='report-preview';overlay.append(button('Close',()=>overlay.remove()),button('Print / Save PDF',()=>window.print()),el('h1',s.title));for(const row of s.frontstageParallel||[]){const pair=el('div',null,'parallel-row');pair.append(el('p',row.left),el('p',row.right));overlay.append(pair);}document.body.append(overlay);}));}else parallel.append(empty('Select a scene'));body.append(parallel);
   }
-  function studioPage(){const[list,detail]=columns(),s=state().frontstageStudio||{records:[],assets:[]};list.append(pick('Workspace',kind,Object.keys(model.studioFields).map(k=>[k,k==='shot'?'Shots & Storyboards':model.label(k)]),v=>{kind=v;recordID=null;render();}));const searchField=field('Search records',search,v=>{search=v;render();});searchField.querySelector('input').disabled=false;list.append(searchField);
+  function studioPage(){const[list,detail]=columns(),s=state().frontstageStudio||{records:[],assets:[]};list.append(pick('Workspace',kind,[...Object.keys(model.studioFields).map(k=>[k,k==='shot'?'Shots & Storyboards':model.label(k)]),['pulledOut','Pulled Out']],v=>{kind=v;recordID=null;render();}));const searchField=field('Search records',search,v=>{search=v;render();});searchField.querySelector('input').disabled=false;list.append(searchField);
+    if(kind==='pulledOut'){detail.append(el('h1','Pulled Out'),el('p','Original beats and scene production data are retained. Restore returns them to their previous position.'));
+      const archived=pulledOutBeats(doc()).filter(b=>!search||[b.title,b.synopsis,api.plain(b.html)].join(' ').toLowerCase().includes(search.toLowerCase()));
+      for(const id of [...new Set(archived.map(b=>b.sceneID))]){const scene=model.scene(doc(),id),group=section(scene.title);detail.append(group);group.append(button('Restore Scene',()=>change(d=>replaceDocument(d,restorePulledOutBeats(d,new Set(pulledOutBeats(d).filter(b=>b.sceneID===id).map(b=>b.id)))),true),true));
+        for(const beat of archived.filter(b=>b.sceneID===id)){const card=el('article',null,'workspace-card');let destination=null;card.append(el('h3',beat.title),el('p',beat.omitted?'Previously omitted · restores inactive':'Previously active'),el('pre',api.plain(beat.html)),pick('Restore destination','',[['','Original container'],...model.board(doc()).blocks.filter(b=>!blockLocked(model.board(doc()),b.id)).map(b=>[b.id,b.name])],v=>destination=v||null),button('Restore Beat',()=>change(d=>replaceDocument(d,restorePulledOutBeats(d,new Set([beat.id]),destination)),true),true));group.append(card);}
+      }return;
+    }
     const records=s.records.filter(r=>r.kind===kind&&`${r.title} ${r.body}`.toLowerCase().includes(search.toLowerCase()));if(!records.some(r=>r.id===recordID))recordID=records[0]?.id;for(const r of records)list.append(button(r.title,()=>{recordID=r.id;render();}));list.append(button('Add',()=>change(d=>{recordID=model.addRecord(d,kind,sceneID);const beatID=api.selectedBeat();if(beatID)model.studio(d).records.find(r=>r.id===recordID).beatID=beatID;},true),true),button('Export CSV',()=>download(`${kind}.csv`,model.csv([['ID','Title','Scene','Beat','Notes','Details','Attachments'],...records.map(r=>[r.id,r.title,r.sceneID,r.beatID,r.body,Object.entries(r.fields).map(([k,v])=>`${k}: ${v}`).join('; '),r.assetIDs.map(id=>s.assets.find(a=>a.id===id)?.filename).join('; ')])]),'text/csv')));
     const record=records.find(r=>r.id===recordID);if(!record){detail.append(empty('Add or select a record'));return;}const update=(key,value,d)=>model.studio(d).records.find(r=>r.id===recordID)[key]=value;
     detail.append(field('Title',record.title,(v,d)=>update('title',v,d)),pick('Linked scene',record.sceneID??'',[['','No scene'],...scenes().map(s=>[s.id,s.title])],v=>change(d=>{if(v==='')delete model.studio(d).records.find(r=>r.id===recordID).sceneID;else update('sceneID',Number(v),d);},true),true),field('Notes',record.body,(v,d)=>update('body',v,d),'textarea'));

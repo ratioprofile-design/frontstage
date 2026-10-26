@@ -1,3 +1,4 @@
+import {markdownSource} from './live-markdown.js';
 import * as model from './workspace-model.js';
 import {reorderTimelineBeats} from './board-operations.js';
 export function sceneCards(document) {
@@ -10,7 +11,7 @@ function owner(document,id) {return id==null?document.project:writableScene(docu
 function notes(document,id) {const o=owner(document,id),key=id==null?'globalNotes':'notes';if(o[key]!=null&&!Array.isArray(o[key]))throw Error('Unsupported imported notes are preserved.');return o[key]||=[];}
 export function editableNote(note) {return !!note&&typeof note.id==='string'&&typeof note.content==='string'&&!/<(?:audio|video|iframe|object)\b/i.test(note.content)&&!note.audio&&!note.audioUrl&&(!note.type||note.type==='text');}
 export function addNote(document,id,content='',color='#fff4bc') {const value={id:crypto.randomUUID(),content,color,timestamp:Date.now()};notes(document,id).push(value);return value.id;}
-export function updateNote(document,id,noteID,patch) {const note=notes(document,id).find(n=>n.id===noteID);if(!editableNote(note))throw Error('This imported note is read-only or no longer exists.');for(const key of ['content','color'])if(typeof patch[key]==='string')note[key]=patch[key];}
+export function updateNote(document,id,noteID,patch) {const note=notes(document,id).find(n=>n.id===noteID);if(!editableNote(note))throw Error('This imported note is read-only or no longer exists.');for(const key of ['content','color'])if(typeof patch[key]==='string')note[key]=patch[key];if(typeof patch.content==='string'&&typeof document!=='undefined'&&globalThis.document)note.frontstageMarkdown=markdownSource(patch.content);}
 export function removeNote(document,id,noteID) {const list=notes(document,id),i=list.findIndex(n=>n.id===noteID);if(i<0)throw Error('Note not found.');list.splice(i,1);}
 export function moveNote(document,id,noteID,offset) {const list=notes(document,id),i=list.findIndex(n=>n.id===noteID);if(i>=0&&i+offset>=0&&i+offset<list.length)list.splice(i+offset,0,list.splice(i,1)[0]);}
 export function moveRequirement(document,id,entry,category) {
@@ -32,6 +33,6 @@ export const normalizedCategory=entry=>entry.category||({props:'PROPS',costume:'
 export function safeNoteHTML(html) {
   const source=document.createElement('template');source.innerHTML=typeof html==='string'?html:'';
   const clean=document.createElement('div');
-  function copy(node,parent){if(node.nodeType===3){parent.append(document.createTextNode(node.textContent));return;}if(node.nodeType!==1)return;if(['SCRIPT','STYLE','IFRAME','OBJECT','SVG','MATH'].includes(node.tagName))return;const allowed=['P','DIV','BR','B','STRONG','I','EM','U','S','UL','OL','LI','BLOCKQUOTE'];const target=allowed.includes(node.tagName)?document.createElement(node.tagName):parent;if(target!==parent)parent.append(target);for(const child of node.childNodes)copy(child,target);}
+  function copy(node,parent){if(node.nodeType===3){parent.append(document.createTextNode(node.textContent));return;}if(node.nodeType!==1)return;if(['SCRIPT','STYLE','IFRAME','OBJECT','SVG','MATH'].includes(node.tagName))return;const allowed=['P','DIV','BR','B','STRONG','I','EM','U','S','UL','OL','LI','BLOCKQUOTE','H1','H2','H3','CODE','PRE','HR','A'];const target=allowed.includes(node.tagName)?document.createElement(node.tagName):parent;if(target!==parent){if(node.tagName==='A'&&/^(https?:|mailto:)/i.test(node.getAttribute('href')||'')){target.setAttribute('href',node.getAttribute('href'));target.setAttribute('rel','noopener noreferrer');}parent.append(target);}for(const child of node.childNodes)copy(child,target);}
   for(const node of source.content.childNodes)copy(node,clean);return clean.innerHTML;
 }
