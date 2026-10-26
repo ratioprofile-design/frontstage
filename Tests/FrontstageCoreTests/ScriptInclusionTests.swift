@@ -21,6 +21,15 @@ final class ScriptInclusionTests: XCTestCase {
         let before = p; XCTAssertThrowsError(try p.restorePulledOutBeats(["beat-1"])); XCTAssertEqual(p, before)
         try p.restorePulledOutBeats(["beat-1"], into: "block-2"); XCTAssertTrue(p.pulledOutBeats.isEmpty)
     }
+    func testRestoreLeadingSequenceKeepsOrder() throws {
+        var p = try fixture()
+        try p.editWhiteboard { board in
+            var third = board.beats[1]; third.id = "beat-3"; third.order = 10; board.beats.append(third)
+        }
+        try p.pullOutBeats(["beat-1", "beat-2"])
+        try p.restorePulledOutBeats(["beat-1", "beat-2"])
+        XCTAssertEqual(try p.whiteboard().orderedBeats.map(\.id), ["beat-1", "beat-2", "beat-3"])
+    }
     func testRevisionCannotDuplicatePulledOutBeat() throws {
         var p = try fixture()
         try p.saveRevision(sceneID: 1, label: "Before pull out")

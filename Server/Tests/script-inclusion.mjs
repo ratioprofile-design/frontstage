@@ -20,3 +20,8 @@ const invalid=structuredClone(archived);invalid.project.frontstageWhiteboard.bea
 assert.throws(()=>validateInclusion(invalid),/both active/);
 validateInclusion(restorePulledOutBeats(archived,new Set(['beat-1'])));
 console.log('PASS: revision restoration and archive collision guards');
+
+const sequence=structuredClone(base),third=structuredClone(sequence.project.frontstageWhiteboard.beats[1]);third.id='beat-3';third.order=10;sequence.project.frontstageWhiteboard.beats.push(third);
+const recovered=restorePulledOutBeats(pullOutBeats(sequence,new Set(['beat-1','beat-2'])),new Set(['beat-1','beat-2']));
+assert.deepEqual([...recovered.project.frontstageWhiteboard.beats].sort((a,b)=>a.order-b.order).map(beat=>beat.id),['beat-1','beat-2','beat-3']);
+console.log('PASS: restoring a leading sequence retains narrative order');

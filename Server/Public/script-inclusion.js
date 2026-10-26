@@ -21,7 +21,9 @@ export function restorePulledOutBeats(document,ids,blockID=null){
   if(b.beats.some(old=>old.id===beat.id)||!p.beats.some(s=>s.id===beat.sceneID))throw Error('The original scene is missing or the beat already exists.');
   if(!b.blocks.some(block=>block.id===beat.blockID)||blockLocked(b,beat.blockID))throw Error('Choose an existing unlocked destination container.');
   if(p.beats.find(s=>s.id===beat.sceneID).frontstageTextLocked)throw Error('Unlock the scene before restoring.');
-  const ordered=[...b.beats].sort((a,b)=>a.order-b.order||a.id.localeCompare(b.id)),after=ordered.findIndex(beat=>beat.id===item.nextID),before=ordered.findIndex(beat=>beat.id===item.previousID);
+  const ordered=[...b.beats].sort((a,b)=>a.order-b.order||a.id.localeCompare(b.id)),available=new Set(ordered.map(beat=>beat.id));
+  const neighbor=(id,key)=>{const seen=new Set();while(id&&!available.has(id)&&!seen.has(id)){seen.add(id);id=archive.find(entry=>entry.id===id)?.[key];}return available.has(id)?id:null;};
+  const after=ordered.findIndex(beat=>beat.id===neighbor(item.nextID,'nextID')),before=ordered.findIndex(beat=>beat.id===neighbor(item.previousID,'previousID'));
   beat.order=after>=0?((ordered[after-1]?.order??ordered[after].order-2)+ordered[after].order)/2:before>=0?(ordered[before].order+(ordered[before+1]?.order??ordered[before].order+2))/2:(ordered.at(-1)?.order??-1)+1;
   b.beats.push(beat);
  }

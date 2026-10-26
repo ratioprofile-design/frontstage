@@ -181,7 +181,9 @@ try {
   await localPage.locator('.beat-popup.active [data-field="close-editor"]').click();
   await localPage.locator('#blocks .block-title').getByText('Beat Group', { exact: true }).click();
   await localPage.locator('#board-actions').selectOption('delete');
-  assert.equal(await localPage.locator('#blocks > .block').count(), 0);
+  // Pulling out contents retains the manually created group, but removes its beats.
+  assert.equal(await localPage.locator('#blocks > .block').count(), 1);
+  assert.equal(await localPage.locator('#blocks .beat').count(), 0);
   await localPage.locator('#undo').click();
   assert.equal(await localPage.locator('#blocks > .block').count(), 1);
   // Independent loose beat and two simultaneously open screenplay editors.

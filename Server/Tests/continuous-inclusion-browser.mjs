@@ -37,8 +37,13 @@ try{
    first.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertFromPaste'}));
    const inserted=doc.project.beats.slice(fixture.project.beats.length).map(scene=>({location:scene.slug.location,html:doc.project.frontstageWhiteboard.beats.filter(b=>b.sceneID===scene.id).map(b=>b.html).join('')}));
    reject=true;first.textContent='Must roll back';first.dispatchEvent(new InputEvent('input',{bubbles:true}));const rolledBack=first.isConnected?first.textContent:sheet.querySelector('[data-beat-id="beat-1"]:not([data-heading-scene])').textContent;
-   sheet.remove();return {inserted,rolledBack};
+   reject=false;
+   const removedScene=doc.project.beats.find(scene=>scene.slug.location==='HALL'),removedBeat=doc.project.frontstageWhiteboard.beats.find(beat=>beat.sceneID===removedScene.id);
+   const nodes=[...sheet.children].filter(node=>node.dataset.beatId===removedBeat.id),range=document.createRange();range.setStart(nodes[0],0);range.setEnd(nodes.at(-1),nodes.at(-1).childNodes.length);getSelection().removeAllRanges();getSelection().addRange(range);
+   sheet.dispatchEvent(new InputEvent('beforeinput',{bubbles:true,cancelable:true,inputType:'deleteContentBackward'}));range.deleteContents();sheet.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'deleteContentBackward'}));
+   const archived=doc.project.frontstagePullouts?.find(entry=>entry.id===removedBeat.id)?.beat.html;
+   sheet.remove();return {inserted,rolledBack,archived};
  },fixture);
- assert.deepEqual(transaction.inserted.map(s=>s.location),['HALL','BEACH']);assert.ok(transaction.inserted[0].html.includes('First inserted scene.'));assert.ok(!transaction.inserted[0].html.includes('Second inserted scene.'));assert.ok(transaction.inserted[1].html.includes('Second inserted scene.'));assert.equal(transaction.rolledBack,'Before both inserted scenes.');
+ assert.deepEqual(transaction.inserted.map(s=>s.location),['HALL','BEACH']);assert.ok(transaction.inserted[0].html.includes('First inserted scene.'));assert.ok(!transaction.inserted[0].html.includes('Second inserted scene.'));assert.ok(transaction.inserted[1].html.includes('Second inserted scene.'));assert.equal(transaction.rolledBack,'Before both inserted scenes.');assert.ok(transaction.archived?.includes('First inserted scene.'));
  await page.screenshot({path:path.join(output,'continuous-inclusion.png')});assert.deepEqual(errors,[]);console.log('PASS: continuous screenplay, inline headings, toolbar, live Markdown, omission and Research restoration');
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}

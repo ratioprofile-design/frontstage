@@ -71,10 +71,17 @@ extension Project {
             guard !board.beats.contains(where: { $0.id == beat.id }), let scene = scenes.first(where: { $0.id == beat.sceneID }), !scene.isTextLocked else { throw ProjectError.invalidProject("The scene is locked, missing, or already contains this beat") }
             if let blockID { beat.blockID = blockID }
             guard board.blocks.contains(where: { $0.id == beat.blockID }), !board.isBlockLocked(beat.blockID) else { throw ProjectError.invalidProject("Choose an existing unlocked destination container") }
-            let ordered = board.orderedBeats
-            if let nextID = record.object?["nextID"]?.string, let index = ordered.firstIndex(where: { $0.id == nextID }) {
+            let ordered = board.orderedBeats, available = Set(board.beats.map(\.id))
+            func neighbor(_ first: String?, key: String) -> String? {
+                var cursor = first, seen = Set<String>()
+                while let id = cursor, !available.contains(id), seen.insert(id).inserted {
+                    cursor = archive.first(where: { $0.object?["id"]?.string == id })?.object?[key]?.string
+                }
+                return cursor.flatMap { available.contains($0) ? $0 : nil }
+            }
+            if let nextID = neighbor(record.object?["nextID"]?.string, key: "nextID"), let index = ordered.firstIndex(where: { $0.id == nextID }) {
                 beat.order = ((index > 0 ? ordered[index - 1].order : ordered[index].order - 2) + ordered[index].order) / 2
-            } else if let previousID = record.object?["previousID"]?.string, let index = ordered.firstIndex(where: { $0.id == previousID }) {
+            } else if let previousID = neighbor(record.object?["previousID"]?.string, key: "previousID"), let index = ordered.firstIndex(where: { $0.id == previousID }) {
                 beat.order = (ordered[index].order + (index + 1 < ordered.count ? ordered[index + 1].order : ordered[index].order + 2)) / 2
             } else { beat.order = (ordered.last?.order ?? -1) + 1 }
             board.beats.append(beat); rawRestored.append(value)

@@ -158,12 +158,24 @@ struct WriteNoteCard: View {
         }.disabled(workspace.sharedProjects.linked?.access == "reader" || (sceneID != nil && workspace.project.scenes.first { $0.id == sceneID }?.isTextLocked == true)).padding(8).background(Color(boardHex: note.color).opacity(0.25)).clipShape(RoundedRectangle(cornerRadius: 6))
     }
 }
+final class NoteTextView: NSTextView {
+    override func mouseDown(with event: NSEvent) {
+        let index = characterIndexForInsertion(at: convert(event.locationInWindow, from: nil))
+        if isEditable, index < string.utf16.count {
+            let value = (string as NSString).substring(with: NSRange(location: index, length: 1))
+            if value == "☐" || value == "☑" {
+                insertText(value == "☐" ? "☑" : "☐", replacementRange: NSRange(location: index, length: 1)); return
+            }
+        }
+        super.mouseDown(with: event)
+    }
+}
 // A separate rich text view keeps note formatting and input focus independent of screenplay controllers.
 struct NoteRichEditor: NSViewRepresentable {
     @Binding var html: String
     func makeCoordinator() -> Coordinator { Coordinator($html) }
     func makeNSView(context: Context) -> NSScrollView {
-        let scroll = NSScrollView(), text = NSTextView()
+        let scroll = NSScrollView(), text = NoteTextView()
         text.isRichText = true; text.isEditable = context.environment.isEnabled; text.allowsUndo = true; text.isAutomaticQuoteSubstitutionEnabled = false
         text.isVerticallyResizable = true; text.autoresizingMask = [.width]; text.textContainer?.widthTracksTextView = true
         text.delegate = context.coordinator; scroll.documentView = text; scroll.hasVerticalScroller = true
@@ -199,6 +211,23 @@ struct NoteRichEditor: NSViewRepresentable {
                 result.replaceSubrange(range, with: allowed.contains(name) ? "<" + (tag.hasPrefix("</") ? "/" : "") + name + ">" : "")
             }
             return result
+        }
+        func textView(_ text: NSTextView, doCommandBy command: Selector) -> Bool {
+            guard command == #selector(NSResponder.insertNewline(_:)), !text.hasMarkedText(), text.isEditable else { return false }
+            let source = text.string as NSString, selection = text.selectedRange(), range = source.paragraphRange(for: selection)
+            let line = source.substring(with: range).trimmingCharacters(in: .newlines)
+            let kind = range.location < source.length ? text.attributedString().attribute(NoteTextCodec.blockKey, at: range.location, effectiveRange: nil) as? String : nil
+            let prefix = line.hasPrefix("• ") ? "• " : line.hasPrefix("☐ ") || line.hasPrefix("☑ ") ? "☐ " : nil
+            guard prefix != nil || ["h1", "h2", "h3", "blockquote"].contains(kind ?? "") else { return false }
+            let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 13), NoteTextCodec.blockKey: prefix == "• " ? "li" : "p"]
+            if let prefix, line.dropFirst(prefix.count).trimmingCharacters(in: .whitespaces).isEmpty {
+                text.insertText(NSAttributedString(string: "", attributes: attributes), replacementRange: NSRange(location: range.location, length: line.utf16.count))
+                text.typingAttributes = [.font: NSFont.systemFont(ofSize: 13), NoteTextCodec.blockKey: "p"]
+            } else {
+                text.insertText(NSAttributedString(string: "\n" + (prefix ?? ""), attributes: attributes), replacementRange: selection)
+                text.typingAttributes = attributes
+            }
+            return true
         }
         func textDidChange(_ notification: Notification) {
             guard let text = notification.object as? NSTextView, !text.hasMarkedText() else { return }
