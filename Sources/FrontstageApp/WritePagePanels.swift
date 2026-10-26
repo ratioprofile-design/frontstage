@@ -148,7 +148,7 @@ struct WriteNoteCard: View {
                     Button("Delete Note") { workspace.edit("Delete Note") { try $0.removeWritingNote(sceneID: sceneID, id: note.id) } }
                 }
             } else { Text("Imported note · preserved read-only"); Text(note.content.localizedCaseInsensitiveContains("<audio") ? "Audio recording retained in the project" : note.content).textSelection(.enabled) }
-        }.padding(8).background(Color(boardHex: note.color).opacity(0.25)).clipShape(RoundedRectangle(cornerRadius: 6))
+        }.disabled(workspace.sharedProjects.linked?.access == "reader" || (sceneID != nil && workspace.project.scenes.first { $0.id == sceneID }?.isTextLocked == true)).padding(8).background(Color(boardHex: note.color).opacity(0.25)).clipShape(RoundedRectangle(cornerRadius: 6))
     }
 }
 // A separate rich text view keeps note formatting and input focus independent of screenplay controllers.
@@ -157,13 +157,14 @@ struct NoteRichEditor: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator($html) }
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSScrollView(), text = NSTextView()
-        text.isRichText = true; text.allowsUndo = true; text.isAutomaticQuoteSubstitutionEnabled = false
+        text.isRichText = true; text.isEditable = context.environment.isEnabled; text.allowsUndo = true; text.isAutomaticQuoteSubstitutionEnabled = false
         text.isVerticallyResizable = true; text.autoresizingMask = [.width]; text.textContainer?.widthTracksTextView = true
         text.delegate = context.coordinator; scroll.documentView = text; scroll.hasVerticalScroller = true
         context.coordinator.load(html, text); return scroll
     }
     func updateNSView(_ view: NSScrollView, context: Context) {
         context.coordinator.binding = $html
+        (view.documentView as? NSTextView)?.isEditable = context.environment.isEnabled
         if let text = view.documentView as? NSTextView, context.coordinator.last != html, !text.hasMarkedText() { context.coordinator.load(html, text) }
     }
     @MainActor
@@ -256,7 +257,9 @@ struct WriteHistoryPanel: View {
                         ForEach(RevisionDiffLine.compare(before: readable(revision.html), after: readable(workspace.project.scenes.first { $0.id == sceneID }?.html ?? ""))) { line in
                             Text((line.kind == .added ? "+ " : line.kind == .removed ? "− " : "  ") + line.text).font(.caption.monospaced()).foregroundStyle(line.kind == .removed ? .red : line.kind == .added ? .green : .primary).textSelection(.enabled)
                         }
-                        Button("Restore This Snapshot") { restore = revision }
+                        let unsafeLegacy = !revision.hasBeatBoundaries && workspace.whiteboard.beats.filter { $0.sceneID == sceneID }.count > 1
+                        if unsafeLegacy { Text("This legacy snapshot has no beat boundaries. Restoring a multi-beat scene is unsafe.").font(.caption) }
+                        Button("Restore This Snapshot") { restore = revision }.disabled(unsafeLegacy || workspace.project.scenes.first { $0.id == sceneID }?.isTextLocked == true)
                     }
                 }
             }

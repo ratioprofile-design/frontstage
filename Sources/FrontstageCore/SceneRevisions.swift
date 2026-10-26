@@ -7,6 +7,7 @@ public struct SceneRevision: Identifiable, Equatable, Sendable {
     public let title: String
     public let html: String
     public let summary: String
+    public let hasBeatBoundaries: Bool
 }
 
 extension Project {
@@ -27,7 +28,7 @@ extension Project {
             if case .number(let number) = item["timestamp"] { milliseconds = NSDecimalNumber(decimal: number).doubleValue }
             else { milliseconds = 0 }
             return SceneRevision(id: id, label: item["frontstageLabel"]?.string ?? item["title"]?.string ?? "Revision",
-                date: Date(timeIntervalSince1970: milliseconds / 1000), title: item["title"]?.string ?? "", html: html, summary: item["summary"]?.string ?? "")
+                date: Date(timeIntervalSince1970: milliseconds / 1000), title: item["title"]?.string ?? "", html: html, summary: item["summary"]?.string ?? "", hasBeatBoundaries: item["frontstageSnippets"]?.array != nil)
         }.sorted { $0.date > $1.date }
     }
 
@@ -76,7 +77,7 @@ extension Project {
         }
         try candidate.saveRevision(sceneID: sceneID, label: "Before restoring \(version["frontstageLabel"]?.string ?? "revision")")
         try candidate.editBeat(sceneID) { fields in
-            for key in ["title", "summary", "content"] where key != "content" || !native { if let value = version[key] { fields[key] = value } }
+            for key in ["title", "summary", "content"] where key != "content" || !native || savedSnippets?.isEmpty == true || (savedSnippets == nil && currentSnippets.isEmpty) { if let value = version[key] { fields[key] = value } }
             if let editorial = version["frontstageEditorial"]?.object {
                 for key in ["slug", "sceneNumber"] {
                     if editorial[key] == .null { fields.removeValue(forKey: key) }

@@ -51,6 +51,7 @@ export function restoreRevision(document,id,revisionID) {
   s.title=revision.title??s.title;s.summary=revision.summary??s.summary;
   if(revision.frontstageEditorial) for(const key of ['slug','sceneNumber']) { if(revision.frontstageEditorial[key]==null) delete s[key]; else s[key]=structuredClone(revision.frontstageEditorial[key]); }
   if(revision.frontstageSnippets) {
+    if(!revision.frontstageSnippets.length)s.content=revision.content;
     const oldIDs=new Set(current.map(x=>x.id)); b.beats=b.beats.filter(x=>x.sceneID!==id).concat(structuredClone(revision.frontstageSnippets));
     const ids=new Set(b.beats.map(x=>x.id)); b.dependencies=b.dependencies.filter(e=>!(oldIDs.has(e.cause)||oldIDs.has(e.effect))||(ids.has(e.cause)&&ids.has(e.effect)));
   } else if(current[0]) { current[0].html=revision.content; current[0].title=revision.title??current[0].title; }
