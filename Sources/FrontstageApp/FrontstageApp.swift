@@ -140,6 +140,13 @@ final class Workspace: ObservableObject {
         loadCopy(candidate)
     }
 
+    func acceptConvertedCopy(_ copy: Project) throws {
+        let root = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true).appendingPathComponent("Frontstage/Conversion Originals", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try project.encoded().write(to: root.appendingPathComponent(UUID().uuidString + ".frontstage"), options: .atomic)
+        loadCopy(copy); mode = .edit
+    }
+
     func loadCopy(_ imported: Project) {
         documentSessionID = UUID()
         reader.filters = .init(); reader.filter = ""

@@ -1,0 +1,34 @@
+import { createServer } from 'node:http';
+import { createRequire } from 'node:module';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+const require=createRequire(import.meta.url),{chromium}=require(process.env.FRONTSTAGE_PLAYWRIGHT_MODULE||'playwright');
+const root=fileURLToPath(new URL('../../',import.meta.url)),publicDir=path.join(root,'Server/Public'),output=path.join(root,'build/parity');await mkdir(output,{recursive:true});
+const server=createServer(async(req,res)=>{try{const relative=req.url==='/'?'index.html':decodeURIComponent(req.url.slice(1));if(relative.includes('/')||relative.includes('..')){res.writeHead(404);res.end();return;}const content=await readFile(path.join(publicDir,relative));res.setHeader('Content-Type',relative.endsWith('.js')?'application/javascript':relative.endsWith('.css')?'text/css':'text/html');res.end(content);}catch{res.writeHead(404);res.end();}});
+await new Promise(resolve=>server.listen(17845,'127.0.0.1',resolve));let browser;
+try{
+ browser=await chromium.launch({executablePath:process.env.FRONTSTAGE_CHROMIUM||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':chromium.executablePath()),headless:true,args:['--no-sandbox']});
+ const context=await browser.newContext({viewport:{width:1440,height:950}}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('http://127.0.0.1:17845');await page.locator('#local-mode').click();await page.locator('#back').click();
+ const fixture=JSON.parse(await readFile(path.join(root,'Tests/Fixtures/write-panels.frontstage'),'utf8'));
+ const extra=structuredClone(fixture.project.frontstageWhiteboard.beats[0]);extra.id='extra';extra.title='Additional beat';extra.order=.5;extra.synopsis='Additional summary';extra.position={x:6,y:110};fixture.project.frontstageWhiteboard.beats.push(extra);fixture.project.beats[0].content+=extra.html;
+ await page.locator('#import-project').setInputFiles({name:'legacy.frontstage',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(fixture))});await page.waitForSelector('#workspace:not([hidden])');await page.locator('#view-mode').selectOption('edit');
+ await page.getByRole('button',{name:'Review Converted Copy',exact:true}).click();const dialog=page.getByRole('dialog');await dialog.waitFor();assert.ok((await dialog.innerText()).includes('Title or summary differs'));
+ await dialog.getByRole('button',{name:'Create Converted Copy',exact:true}).click();await dialog.waitFor({state:'detached'});await page.locator('#view-mode').selectOption('edit');
+ const cards=page.locator('.simple-beat-card');assert.equal(await cards.count(),3);assert.equal(await page.getByRole('button',{name:'Review Converted Copy',exact:true}).count(),0);
+ const first=page.locator('.simple-beat-card[data-beat-id="beat-1"]');await first.locator('[data-card-field="title"]').dblclick();await first.getByLabel('Beat title',{exact:true}).fill('தமிழ் scene title');await first.getByLabel('Beat title',{exact:true}).press('Enter');assert.equal(await first.locator('[data-card-field="title"]').innerText(),'தமிழ் scene title');
+ await first.locator('.beat-card-synopsis').dblclick();await first.getByLabel('Beat summary',{exact:true}).fill('Cancelled summary');await first.getByLabel('Beat summary',{exact:true}).press('Escape');assert.ok(!(await first.innerText()).includes('Cancelled summary'));
+ await first.locator('.beat-card-synopsis').dblclick();await first.getByLabel('Beat summary',{exact:true}).fill('தமிழ் summary '.repeat(60));await first.getByLabel('Beat summary',{exact:true}).press('ControlOrMeta+Enter');assert.ok((await first.locator('.beat-card-synopsis').innerText()).startsWith('தமிழ் summary'));assert.ok(await first.getByRole('button',{name:'Show more',exact:true}).isVisible());
+ const paper=page.getByRole('textbox',{name:'Screenplay',exact:true});await paper.locator('[data-heading-scene="1"]').fill('EXT. UPDATED LOCATION - NIGHT');assert.ok((await first.locator('[data-card-field="slug"]').innerText()).includes('UPDATED LOCATION'));
+ const lastID=await cards.last().getAttribute('data-beat-id');await first.evaluate((node,id)=>{const transfer=new DataTransfer();transfer.setData('text/frontstage-card',id);const rect=node.getBoundingClientRect();node.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:transfer,clientY:rect.top+1}));node.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:transfer,clientY:rect.top+1}));},lastID);assert.equal(await cards.first().getAttribute('data-beat-id'),lastID);
+ await page.getByRole('navigation',{name:'Script toolbar'}).locator('summary').filter({hasText:/^Display$/}).click();await page.getByRole('navigation',{name:'Script toolbar'}).getByRole('button',{name:'Index Cards',exact:true}).click();await page.locator('#view-mode').selectOption('board');await page.locator('#view-mode').selectOption('edit');assert.equal(await page.locator('.continuous-paper').getAttribute('data-display'),'Final Script');
+ await page.locator('.write-right').getByRole('button',{name:'Notes',exact:true}).click();await page.locator('.write-right').getByRole('button',{name:'Add Note',exact:true}).click();assert.ok(await page.locator('.note-block-header').count()>0);
+ await page.screenshot({path:path.join(output,'simple-scene-cards.png')});
+ await page.locator('#view-mode').selectOption('board');await page.locator('#blocks [data-beat-id="beat-1"]').click();await page.locator('#canvas').press('Enter');await page.locator('.beat-popup.active').waitFor();await page.locator('.beat-popup.active [data-field="close-editor"]').click();
+ const downloaded=page.waitForEvent('download');await page.locator('#download').click();const file=await downloaded;await file.saveAs(path.join(output,'simple-scenes.frontstage'));const result=JSON.parse(await readFile(path.join(output,'simple-scenes.frontstage'),'utf8'));
+ assert.equal(result.project.frontstageSceneModel,'oneBeatPerScene');assert.equal(new Set(result.project.frontstageWhiteboard.beats.map(b=>b.sceneID)).size,result.project.frontstageWhiteboard.beats.length);assert.equal(result.project.frontstageLegacyScenes.beats[0].title,fixture.project.beats[0].title);
+ assert.deepEqual(errors,[]);console.log('PASS: reviewed copy, simple editable cards, Tamil synopsis, slugline propagation, drag ordering, notes, Final Script default and independent beat creation');
+}finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}

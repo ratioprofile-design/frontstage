@@ -7,6 +7,11 @@ public struct SceneConversionGroup: Identifiable, Sendable {
     public var id: Decimal { scene.id }
 }
 extension Project {
+    public func legacySceneRevisions(_ sceneID: Decimal) -> [SceneRevision] {
+        guard let fields = state["beats"]?.array?.first(where: { $0.object?["id"]?.decimal == sceneID })?.object,
+              let originalID = fields["frontstageLegacySceneID"]?.decimal, let legacy = state["frontstageLegacyScenes"]?.object else { return [] }
+        var project = Project(); project.state = legacy; return project.revisions(for: originalID)
+    }
     public var usesOneBeatPerScene: Bool { state["frontstageSceneModel"]?.string == "oneBeatPerScene" }
     public func validateSceneModel() throws {
         guard usesOneBeatPerScene, state["frontstageWhiteboard"] != nil else { return }

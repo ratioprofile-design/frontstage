@@ -92,37 +92,55 @@ struct SimpleWriteBeatCard: View {
     @FocusState private var focused: Bool
     private var locked: Bool { workspace.whiteboard.isLocked(beat) || scene.isTextLocked || workspace.sharedProjects.linked?.access == "reader" }
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top, spacing: 8) {
-                Text(number).bold().padding(7).background(.orange.opacity(0.8)).foregroundStyle(.black)
-                VStack(alignment: .leading, spacing: 4) {
-                    if editing == "title" { TextField("Beat title", text: $draft).focused($focused).onSubmit { finish(true) } }
-                    else { Text(beat.title.isEmpty ? "Untitled Beat" : beat.title).bold().fixedSize(horizontal: false, vertical: true).onTapGesture(count: 2) { begin("title") } }
-                    Text(scene.heading.text).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                }
-            }.padding(10)
-            Divider()
-            if editing == "synopsis" {
-                TextEditor(text: $draft).frame(minHeight: 130).focused($focused).accessibilityLabel("Beat summary")
-                    .onKeyPress(.return) { press in if press.modifiers.contains(.command) || press.modifiers.contains(.control) { finish(true); return .handled }; return .ignored }
-            } else {
-                Text(beat.synopsis.isEmpty ? "Double-click to add a summary…" : beat.synopsis)
-                    .font(.callout).foregroundStyle(beat.synopsis.isEmpty ? .secondary : .primary)
-                    .lineLimit(expanded ? nil : 4).fixedSize(horizontal: false, vertical: true).padding(10)
-                    .onTapGesture(count: 2) { begin("synopsis") }
-                if beat.synopsis.count > 220 { Button(expanded ? "Show less" : "Show more") { expanded.toggle() }.font(.caption).padding(.horizontal, 10) }
-            }
-            Rectangle().fill(dropAfter ? Color.accentColor : .clear).frame(height: 12)
-                .dropDestination(for: String.self) { values, _ in move(values, after: true) } isTargeted: { dropAfter = $0 }
-        }.background(.secondary.opacity(0.07))
-            .overlay(RoundedRectangle(cornerRadius: 4).stroke(workspace.selectedBoardBeatID == beat.id ? Color.accentColor : .gray.opacity(0.35)))
+        content
+            .background(Color.secondary.opacity(0.07))
+            .overlay(RoundedRectangle(cornerRadius: 4).stroke(workspace.selectedBoardBeatID == beat.id ? Color.accentColor : Color.gray.opacity(0.35)))
             .overlay(alignment: .top) { if dropBefore { Rectangle().fill(Color.accentColor).frame(height: 3) } }
             .onTapGesture { if editing == nil { navigate(scene.id, beat.id) } }
-            .contextMenu { Button("Edit title") { begin("title") }.disabled(locked); Button("Edit summary") { begin("synopsis") }.disabled(locked); Button("Pull Out Scene") { workspace.edit("Pull Out Scene") { try $0.pullOutBeats([beat.id]) } }.disabled(locked) }
+            .contextMenu { actions }
             .onDrag { NSItemProvider(object: "frontstage-card:\(beat.id)" as NSString) }
             .dropDestination(for: String.self) { values, _ in move(values, after: false) } isTargeted: { dropBefore = $0 }
             .onExitCommand { finish(false) }
             .onChange(of: focused) { _, value in if !value { finish(true) } }
+    }
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            Divider()
+            synopsis
+            Rectangle().fill(dropAfter ? Color.accentColor : Color.clear).frame(height: 12)
+                .dropDestination(for: String.self) { values, _ in move(values, after: true) } isTargeted: { dropAfter = $0 }
+        }
+    }
+    private var header: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(number).bold().padding(7).background(Color.orange.opacity(0.8)).foregroundStyle(Color.black)
+            VStack(alignment: .leading, spacing: 4) {
+                if editing == "title" { TextField("Beat title", text: $draft).focused($focused).onSubmit { finish(true) } }
+                else { Text(beat.title.isEmpty ? "Untitled Beat" : beat.title).bold().fixedSize(horizontal: false, vertical: true).onTapGesture(count: 2) { begin("title") } }
+                Text(scene.heading.text).font(.caption2).foregroundStyle(Color.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }.padding(10)
+    }
+    @ViewBuilder private var synopsis: some View {
+        if editing == "synopsis" {
+            TextEditor(text: $draft).frame(minHeight: 130).focused($focused).accessibilityLabel("Beat summary")
+                .onKeyPress(.return) { press in
+                    if press.modifiers.contains(.command) || press.modifiers.contains(.control) { finish(true); return .handled }
+                    return .ignored
+                }
+        } else {
+            Text(beat.synopsis.isEmpty ? "Double-click to add a summary…" : beat.synopsis)
+                .font(.callout).foregroundStyle(beat.synopsis.isEmpty ? Color.secondary : Color.primary)
+                .lineLimit(expanded ? nil : 4).fixedSize(horizontal: false, vertical: true).padding(10)
+                .onTapGesture(count: 2) { begin("synopsis") }
+            if beat.synopsis.count > 220 { Button(expanded ? "Show less" : "Show more") { expanded.toggle() }.font(.caption).padding(.horizontal, 10) }
+        }
+    }
+    @ViewBuilder private var actions: some View {
+        Button("Edit title") { begin("title") }.disabled(locked)
+        Button("Edit summary") { begin("synopsis") }.disabled(locked)
+        Button("Pull Out Scene") { workspace.edit("Pull Out Scene") { try $0.pullOutBeats([beat.id]) } }.disabled(locked)
     }
     private func begin(_ field: String) { guard !locked else { return }; editing = field; draft = field == "title" ? beat.title : beat.synopsis; focused = true }
     private func finish(_ save: Bool) {
@@ -174,7 +192,7 @@ struct SceneConversionReview: View {
                 }
             }
             HStack { Button("Cancel") { dismiss() }; Spacer(); Button("Create Converted Copy") {
-                do { let copy = try source.convertedSceneCopy(choices: choices); workspace.loadCopy(copy); workspace.mode = .edit; dismiss() }
+                do { let copy = try source.convertedSceneCopy(choices: choices); try workspace.acceptConvertedCopy(copy); dismiss() }
                 catch { workspace.errorMessage = error.localizedDescription }
             }.disabled(workspace.sharedProjects.linked?.access == "reader") }
         }.padding(20).frame(width: 660, height: 600).onAppear { original = workspace.project }
@@ -224,8 +242,6 @@ struct WriteNoteCard: View {
     var body: some View {
         VStack(alignment: .leading) {
             if note.editable {
-                NoteRichEditor(html: Binding(get: { workspace.project.writingNotes(sceneID: sceneID).first { $0.id == note.id }?.content ?? note.content }, set: { value in workspace.edit("Note Text", key: "note-\(note.id)") { try $0.updateWritingNote(sceneID: sceneID, id: note.id, content: value) } }))
-                    .frame(height: 150).accessibilityLabel("Note text")
                 HStack(spacing: 5) {
                     Menu { Button("Move Up") { move(-1) }; Button("Move Down") { move(1) } } label: { Image(systemName: "line.3.horizontal") }
                         .accessibilityLabel("Move note").onDrag { NSItemProvider(object: "frontstage-note:\(note.id)" as NSString) }
@@ -235,6 +251,9 @@ struct WriteNoteCard: View {
                     Spacer()
                     Button { workspace.edit("Delete Note") { try $0.removeWritingNote(sceneID: sceneID, id: note.id) } } label: { Image(systemName: "trash") }.buttonStyle(.plain).accessibilityLabel("Delete Note")
                 }
+
+                NoteRichEditor(html: Binding(get: { workspace.project.writingNotes(sceneID: sceneID).first { $0.id == note.id }?.content ?? note.content }, set: { value in workspace.edit("Note Text", key: "note-\(note.id)") { try $0.updateWritingNote(sceneID: sceneID, id: note.id, content: value) } }))
+                    .frame(height: 150).accessibilityLabel("Note text")
 
             } else { Text("Imported note · preserved read-only"); Text(note.content.localizedCaseInsensitiveContains("<audio") ? "Audio recording retained in the project" : note.content).textSelection(.enabled) }
         }.disabled(workspace.sharedProjects.linked?.access == "reader" || (sceneID != nil && workspace.project.scenes.first { $0.id == sceneID }?.isTextLocked == true)).padding(8).background(Color(boardHex: note.color).opacity(0.25)).clipShape(RoundedRectangle(cornerRadius: 6))
@@ -381,6 +400,13 @@ struct WriteHistoryPanel: View {
         ScrollView {
             VStack(alignment: .leading) {
                 Text("Scene History").font(.headline)
+                if !workspace.project.legacySceneRevisions(sceneID).isEmpty {
+                    DisclosureGroup("Original history · read-only") {
+                        ForEach(workspace.project.legacySceneRevisions(sceneID)) { revision in
+                            DisclosureGroup(revision.label) { Text(revision.summary); Text(readable(revision.html)).textSelection(.enabled) }
+                        }
+                    }
+                }
                 TextField("Snapshot label", text: $label)
                 Button("Capture Snapshot") { guard workspace.scriptController("write-continuous").textView?.hasMarkedText() != true, !workspace.whiteboard.beats.filter({ $0.sceneID == sceneID }).contains(where: { workspace.scriptController($0.id).textView?.hasMarkedText() == true }) else { workspace.errorMessage = "Finish the current text composition before taking a snapshot."; return }; workspace.edit("Capture Snapshot") { try $0.saveRevision(sceneID: sceneID, label: label) } }
                 ForEach(workspace.project.revisions(for: sceneID)) { revision in
