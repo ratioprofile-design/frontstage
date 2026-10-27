@@ -4,33 +4,80 @@ import SwiftUI
 import FrontstageCore
 private let ownerKey = NSAttributedString.Key("FrontstageBeatOwner")
 private let headingKey = NSAttributedString.Key("FrontstageSceneHeading")
+enum WritingPaperTheme: String, CaseIterable {
+    case white = "White", warm = "Warm", dark = "Dark", red = "Red"
+    var paper: NSColor { switch self { case .white: .white; case .warm: NSColor(srgbRed: 0.98, green: 0.94, blue: 0.85, alpha: 1); case .dark: NSColor(white: 0.13, alpha: 1); case .red: NSColor(srgbRed: 0.13, green: 0.04, blue: 0.04, alpha: 1) } }
+    var ink: NSColor { switch self { case .white, .warm: .black; case .dark: NSColor(white: 0.92, alpha: 1); case .red: NSColor(srgbRed: 0.91, green: 0.65, blue: 0.65, alpha: 1) } }
+}
+final class WritingClipView: NSClipView {
+    override func constrainBoundsRect(_ proposedBounds: NSRect) -> NSRect {
+        var result = super.constrainBoundsRect(proposedBounds)
+        if let documentView, documentView.frame.width < result.width { result.origin.x = -(result.width - documentView.frame.width) / 2 }
+        return result
+    }
+}
+final class WritingTextView: ScreenplayTextView {
+    var pageHeight: CGFloat = 842
+    override func drawBackground(in rect: NSRect) {
+        super.drawBackground(in: rect)
+        guard pageHeight > 0 else { return }
+        let first = max(1, Int(rect.minY / pageHeight)), last = Int(rect.maxY / pageHeight)
+        if first <= last { for page in first...last {
+            let y = CGFloat(page) * pageHeight
+            NSColor.gray.withAlphaComponent(0.5).setFill()
+            NSRect(x: 0, y: y, width: 24, height: 1).fill()
+            NSRect(x: bounds.width - 24, y: y, width: 24, height: 1).fill()
+        } }
+    }
+}
 struct ContinuousScriptEditor: NSViewRepresentable {
     @ObservedObject var workspace: Workspace
     @ObservedObject var controller: ScreenplayEditorController
     var width: CGFloat
     var zoom: Double
+    var theme = WritingPaperTheme.white
     func makeCoordinator() -> Coordinator { Coordinator(workspace, controller) }
     func makeNSView(context: Context) -> NSScrollView {
-        let scroll = NSScrollView(), text = ScreenplayTextView()
+        let scroll = NSScrollView(), text = WritingTextView()
+        scroll.contentView = WritingClipView()
+        scroll.drawsBackground = true; scroll.backgroundColor = NSColor(white: 0.3, alpha: 1)
         scroll.documentView = text; scroll.hasVerticalScroller = true; scroll.hasHorizontalScroller = true
         text.isRichText = true; text.importsGraphics = false; text.allowsUndo = true; text.isAutomaticQuoteSubstitutionEnabled = false
         text.backgroundColor = .white; text.textColor = .black; text.isVerticallyResizable = true; text.isHorizontallyResizable = true
         text.textContainerInset = NSSize(width: 60, height: 60); text.textContainer?.widthTracksTextView = false
         text.screenplayController = controller; text.delegate = context.coordinator; controller.textView = text
-        configure(text); context.coordinator.load(text); return scroll
+        text.splitScene = { [weak coordinator = context.coordinator, weak text] in if let text { coordinator?.splitAtCaret(text) } }
+        configure(text); context.coordinator.load(text); applyAppearance(text); return scroll
     }
     private func configure(_ text: NSTextView) {
         controller.contentWidth = width * zoom
         var typography = workspace.project.scriptLayout; typography.fontSize *= zoom; typography.lineHeight *= zoom; typography.paragraphSpacing *= zoom; controller.typography = typography
         text.textContainer?.containerSize = NSSize(width: width * zoom, height: .greatestFiniteMagnitude)
-        text.minSize = NSSize(width: width * zoom + 120, height: 792 * zoom); text.setFrameSize(NSSize(width: width * zoom + 120, height: max(text.frame.height, 792 * zoom)))
+        text.textContainerInset = NSSize(width: workspace.paper.leftMargin * zoom, height: workspace.paper.topMargin * zoom)
+        text.minSize = NSSize(width: workspace.paper.width * zoom, height: workspace.paper.height * zoom)
+        text.maxSize = NSSize(width: workspace.paper.width * zoom, height: .greatestFiniteMagnitude)
+        text.setFrameSize(NSSize(width: workspace.paper.width * zoom, height: max(text.frame.height, workspace.paper.height * zoom)))
+        (text as? WritingTextView)?.pageHeight = workspace.paper.height * zoom
+        text.isSelectable = true
         text.isEditable = workspace.sharedProjects.linked?.access != "reader"
+    }
+    private func applyAppearance(_ text: NSTextView) {
+        guard !text.hasMarkedText() else { return }
+        text.backgroundColor = theme.paper; text.textColor = theme.ink; text.insertionPointColor = theme.ink
+        text.typingAttributes[.foregroundColor] = theme.ink
+        let length = text.attributedString().length
+        guard length > 0, let manager = text.layoutManager else { return }
+        manager.removeTemporaryAttribute(.backgroundColor, forCharacterRange: NSRange(location: 0, length: length))
+        text.attributedString().enumerateAttribute(ownerKey, in: NSRange(location: 0, length: length)) { id, range, _ in
+            if id as? String == workspace.selectedBoardBeatID { manager.addTemporaryAttribute(.backgroundColor, value: NSColor.systemYellow.withAlphaComponent(0.12), forCharacterRange: range) }
+        }
     }
     func updateNSView(_ view: NSScrollView, context: Context) {
         guard let text = view.documentView as? NSTextView else { return }
         configure(text)
         let signature = context.coordinator.signature()
         if !context.coordinator.committing && !text.hasMarkedText() && signature != context.coordinator.lastSignature { context.coordinator.load(text) }
+        applyAppearance(text)
     }
     @MainActor final class Coordinator: NSObject, NSTextViewDelegate {
         let workspace: Workspace; let controller: ScreenplayEditorController
@@ -39,6 +86,31 @@ struct ContinuousScriptEditor: NSViewRepresentable {
         var headingScenes = Set<Decimal>()
         var pendingPullouts = Set<String>()
         init(_ workspace: Workspace, _ controller: ScreenplayEditorController) { self.workspace = workspace; self.controller = controller }
+        func splitAtCaret(_ text: NSTextView) {
+            guard text.isEditable, !text.hasMarkedText(), text.selectedRange().length == 0 else { return }
+            let source = text.attributedString(), caret = text.selectedRange().location
+            guard caret < source.length, source.attribute(headingKey, at: caret, effectiveRange: nil) == nil,
+                  let id = source.attribute(ownerKey, at: caret, effectiveRange: nil) as? String,
+                  let beat = workspace.whiteboard.beats.first(where: { $0.id == id }),
+                  let scene = workspace.project.scenes.first(where: { $0.id == beat.sceneID }) else { workspace.errorMessage = "Place the cursor inside screenplay text to split the scene."; return }
+            let before = NSMutableAttributedString(string: ""), after = NSMutableAttributedString(string: "")
+            source.enumerateAttributes(in: NSRange(location: 0, length: source.length)) { attributes, range, _ in
+                guard attributes[ownerKey] as? String == id, attributes[headingKey] == nil else { return }
+                let end = NSMaxRange(range)
+                if range.location < caret { before.append(source.attributedSubstring(from: NSRange(location: range.location, length: min(end, caret) - range.location))) }
+                if end > caret { after.append(source.attributedSubstring(from: NSRange(location: max(range.location, caret), length: end - max(range.location, caret)))) }
+            }
+            guard !before.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !after.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { workspace.errorMessage = "Place the cursor between screenplay text before splitting."; return }
+            var created: String?
+            workspace.edit("Split Scene") { created = try $0.insertScriptScene(afterSplitting: id, beforeHTML: ScreenplayTextCodec.encode(before), afterHTML: ScreenplayTextCodec.encode(after), heading: scene.heading.inlineText) }
+            if let created {
+                workspace.selectBoardBeat(created); load(text)
+                text.attributedString().enumerateAttribute(ownerKey, in: NSRange(location: 0, length: text.attributedString().length)) { value, range, stop in
+                    if value as? String == created { text.setSelectedRange(NSRange(location: range.location, length: 0)); text.scrollRangeToVisible(range); stop.pointee = true }
+                }
+                text.window?.makeFirstResponder(text)
+            }
+        }
         func signature() -> String {
             String(describing: controller.typography) + String(describing: controller.contentWidth) + workspace.whiteboard.orderedBeats.filter { !$0.omitted && !workspace.whiteboard.isUnused($0) && workspace.reader.filters.matches($0, board: workspace.whiteboard, scenes: workspace.project.scenes) }.map { beat in beat.id + beat.html + (workspace.project.scenes.first { $0.id == beat.sceneID }?.heading.inlineText ?? "") }.joined(separator: "\u{1f}")
         }

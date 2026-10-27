@@ -9,31 +9,26 @@ struct WritePagePanels<Content: View>: View {
     @ViewBuilder let content: () -> Content
     @AppStorage("write-left-width") private var leftWidth = 280.0
     @AppStorage("write-right-width") private var rightWidth = 320.0
-    @AppStorage("write-left-visible") private var leftVisible = true
-    @AppStorage("write-right-visible") private var rightVisible = true
     @State private var drawer: String?
     @State private var dragLeft: Double?
     @State private var dragRight: Double?
     var body: some View {
         GeometryReader { geometry in
             VStack(spacing: 0) {
-                HStack {
-                    Button("Scenes / Locations") { if geometry.size.width < 900 { drawer = drawer == "left" ? nil : "left" } else { leftVisible.toggle() } }
-                    Button("Notes / Breakdown / History") { if geometry.size.width < 1180 { drawer = drawer == "right" ? nil : "right" } else { rightVisible.toggle() } }
-                    Spacer()
-                }.padding(6)
                 HStack(spacing: 0) {
                     WriteScenePanel(workspace: workspace, navigate: navigate)
-                        .frame(width: leftWidth).frame(width: geometry.size.width >= 900 && leftVisible ? leftWidth : 0).clipped()
-                    if geometry.size.width >= 900 && leftVisible { divider(left: true) }
+                        .frame(width: leftWidth).frame(width: geometry.size.width >= 900 && workspace.writeCardsVisible ? leftWidth : 0).clipped()
+                    if geometry.size.width >= 900 && workspace.writeCardsVisible { divider(left: true) }
                     content().frame(maxWidth: .infinity, maxHeight: .infinity)
-                    if geometry.size.width >= 1180 && rightVisible { divider(left: false) }
+                    if geometry.size.width >= 1180 && workspace.writeInspectorVisible { divider(left: false) }
                     WriteInspector(workspace: workspace)
-                        .frame(width: rightWidth).frame(width: geometry.size.width >= 1180 && rightVisible ? rightWidth : 0).clipped()
+                        .frame(width: rightWidth).frame(width: geometry.size.width >= 1180 && workspace.writeInspectorVisible ? rightWidth : 0).clipped()
                 }
                 .overlay(alignment: .leading) { if geometry.size.width < 900 && drawer == "left" { WriteScenePanel(workspace: workspace, navigate: navigate).frame(width: min(leftWidth, geometry.size.width * 0.85)).background(.background).shadow(radius: 8) } }
                 .overlay(alignment: .trailing) { if geometry.size.width < 1180 && drawer == "right" { WriteInspector(workspace: workspace).frame(width: min(rightWidth, geometry.size.width * 0.85)).background(.background).shadow(radius: 8) } }
             }
+            .onChange(of: workspace.writeCardsToggle) { _, _ in if geometry.size.width < 900 { drawer = drawer == "left" ? nil : "left" } else { workspace.writeCardsVisible.toggle() } }
+            .onChange(of: workspace.writeInspectorToggle) { _, _ in if geometry.size.width < 1180 { drawer = drawer == "right" ? nil : "right" } else { workspace.writeInspectorVisible.toggle() } }
         }
     }
     private func divider(left: Bool) -> some View {
@@ -207,13 +202,17 @@ struct WriteInspector: View {
     @AppStorage("write-right-tab") private var tab = "Notes"
     @AppStorage("write-note-scope") private var scope = "Scene"
     private var scene: FrontstageCore.Scene? { workspace.project.scenes.first { $0.id == workspace.selectedSceneID } }
+    private var targetTitle: String {
+        if let beat = workspace.selectedBoardBeat, beat.sceneID == scene?.id { return beat.title }
+        return scene?.title ?? "Select a scene"
+    }
     var body: some View {
         VStack(alignment: .leading) {
             Picker("Inspector", selection: $tab) { ForEach(["Notes", "Breakdown", "History"], id: \.self) { Text($0) } }.pickerStyle(.segmented)
             if tab == "Notes" {
-                Picker("Note scope", selection: $scope) { Text("Scene").tag("Scene"); Text("Project").tag("Project") }.pickerStyle(.segmented)
-                if scope == "Project" { WriteNotesPanel(workspace: workspace, sceneID: nil, title: "Project notes").id("project-notes") }
-                else if let scene { WriteNotesPanel(workspace: workspace, sceneID: scene.id, title: scene.title).id("scene-notes-\(scene.id)") }
+                Picker("Note scope", selection: $scope) { Text("Scene").tag("Scene"); Text("Project").tag("Project"); Text("Both").tag("Both") }.pickerStyle(.segmented)
+                if scope == "Scene" || scope == "Both", let scene { WriteNotesPanel(workspace: workspace, sceneID: scene.id, title: "Scene notes · " + targetTitle).id("scene-notes-\(scene.id)") }
+                if scope == "Project" || scope == "Both" { WriteNotesPanel(workspace: workspace, sceneID: nil, title: "Project notes").id("project-notes") }
             } else if let scene {
                 if tab == "Breakdown" { WriteBreakdownPanel(workspace: workspace, sceneID: scene.id).id(scene.id) }
                 else { WriteHistoryPanel(workspace: workspace, sceneID: scene.id).id(scene.id) }
@@ -248,7 +247,9 @@ struct WriteNoteCard: View {
                 NoteRichEditor(html: Binding(get: { workspace.project.writingNotes(sceneID: sceneID).first { $0.id == note.id }?.content ?? note.content }, set: { value in workspace.edit("Note Text", key: "note-\(note.id)") { try $0.updateWritingNote(sceneID: sceneID, id: note.id, content: value) } }), color: note.color)
                     .frame(height: 150).accessibilityLabel("Note text")
                 Picker("Note color", selection: Binding(get: { note.color }, set: { color in workspace.edit("Note Color") { try $0.updateWritingNote(sceneID: sceneID, id: note.id, color: color) } })) {
-                    ForEach(["#fff4bc", "#d9edff", "#e1f4dc", "#f8dce7", "#ffffff"], id: \.self) { Text($0) }
+                    ForEach(Array(zip(["#fff4bc", "#d9edff", "#e1f4dc", "#f8dce7", "#ffffff"], ["Yellow", "Blue", "Green", "Pink", "White"])), id: \.0) { color, name in
+                        Label { Text(name) } icon: { Circle().fill(Color(boardHex: color)).frame(width: 12, height: 12).overlay(Circle().stroke(.gray)) }.tag(color)
+                    }
                 }
                 HStack {
                     Button("↑") { workspace.edit("Move Note") { try $0.moveWritingNote(sceneID: sceneID, id: note.id, offset: -1) } }.accessibilityLabel("Move Note Up")

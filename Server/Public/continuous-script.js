@@ -53,9 +53,36 @@ export function mountContinuousScript(sheet, api) {
   };
   function select() {
     const node = paragraph(), beat = beatFor(node?.dataset.beatId);
-    if (beat) { lastOwner = beat.id; api.select(beat.sceneID, beat.id); }
+    if (beat) { lastOwner = beat.id; mark(beat.id); api.select(beat.sceneID, beat.id); }
     api.element?.(elements.find(kind => node?.classList.contains('sc-'+kind)) || 'action');
   }
+  function mark(id) {
+    sheet.dataset.activeBeat=id;
+    let style=document.getElementById('write-active-scene-style');
+    if(!style){style=document.createElement('style');style.id='write-active-scene-style';document.head.append(style);}
+    style.textContent='.continuous-editor>[data-beat-id="'+CSS.escape(id)+'"]{background-color:rgba(210,160,30,.12)}';
+  }
+  function splitScene() {
+    const node=paragraph(),selection=getSelection();
+    if(!node||node.dataset.headingScene||!selection?.isCollapsed||locked(beatFor(node.dataset.beatId)))throw Error('Place the cursor inside unlocked screenplay text to split the scene.');
+    const id=node.dataset.beatId,parts=[...sheet.children].filter(n=>n.dataset.beatId===id&&!n.dataset.headingScene),caret=selection.getRangeAt(0),full=document.createRange();
+    full.setStart(parts[0],0);full.setEnd(parts.at(-1),parts.at(-1).childNodes.length);
+    const before=full.cloneRange(),after=full.cloneRange();before.setEnd(caret.startContainer,caret.startOffset);after.setStart(caret.startContainer,caret.startOffset);
+    const first=document.createElement('div'),second=document.createElement('div');first.append(before.cloneContents());second.append(after.cloneContents());
+    if(!first.textContent.trim()||!second.textContent.trim())throw Error('Place the cursor between screenplay text before splitting.');
+    const scene=api.document().project.beats.find(s=>s.id===beatFor(id).sceneID);let created;
+    const result=api.change(d=>{created=insertScriptScene(d,id,api.cleanHTML(first.innerHTML),api.cleanHTML(second.innerHTML),inlineHeading(scene));});
+    if(result!==false){const beat=model.board(api.document()).beats.find(b=>b.id===created);api.select(beat.sceneID,created);api.rebuild?.();requestAnimationFrame(()=>{const node=document.querySelector('.continuous-editor>[data-beat-id="'+CSS.escape(created)+'"]');if(node){const editor=node.closest('.continuous-editor');editor.focus();const range=document.createRange();range.selectNodeContents(node);range.collapse(true);getSelection().removeAllRanges();getSelection().addRange(range);node.scrollIntoView({block:'nearest'});editor.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));}});}
+  }
+  let contextCaret;
+  sheet.addEventListener('pointerdown',event=>{if(event.button===2){const selection=getSelection();contextCaret=selection?.rangeCount&&selection.isCollapsed?selection.getRangeAt(0).cloneRange():null;}},true);
+  sheet.addEventListener('contextmenu',event=>{
+    if(api.readonly())return;event.preventDefault();document.querySelector('.write-script-menu')?.remove();
+    if(contextCaret&&sheet.contains(contextCaret.startContainer)){getSelection().removeAllRanges();getSelection().addRange(contextCaret);}
+    const menu=document.createElement('div');menu.className='write-script-menu';menu.setAttribute('role','menu');menu.style.left=event.clientX+'px';menu.style.top=event.clientY+'px';
+    const item=document.createElement('button');item.textContent='Split scene at cursor';item.setAttribute('role','menuitem');item.onmousedown=e=>e.preventDefault();item.onclick=()=>{menu.remove();try{splitScene();}catch(e){api.status(e.message);}};menu.append(item);document.body.append(menu);
+    setTimeout(()=>document.addEventListener('click',()=>menu.remove(),{once:true}),0);
+  });
   function restoreHeadingAnchors(headings) {
     for (const sceneID of headingIDs) {
       if ([...pendingPullouts].some(id => String(beatFor(id)?.sceneID) === sceneID)) continue;
@@ -163,6 +190,7 @@ export function mountContinuousScript(sheet, api) {
     }
   });
   for (const event of ['focus','keyup','mouseup']) sheet.addEventListener(event, select);
-  return {...behavior, format(kind) { const node = paragraph(); if (node?.dataset.headingScene && kind !== 'slugline') insertAfterHeading(node, kind); else behavior.format(kind); }, commit,
-    reveal(id) { const node = [...sheet.children].find(node => node.dataset.beatId === id); node?.scrollIntoView({block:'nearest'}); return !!node; }};
+  if(api.selection?.())mark(api.selection());
+  return {...behavior,split:splitScene, format(kind) { const node = paragraph(); if (node?.dataset.headingScene && kind !== 'slugline') insertAfterHeading(node, kind); else behavior.format(kind); }, commit,
+    reveal(id) { const node = [...sheet.children].find(node => node.dataset.beatId === id); if(node){sheet.focus({preventScroll:true});const range=document.createRange();range.selectNodeContents(node);range.collapse(true);getSelection().removeAllRanges();getSelection().addRange(range);mark(id);node.scrollIntoView({block:'nearest'});} return !!node; }};
 }

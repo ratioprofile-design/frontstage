@@ -13,6 +13,7 @@ struct ScriptWritingWorkspace: View {
     @AppStorage("frontstage-script-dedicated-synopsis") private var showSynopsis = false
     @AppStorage("frontstage-script-dedicated-boundaries") private var showBoundaries = false
     @AppStorage("frontstage-script-show-omitted") private var showOmitted = false
+    @AppStorage("frontstage-write-paper-theme") private var paperTheme = "White"
     @State private var filter = ""
     @State private var activeController: ScreenplayEditorController?
     @State private var headingID: Decimal?
@@ -26,6 +27,7 @@ struct ScriptWritingWorkspace: View {
     private var tools: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 16) {
+                Menu {
                 Menu("Display") {
                     Picker("Beat Display", selection: $display) { ForEach(["Expand All", "Index Cards", "Collapse All", "Content Only", "Final Script"], id: \.self) { Text($0) } }
                     Divider()
@@ -51,7 +53,13 @@ struct ScriptWritingWorkspace: View {
                     Button("Full Screen") { NSApp.keyWindow?.toggleFullScreen(nil) }
                     Button("Writing Settings") { workspace.mode = .writingTools }
                 }
-                Text(display).foregroundStyle(.secondary)
+                } label: { Label("Writing options", systemImage: "ellipsis.circle") }
+                Button("Zoom out", systemImage: "minus.magnifyingglass") { zoom = max(0.5, zoom - 0.1) }.labelStyle(.iconOnly)
+                Text("\(Int((zoom * 100).rounded()))%")
+                Button("Zoom in", systemImage: "plus.magnifyingglass") { zoom = min(2, zoom + 0.1) }.labelStyle(.iconOnly)
+                Picker("Paper theme", selection: $paperTheme) { ForEach(WritingPaperTheme.allCases, id: \.rawValue) { Text($0.rawValue).tag($0.rawValue) } }.labelsHidden().frame(width: 85)
+                Spacer()
+                Button("Toggle inspector", systemImage: "sidebar.right") { workspace.writeInspectorToggle += 1 }.labelStyle(.iconOnly)
             }.font(.caption).padding(10).fixedSize()
         }.frame(height: 40).background(Color(white: 0.2)).accessibilityIdentifier("dedicated-script-tools")
     }
@@ -64,7 +72,11 @@ struct ScriptWritingWorkspace: View {
                 if plain, let text = workspace.scriptController("write-continuous").textView {
                     var found: NSRange?
                     text.attributedString().enumerateAttribute(NSAttributedString.Key("FrontstageBeatOwner"), in: NSRange(location: 0, length: text.attributedString().length)) { value, range, stop in if value as? String == beatID { found = range; stop.pointee = true } }
-                    if let found { text.scrollRangeToVisible(found) }
+                    if let found {
+                        text.window?.makeFirstResponder(text)
+                        text.setSelectedRange(NSRange(location: found.location, length: 0))
+                        text.scrollRangeToVisible(found)
+                    }
                 } else { proxy.scrollTo(beatID, anchor: .top) }
             } else { workspace.selectedSceneID = sceneID; proxy.scrollTo("scene-\(sceneID)", anchor: .top) }
         }) {
@@ -90,7 +102,7 @@ struct ScriptWritingWorkspace: View {
                 }.frame(maxHeight: 220)
             }
             if plain {
-                ContinuousScriptEditor(workspace: workspace, controller: workspace.scriptController("write-continuous"), width: contentWidth, zoom: zoom)
+                ContinuousScriptEditor(workspace: workspace, controller: workspace.scriptController("write-continuous"), width: contentWidth, zoom: zoom, theme: WritingPaperTheme(rawValue: paperTheme) ?? .white)
                     .onAppear { activeController = workspace.scriptController("write-continuous") }
             } else {
             ScrollView([.vertical, .horizontal]) {

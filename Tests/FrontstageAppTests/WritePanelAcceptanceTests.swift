@@ -5,6 +5,43 @@ import XCTest
 import FrontstageCore
 @testable import FrontstageApp
 final class WritePanelAcceptanceTests: XCTestCase {
+    func testEmbeddedWritePaperEditsHeadingsAndSplitsScenes() async throws {
+        try await MainActor.run {
+            _ = NSApplication.shared
+            let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Fixtures/write-panels.frontstage")
+            let workspace = Workspace(); workspace.loadCopy(try Project(data: Data(contentsOf: fixture)))
+            let controller = workspace.scriptController("embedded-write")
+            let root = ContinuousScriptEditor(workspace: workspace, controller: controller, width: workspace.paper.contentWidth, zoom: 1, theme: .warm)
+            let host = NSHostingView(rootView: root)
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false; window.contentView = host; host.layoutSubtreeIfNeeded()
+            defer { window.close() }
+            let text = try XCTUnwrap(controller.textView)
+            XCTAssertTrue(text.isEditable); XCTAssertTrue(text.isSelectable); XCTAssertTrue(window.makeFirstResponder(text))
+            XCTAssertEqual(workspace.paper, .a4)
+            XCTAssertEqual(text.frame.width, workspace.paper.width, accuracy: 1)
+            XCTAssertEqual(text.backgroundColor, WritingPaperTheme.warm.paper)
+            let count = workspace.project.scenes.count
+            let heading = (text.string as NSString).paragraphRange(for: NSRange(location: 0, length: 0))
+            text.setSelectedRange(NSRange(location: 0, length: heading.length - 1)); controller.selectionChanged()
+            text.insertText("ext. park - night", replacementRange: text.selectedRange())
+            XCTAssertEqual(workspace.project.scenes.first { $0.id == 1 }?.heading.location, "PARK")
+            XCTAssertEqual(workspace.project.scenes.first { $0.id == 1 }?.heading.time, "NIGHT")
+            XCTAssertEqual(workspace.project.scenes.count, count)
+            var body: NSRange?
+            text.attributedString().enumerateAttributes(in: NSRange(location: 0, length: text.attributedString().length)) { attributes, range, stop in
+                if attributes[NSAttributedString.Key("FrontstageBeatOwner")] as? String == "beat-1", attributes[NSAttributedString.Key("FrontstageSceneHeading")] == nil { body = range; stop.pointee = true }
+            }
+            let bodyRange = try XCTUnwrap(body)
+            text.setSelectedRange(NSRange(location: bodyRange.location + max(1, bodyRange.length / 2), length: 0))
+            let notes = workspace.project.writingNotes(sceneID: 1)
+            text.splitScene?()
+            XCTAssertEqual(workspace.project.scenes.count, count + 1)
+            XCTAssertEqual(workspace.project.writingNotes(sceneID: 1), notes)
+            XCTAssertNil(workspace.errorMessage)
+            workspace.undoProject(); XCTAssertEqual(workspace.project.scenes.count, count)
+        }
+    }
     func testTypingExistingHeadingAndTimeCompletionKeepsSceneIdentity() async throws {
         try await MainActor.run {
             _ = NSApplication.shared

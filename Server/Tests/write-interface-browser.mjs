@@ -1,0 +1,42 @@
+import {createServer} from 'node:http';
+import {createRequire} from 'node:module';
+import {readFile,mkdir} from 'node:fs/promises';
+import {existsSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+const require=createRequire(import.meta.url),{chromium}=require(process.env.FRONTSTAGE_PLAYWRIGHT_MODULE||'playwright');
+const root=fileURLToPath(new URL('../../',import.meta.url));
+const server=createServer(async(req,res)=>{try{const file=req.url==='/'?'index.html':decodeURIComponent(req.url.slice(1));if(file.includes('/')||file.includes('..'))throw Error();res.setHeader('Content-Type',file.endsWith('.js')?'application/javascript':file.endsWith('.css')?'text/css':'text/html');res.end(await readFile(path.join(root,'Server/Public',file)));}catch{res.writeHead(404);res.end();}});
+await new Promise(resolve=>server.listen(17845,'127.0.0.1',resolve));let browser;
+try{
+ browser=await chromium.launch({executablePath:process.env.FRONTSTAGE_CHROMIUM||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':chromium.executablePath()),headless:true,args:['--no-sandbox']});
+ const page=await browser.newPage({viewport:{width:1440,height:950}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('http://127.0.0.1:17845');await page.locator('#local-mode').click();await page.locator('#back').click();await page.waitForSelector('#projects:not([hidden])');
+ await page.locator('#import-project').setInputFiles(path.join(root,'Tests/Fixtures/write-panels.frontstage'));await page.waitForSelector('#workspace:not([hidden])');await page.locator('#view-mode').selectOption('edit');
+ const sheet=page.locator('.continuous-editor'),first=page.locator('.simple-beat-card[data-beat-id="beat-1"]'),right=page.locator('.write-right');
+ assert.equal(await page.locator('#paper-mode').inputValue(),'a4');assert.equal(await page.locator('.write-panel-layout>.write-panel-switches').count(),0);
+ assert.ok(await page.getByText('Writing options',{exact:true}).isVisible());assert.equal(await page.getByRole('navigation',{name:'Script toolbar'}).getByText('Display',{exact:true}).isVisible(),false);
+ await first.locator('[data-card-field="title"]').dblclick();await first.getByLabel('Beat title',{exact:true}).fill('Chosen beat title');await first.getByLabel('Beat title',{exact:true}).press('Enter');
+ await first.locator('[data-card-field="title"]').click();assert.equal(await sheet.getAttribute('data-active-beat'),'beat-1');assert.ok((await right.locator('[data-note-target]').innerText()).includes('Chosen beat title'));
+ await sheet.evaluate(n=>window.interfaceEditor=n);await page.locator('#scenes-toggle').click();assert.equal(await page.locator('.write-left').isVisible(),false);await page.locator('#scenes-toggle').click();assert.ok(await sheet.evaluate(n=>n===window.interfaceEditor));
+ await page.getByRole('button',{name:'Zoom in',exact:true}).click();assert.equal(await page.locator('[data-write-zoom]').innerText(),'110%');assert.ok(await sheet.evaluate(n=>n===window.interfaceEditor));
+ for(const theme of ['Warm','Dark','Red','White']){await page.getByLabel('Paper theme',{exact:true}).selectOption(theme);assert.equal(await sheet.getAttribute('data-theme'),theme);assert.ok(await sheet.evaluate(n=>n===window.interfaceEditor));}
+ await right.getByLabel('Note scope',{exact:true}).selectOption('Both');assert.equal(await right.locator('[data-note-scope]').count(),2);assert.ok(await right.getByText('Project note',{exact:true}).isVisible());
+ const sceneNotes=right.locator('[data-note-scope="Scene"]'),projectNotes=right.locator('[data-note-scope="Project"]');
+ await sceneNotes.getByRole('button',{name:'Add Note',exact:true}).click();await sceneNotes.getByRole('textbox',{name:'Note text',exact:true}).last().fill('Only the chosen scene');
+ await projectNotes.getByRole('button',{name:'Set note color to Blue',exact:true}).first().click();assert.equal(await projectNotes.locator('.writing-note').first().evaluate(n=>getComputedStyle(n).backgroundColor),'rgb(217, 237, 255)');assert.equal(await projectNotes.getByLabel('Note color',{exact:true}).first().locator('option:checked').innerText(),'Blue');
+ await page.locator('.simple-beat-card[data-beat-id="beat-2"] [data-card-field="title"]').click();assert.equal(await right.getByText('Only the chosen scene',{exact:true}).count(),0);assert.equal(await right.getByText('Project note',{exact:true}).count(),1);
+ await first.locator('[data-card-field="title"]').click();assert.equal(await sceneNotes.getByText('Only the chosen scene',{exact:true}).count(),1);
+ const heading=sheet.locator('[data-heading-scene="1"]');await heading.selectText();await page.keyboard.type('ext. park - n');await page.keyboard.press('Enter');assert.equal(await heading.innerText(),'EXT. PARK - NIGHT');
+ const body=sheet.locator('[data-beat-id="beat-1"]:not([data-heading-scene])').first();await body.fill('Before split. After split.');
+ await body.evaluate(n=>{const range=document.createRange();range.setStart(n.firstChild,14);range.collapse(true);getSelection().removeAllRanges();getSelection().addRange(range);});
+ await body.click({button:'right'});await page.getByRole('menuitem',{name:'Split scene at cursor',exact:true}).click();
+ assert.ok(!(await page.locator('#status').innerText()).includes('Place the cursor'),await page.locator('#status').innerText());
+ await page.waitForFunction(()=>document.querySelectorAll('.simple-beat-card').length===3);
+ assert.ok((await sheet.innerText()).includes('Before split.'));assert.ok((await sheet.innerText()).includes('After split.'));assert.equal(await sheet.locator('[data-heading-scene]').count(),3);
+ await page.locator('#undo').click();assert.equal(await page.locator('.simple-beat-card').count(),2);
+ assert.equal(await sheet.getAttribute('data-active-beat'),'beat-1');assert.ok((await right.locator('[data-note-target]').innerText()).includes('Chosen beat title'));
+ await mkdir(path.join(root,'build/parity'),{recursive:true});await page.screenshot({path:path.join(root,'build/parity/write-interface.png')});assert.deepEqual(errors,[]);
+ console.log('PASS: compact Write controls, A4, retained editor across zoom/themes/sidebar, beat selection, both note scopes, named colors, editable headings and scene splitting/undo');
+}finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}

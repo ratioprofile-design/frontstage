@@ -141,8 +141,15 @@ final class ScreenplayEditorController: ObservableObject {
     }
 }
 
-final class ScreenplayTextView: NSTextView {
+class ScreenplayTextView: NSTextView {
     weak var screenplayController: ScreenplayEditorController?
+    var splitScene: (() -> Void)?
+    private var splitCaret: NSRange?
+    override func rightMouseDown(with event: NSEvent) {
+        if splitScene != nil, selectedRange().length == 0 { splitCaret = selectedRange() }
+        super.rightMouseDown(with: event)
+        splitCaret = nil
+    }
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = super.menu(for: event) ?? NSMenu()
         let styles = NSMenuItem(title: "Paragraph Style", action: nil, keyEquivalent: "")
@@ -152,8 +159,13 @@ final class ScreenplayTextView: NSTextView {
             item.target = self; item.representedObject = element.rawValue; item.isEnabled = isEditable; submenu.addItem(item)
         }
         styles.submenu = submenu; menu.addItem(.separator()); menu.addItem(styles)
+        if splitScene != nil {
+            let split = NSMenuItem(title: "Split scene at cursor", action: #selector(splitWriteScene), keyEquivalent: "")
+            split.target = self; split.isEnabled = isEditable; menu.addItem(split)
+        }
         return menu
     }
+    @objc private func splitWriteScene() { if let splitCaret { setSelectedRange(splitCaret) }; splitScene?() }
     @objc private func applyParagraph(_ sender: NSMenuItem) {
         if let value = sender.representedObject as? String, let element = ScreenplayElement(rawValue: value) { screenplayController?.format(element) }
     }

@@ -90,13 +90,17 @@ final class Workspace: ObservableObject {
     @Published var selectedBoardBeatID: String?
     @Published var pendingBoardCauseID: String?
     @Published var showBoardScript = true
+    @Published var writeCardsVisible = true
+    @Published var writeInspectorVisible = true
+    @Published var writeCardsToggle = 0
+    @Published var writeInspectorToggle = 0
     @Published var reader = ScriptReaderSettings()
     @Published var whiteboardRipple = true
     @Published var selectedResearchID: String?
     @Published var mode = Mode.board {
         didSet { if oldValue != mode { editor.textView?.undoManager?.removeAllActions() } }
     }
-    @Published var paper = ScreenplayPaper.letter
+    @Published var paper = ScreenplayPaper.a4
     @Published private(set) var preview: PDFDocument?
     @Published private(set) var history = ProjectHistory()
     @Published private(set) var recoveryCandidate: Project?
@@ -212,6 +216,7 @@ final class Workspace: ObservableObject {
         for id in popup.panels.keys { popup.controller(for: id)?.textView?.undoManager?.removeAllActions() }
         for controller in scriptEditors.values { controller.textView?.undoManager?.removeAllActions() }
         if !whiteboard.beats.contains(where: { $0.id == selectedBoardBeatID }) { selectedBoardBeatID = whiteboard.orderedBeats.first?.id }
+        if let beat = whiteboard.beats.first(where: { $0.id == selectedBoardBeatID }) { selectedSceneID = beat.sceneID }
     }
 
     private func didSave() {
@@ -456,7 +461,14 @@ struct WorkspaceView: View {
                 if !workspace.recoveryStatus.isEmpty { Text(workspace.recoveryStatus) }
             }.font(.caption).foregroundStyle(.secondary).padding(8).background(.regularMaterial)
         }
+        .toolbar(removing: .sidebarToggle)
         .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button("Toggle navigation", systemImage: "sidebar.left") {
+                    if workspace.mode == .edit { workspace.writeCardsToggle += 1 }
+                    else { workspace.showBoardScript.toggle() }
+                }
+            }
             Picker("View", selection: $workspace.mode) {
                 ForEach(Workspace.Mode.allCases, id: \.self) { mode in Text(mode.rawValue).tag(mode) }
             }.pickerStyle(.menu).frame(width: 140)

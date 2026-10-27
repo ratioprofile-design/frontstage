@@ -34,7 +34,7 @@ try{
  assert.equal(await page.locator('.continuous-paper .screenplay-toolbar').count(),0);
  assert.equal(await page.locator('.continuous-paper .snippet-heading').count(),0);
  assert.equal(await page.locator('.writing-scene-fields').count(),0);
- const displayMode=async mode=>{await scriptTools.locator('summary').filter({hasText:/^Display$/}).click();await scriptTools.getByRole('button',{name:mode,exact:true}).click();};
+ const displayMode=async mode=>{if(!await scriptTools.locator('.write-settings').evaluate(n=>n.open))await scriptTools.getByText('Writing options',{exact:true}).click();await scriptTools.locator('summary').filter({hasText:/^Display$/}).click();await scriptTools.getByRole('button',{name:mode,exact:true}).click();};
  await displayMode('Expand All');assert.ok(await page.locator('.continuous-paper .snippet-heading').count()>0);
  await displayMode('Collapse All');assert.equal(await page.locator('.continuous-paper .script-text:visible').count(),0);
  await page.locator('.continuous-paper .snippet-heading').first().click();assert.equal(await page.locator('.continuous-paper .script-text:visible').count(),1);
@@ -43,7 +43,7 @@ try{
  await displayMode('Content Only');assert.equal(await page.locator('.continuous-paper .snippet-heading').count(),0);assert.ok(await page.locator('.continuous-editor').count()>0);
  await displayMode('Final Script');assert.equal(await page.locator('.writing-scene-fields').count(),0);assert.ok(await page.locator('.continuous-editor [data-heading-scene]').count()>0);
  const formatText=page.locator('.continuous-editor [data-beat-id="beat-1"]:not([data-heading-scene])').first();await formatText.fill('Keep selected text.');await formatText.evaluate(node=>{const range=document.createRange();range.selectNodeContents(node);getSelection().removeAllRanges();getSelection().addRange(range);node.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));});
- await scriptTools.locator('summary').filter({hasText:/^Styling$/}).click();await scriptTools.getByRole('button',{name:'italic',exact:true}).click();assert.equal(await formatText.locator('i,em').innerText(),'Keep selected text.');
+ if(!await scriptTools.locator('.write-settings').evaluate(n=>n.open))await scriptTools.getByText('Writing options',{exact:true}).click();await scriptTools.locator('summary').filter({hasText:/^Styling$/}).click();await scriptTools.getByRole('button',{name:'italic',exact:true}).click();assert.equal(await formatText.locator('i,em').innerText(),'Keep selected text.');
  await formatText.fill('Action.');await formatText.press('End');await formatText.press('Tab');assert.ok(await page.locator('.continuous-editor .sc-character').count()>0);await page.keyboard.press('Enter');assert.ok(await page.locator('.continuous-editor .sc-dialogue').count()>0);
  await view('board');await page.locator('#blocks [data-beat-id="beat-1"]').dblclick();await view('edit');
  const text=page.locator('.continuous-editor [data-beat-id="beat-1"]:not([data-heading-scene])').first();await text.fill('Browser screenplay text.');assert.equal(await page.locator('.beat-popup.active [data-field="snippet-editor"]').innerText(),'Browser screenplay text.');await page.locator('.beat-popup.active [data-field="close-editor"]').click();
