@@ -162,5 +162,24 @@ final class WriteNavigationEditingTests: XCTestCase {
             XCTAssertEqual(plain.selectedRange(), NSRange(location: 5, length: 7))
         }
     }
+    func testHeadingSuggestionsAcceptExplicitlyWithoutMovingCaretWhileTyping() async throws {
+        try await MainActor.run {
+            let (workspace, _, window, text) = try Self.editor(Self.fixture()); defer { window.close() }
+            window.orderFront(nil)
+            let heading = (text.string as NSString).paragraphRange(for: NSRange(location: 0, length: 0))
+            text.setSelectedRange(NSRange(location: 0, length: heading.length - 1))
+            text.insertText("ext. park - n", replacementRange: text.selectedRange())
+            let coordinator = try XCTUnwrap(text.delegate as? ContinuousScriptEditor.Coordinator)
+            XCTAssertTrue(coordinator.headingSuggestions.isShown)
+            XCTAssertTrue(text.string.hasPrefix("EXT. PARK - N\n"), "Suggestions must not insert a preview into the paper")
+            XCTAssertEqual(text.selectedRange(), NSRange(location: "EXT. PARK - N".utf16.count, length: 0))
+            XCTAssertTrue(coordinator.textView(text, doCommandBy: #selector(NSResponder.insertNewline(_:))))
+            XCTAssertEqual(workspace.project.scenes[0].heading.time, "NIGHT")
+            XCTAssertFalse(coordinator.headingSuggestions.isShown)
+            XCTAssertTrue(text.string.hasPrefix("EXT. PARK - NIGHT\n"))
+            XCTAssertTrue(coordinator.textView(text, doCommandBy: #selector(NSResponder.insertNewline(_:))))
+            XCTAssertEqual(text.selectedRange().location, "EXT. PARK - NIGHT\n".utf16.count)
+        }
+    }
 }
 #endif
