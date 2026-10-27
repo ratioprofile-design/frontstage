@@ -91,7 +91,7 @@ struct SimpleWriteBeatCard: View {
             .background(Color.secondary.opacity(0.07))
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(workspace.selectedBoardBeatID == beat.id ? Color.accentColor : Color.gray.opacity(0.35)))
             .overlay(alignment: .top) { if dropBefore { Rectangle().fill(Color.accentColor).frame(height: 3) } }
-            .onTapGesture { if editing == nil { navigate(scene.id, beat.id) } }
+            .simultaneousGesture(TapGesture().onEnded { if editing == nil { navigate(scene.id, beat.id) } })
             .contextMenu { actions }
             .onDrag { NSItemProvider(object: "frontstage-card:\(beat.id)" as NSString) }
             .dropDestination(for: String.self) { values, _ in move(values, after: false) } isTargeted: { dropBefore = $0 }

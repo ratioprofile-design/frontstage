@@ -35,6 +35,42 @@ final class WritingCanvasView: NSView {
 }
 final class WritingTextView: ScreenplayTextView {
     var pageHeight: CGFloat = 842
+    var revealBeat: ((String) -> Void)?
+    var compositionFinished: (() -> Void)?
+    override func unmarkText() {
+        super.unmarkText()
+        DispatchQueue.main.async { [weak self] in if let self, !self.hasMarkedText() { self.compositionFinished?() } }
+    }
+    override func insertText(_ insertString: Any, replacementRange: NSRange) {
+        let range = replacementRange.location == NSNotFound ? selectedRange() : replacementRange
+        if let replacement = ScriptHeadingEditing.replacement(insertString, in: self, range: range) {
+            super.insertText(replacement, replacementRange: replacementRange)
+        } else { super.insertText(insertString, replacementRange: replacementRange) }
+    }
+    @discardableResult func centerBeat(_ id: String) -> Bool {
+        guard !hasMarkedText(), let canvas = superview as? WritingCanvasView, let scroll = enclosingScrollView,
+              let manager = layoutManager, let container = textContainer else { return false }
+        canvas.layoutPaper()
+        let source = attributedString()
+        var target: NSRange?
+        source.enumerateAttribute(ownerKey, in: NSRange(location: 0, length: source.length)) { value, range, stop in
+            if value as? String == id { target = (source.string as NSString).paragraphRange(for: NSRange(location: range.location, length: 0)); stop.pointee = true }
+        }
+        guard let target else { return false }
+        window?.makeFirstResponder(self)
+        setSelectedRange(NSRange(location: target.location, length: 0))
+        let glyphs = manager.glyphRange(forCharacterRange: target, actualCharacterRange: nil)
+        var rect = manager.boundingRect(forGlyphRange: glyphs, in: container)
+        rect.origin.x += textContainerOrigin.x; rect.origin.y += textContainerOrigin.y
+        let heading = canvas.convert(rect, from: self), clip = scroll.contentView
+        let y = max(0, min(canvas.bounds.height - clip.bounds.height, heading.midY - clip.bounds.height / 2))
+        clip.scroll(to: NSPoint(x: clip.bounds.origin.x, y: y)); scroll.reflectScrolledClipView(clip)
+        manager.removeTemporaryAttribute(.backgroundColor, forCharacterRange: NSRange(location: 0, length: source.length))
+        source.enumerateAttribute(ownerKey, in: NSRange(location: 0, length: source.length)) { value, range, _ in
+            if value as? String == id { manager.addTemporaryAttribute(.backgroundColor, value: NSColor.systemYellow.withAlphaComponent(0.12), forCharacterRange: range) }
+        }
+        return true
+    }
     override func drawBackground(in rect: NSRect) {
         super.drawBackground(in: rect)
         guard pageHeight > 0 else { return }
@@ -64,6 +100,10 @@ struct ContinuousScriptEditor: NSViewRepresentable {
         text.textContainerInset = NSSize(width: 60, height: 60); text.textContainer?.widthTracksTextView = false
         text.screenplayController = controller; text.delegate = context.coordinator; controller.textView = text
         text.splitScene = { [weak coordinator = context.coordinator, weak text] in if let text { coordinator?.splitAtCaret(text) } }
+        text.revealBeat = { [weak coordinator = context.coordinator, weak text] id in if let text { coordinator?.reveal(id, in: text) } }
+        text.compositionFinished = { [weak coordinator = context.coordinator, weak text] in
+            if let coordinator, coordinator.pendingReveal != nil, let text { coordinator.textDidChange(Notification(name: NSText.didChangeNotification, object: text)) }
+        }
         configure(text); context.coordinator.load(text); canvas.layoutPaper(); applyAppearance(text); return scroll
     }
     private func configure(_ text: NSTextView) {
@@ -104,7 +144,21 @@ struct ContinuousScriptEditor: NSViewRepresentable {
         var visible = Set<String>()
         var headingScenes = Set<Decimal>()
         var pendingPullouts = Set<String>()
+        var pendingHeading: ScriptHeadingEditing.Context?
+        var pendingReveal: String?
+        var offerCompletions = false
         init(_ workspace: Workspace, _ controller: ScreenplayEditorController) { self.workspace = workspace; self.controller = controller }
+        func reveal(_ id: String, in text: WritingTextView) {
+            if text.hasMarkedText() { pendingReveal = id; return }
+            synchronizeHeadings(text, excluding: nil)
+            if text.centerBeat(id) { workspace.selectBoardBeat(id) }
+        }
+        func synchronizeHeadings(_ text: NSTextView, excluding range: NSRange?) {
+            let prior = loading; loading = true
+            ScriptHeadingEditing.synchronize(text, project: workspace.project, excluding: range)
+            loading = prior
+            (text.superview as? WritingCanvasView)?.layoutPaper()
+        }
         func splitAtCaret(_ text: NSTextView) {
             guard text.isEditable, !text.hasMarkedText(), text.selectedRange().length == 0 else { return }
             let source = text.attributedString(), caret = text.selectedRange().location
@@ -135,6 +189,7 @@ struct ContinuousScriptEditor: NSViewRepresentable {
         }
         func load(_ text: NSTextView) {
             loading = true; defer { loading = false }; visible.removeAll(); headingScenes.removeAll()
+            let bookmark = ScriptHeadingEditing.bookmark(text)
             let result = NSMutableAttributedString(string: "")
             for segment in (try? workspace.project.orderedScript()) ?? [] {
                 let beats = segment.beatIDs.compactMap { id in workspace.whiteboard.beats.first { $0.id == id } }.filter { workspace.reader.filters.matches($0, board: workspace.whiteboard, scenes: workspace.project.scenes) }
@@ -150,14 +205,16 @@ struct ContinuousScriptEditor: NSViewRepresentable {
                     body.addAttribute(ownerKey, value: beat.id, range: NSRange(location: 0, length: body.length)); result.append(body)
                 }
             }
-            let selection = text.selectedRange(); text.textStorage?.setAttributedString(result)
+            let selection = bookmark.flatMap { ScriptHeadingEditing.restore($0, in: result, project: workspace.project) } ?? NSRange(location: min(text.selectedRange().location, result.length), length: 0)
+            text.textStorage?.setAttributedString(result)
             (text.superview as? WritingCanvasView)?.layoutPaper()
-            text.setSelectedRange(NSRange(location: min(selection.location, result.length), length: 0)); lastSignature = signature()
+            text.setSelectedRange(selection, affinity: bookmark?.affinity ?? .downstream, stillSelecting: false); lastSignature = signature()
         }
         func textDidChange(_ notification: Notification) {
             guard let text = notification.object as? NSTextView, !loading, !committing, !text.hasMarkedText() else { return }
             committing = true; defer { committing = false }
             loading = true
+            if let context = pendingHeading { ScriptHeadingEditing.repair(text, context: context); pendingHeading = nil }
             if let storage = text.textStorage, storage.length > 0 {
                 let position = min(text.selectedRange().location, storage.length - 1)
                 let range = (text.string as NSString).paragraphRange(for: NSRange(location: position, length: 0))
@@ -169,7 +226,9 @@ struct ContinuousScriptEditor: NSViewRepresentable {
             }
             ScriptCueNames.capitalize(in: text); loading = false
             let source = text.attributedString(), string = source.string as NSString
-            var assignments = [(NSRange, String)](), created = [(NSRange, String, Decimal)](), succeeded = false, missingHeading = false, repeatedHeadingChanged = false
+            var assignments = [(NSRange, String)](), created = [(NSRange, String, Decimal)](), succeeded = false, missingHeading = false
+            let selection = text.selectedRange()
+            let editing = source.length > 0 ? string.paragraphRange(for: NSRange(location: min(selection.location, source.length - 1), length: 0)) : nil
             workspace.edit("Screenplay", key: "continuous-script") { project in
                 var html = Dictionary(uniqueKeysWithValues: visible.filter { !pendingPullouts.contains($0) }.map { ($0, "") })
                 var headings = [ScriptHeadingEdit](), owner: String?, redirects = [String: String]()
@@ -182,10 +241,8 @@ struct ContinuousScriptEditor: NSViewRepresentable {
                     let line = string.substring(with: range).trimmingCharacters(in: .newlines)
                     let kind = ScreenplayElement(rawValue: attributes[.screenplayElement] as? String ?? "action") ?? .action
                     if let scene = attributes[headingKey] as? String, let sceneID = Decimal(string: scene) {
-                        let changed = line != project.scenes.first(where: { $0.id == sceneID })?.heading.inlineText
                         if let existing = headings.firstIndex(where: { $0.sceneID == sceneID }) {
-                            if changed { headings[existing] = ScriptHeadingEdit(sceneID: sceneID, text: line) }
-                            if changed || headings[existing].text != project.scenes.first(where: { $0.id == sceneID })?.heading.inlineText { repeatedHeadingChanged = true }
+                            if range == editing { headings[existing] = ScriptHeadingEdit(sceneID: sceneID, text: line) }
                         } else { headings.append(ScriptHeadingEdit(sceneID: sceneID, text: line)) }
                     } else if kind == .sceneHeading && !line.trimmingCharacters(in: .whitespaces).isEmpty {
                         let newID = try project.insertScriptScene(afterSplitting: id, beforeHTML: html[id] ?? "", afterHTML: "", heading: line)
@@ -214,21 +271,33 @@ struct ContinuousScriptEditor: NSViewRepresentable {
                 visible.insert(id); headingScenes.insert(sceneID)
             }
             visible.subtract(pendingPullouts); pendingPullouts.removeAll()
-            if missingHeading || repeatedHeadingChanged { load(text) }
+            if missingHeading { load(text) }
+            synchronizeHeadings(text, excluding: editing)
             (text.superview as? WritingCanvasView)?.layoutPaper()
             lastSignature = signature(); controller.selectionChanged(); text.scrollRangeToVisible(text.selectedRange())
-            if !completing, !(completionChoices[controller.activeElement] ?? []).isEmpty {
+            if let id = pendingReveal, let writing = text as? WritingTextView { pendingReveal = nil; reveal(id, in: writing) }
+            if offerCompletions, !completing, !(completionChoices[controller.activeElement] ?? []).isEmpty {
                 completing = true; text.complete(nil); completing = false
             }
+            offerCompletions = false
         }
         func textViewDidChangeSelection(_ notification: Notification) {
             guard !loading, let text = notification.object as? NSTextView, !text.hasMarkedText() else { return }
             controller.selectionChanged()
             let index = min(text.selectedRange().location, max(0, text.attributedString().length - 1))
-            if text.attributedString().length > 0, let id = text.attributedString().attribute(ownerKey, at: index, effectiveRange: nil) as? String {
+            let active = text.attributedString().length > 0 ? (text.string as NSString).paragraphRange(for: NSRange(location: index, length: 0)) : nil
+            synchronizeHeadings(text, excluding: active)
+            let position = min(text.selectedRange().location, max(0, text.attributedString().length - 1))
+            if text.attributedString().length > 0, text.attributedString().attribute(headingKey, at: position, effectiveRange: nil) != nil {
+                text.typingAttributes = text.attributedString().attributes(at: position, effectiveRange: nil)
+            }
+            if text.attributedString().length > 0, let id = text.attributedString().attribute(ownerKey, at: position, effectiveRange: nil) as? String {
                 workspace.selectBoardBeat(id)
                 if text.selectedRange().length > 0, let beat = workspace.whiteboard.beats.first(where: { $0.id == id }) { workspace.writingSelectedQuote = (beat.sceneID, (text.string as NSString).substring(with: text.selectedRange())) }
             }
+        }
+        func textDidEndEditing(_ notification: Notification) {
+            if let text = notification.object as? NSTextView { synchronizeHeadings(text, excluding: nil) }
         }
         var completionChoices: [ScreenplayElement: [String]] {
             var choices = workspace.screenplayCompletions
@@ -247,16 +316,34 @@ struct ContinuousScriptEditor: NSViewRepresentable {
             if controller.activeElement == .sceneHeading, !choices.isEmpty { index?.pointee = 0 }
             return choices.map { String($0.dropFirst(before.count)) }
         }
-        func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool { controller.handleCommand(commandSelector, in: textView) }
+        func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            guard !textView.hasMarkedText() else { return false }
+            if let context = ScriptHeadingEditing.context(in: textView, replacing: textView.selectedRange()) {
+                if commandSelector == #selector(NSResponder.deleteBackward(_:)), textView.selectedRange() == NSRange(location: context.range.location, length: 0) { return true }
+                if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+                    synchronizeHeadings(textView, excluding: nil)
+                    let heading = (textView.string as NSString).paragraphRange(for: NSRange(location: context.range.location, length: 0))
+                    let next = NSMaxRange(heading)
+                    if next < textView.attributedString().length {
+                        textView.setSelectedRange(NSRange(location: next, length: 0))
+                        textView.typingAttributes = textView.attributedString().attributes(at: next, effectiveRange: nil)
+                        controller.selectionChanged(); textView.scrollRangeToVisible(textView.selectedRange()); return true
+                    }
+                }
+            }
+            return controller.handleCommand(commandSelector, in: textView)
+        }
         func textView(_ textView: NSTextView, shouldChangeTextIn range: NSRange, replacementString: String?) -> Bool {
             pendingPullouts.removeAll()
             let source = textView.attributedString(); guard source.length > 0 else { return true }
+            pendingHeading = (replacementString?.contains("\n") == true) ? nil : ScriptHeadingEditing.context(in: textView, replacing: range)
+            offerCompletions = replacementString?.last?.isLetter == true
             var allowed = true
             let checked = NSRange(location: min(range.location, source.length - 1), length: max(1, min(range.length, source.length - min(range.location, source.length - 1))))
             source.enumerateAttribute(ownerKey, in: checked) { value, _, _ in
                 if let id = value as? String, let beat = workspace.whiteboard.beats.first(where: { $0.id == id }), workspace.whiteboard.isLocked(beat) || workspace.project.scenes.first(where: { $0.id == beat.sceneID })?.isTextLocked == true { allowed = false }
             }
-            if allowed, replacementString == "", range.length > 0 {
+            if allowed, replacementString == "", range.length > 0, pendingHeading == nil {
                 var sceneRanges = [Decimal: NSRange]()
                 source.enumerateAttribute(ownerKey, in: NSRange(location: 0, length: source.length)) { value, run, _ in
                     guard let id = value as? String, let beat = workspace.whiteboard.beats.first(where: { $0.id == id }) else { return }

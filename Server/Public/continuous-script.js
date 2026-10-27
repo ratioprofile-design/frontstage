@@ -7,6 +7,11 @@ export function applyScriptDocument(document,html,headings){const b=model.board(
 export function insertScriptScene(document,id,beforeHTML,afterHTML,heading){const b=model.board(document),beat=b.beats.find(b=>b.id===id);if(!beat||beat.locked||beat.omitted||blockLocked(b,beat.blockID)||model.scene(document,beat.sceneID).frontstageTextLocked)throw Error('Select an unlocked active beat.');const ordered=[...b.beats].sort((a,b)=>a.order-b.order),index=ordered.indexOf(beat),sceneID=Math.max(document.project.nextId||1,...document.project.beats.map(s=>s.id+1));const s={id:sceneID,title:'Untitled Scene',summary:'',content:'',slug:parseHeading(heading)};document.project.beats.push(s);document.project.nextId=sceneID+1;
  const fragment={...structuredClone(beat),id:crypto.randomUUID(),sceneID,title:'Untitled Beat',synopsis:'',html:afterHTML,order:(beat.order+(ordered[index+1]?.order??beat.order+2))/2,duration:Math.max(.05,beat.duration/2),start:beat.start+beat.duration/2};beat.html=beforeHTML;beat.duration=Math.max(.05,beat.duration/2);
  for(const next of ordered.slice(index+1)){if(next.sceneID!==beat.sceneID)break;if(next.locked||blockLocked(b,next.blockID))throw Error('A locked beat prevents inserting this scene.');next.sceneID=sceneID;}const owner=b.blocks.find(block=>block.id===beat.blockID);if(owner?.standalone){const container=structuredClone(owner);container.id=crypto.randomUUID();container.position.y+=60;b.blocks.push(container);fragment.blockID=container.id;}b.beats.push(fragment);return fragment.id;}
+export function centerScriptTarget(node) {
+  const desk=node?.closest('.continuous-desk');if(!desk)return;
+  const viewport=desk.getBoundingClientRect(),target=node.getBoundingClientRect();
+  desk.scrollTop=Math.max(0,Math.min(desk.scrollHeight-desk.clientHeight,desk.scrollTop+target.top+target.height/2-viewport.top-desk.clientTop-desk.clientHeight/2));
+}
 export function mountContinuousScript(sheet, api) {
   sheet.replaceChildren();
   sheet.classList.add('script-text', 'continuous-editor');
@@ -14,7 +19,7 @@ export function mountContinuousScript(sheet, api) {
   sheet.setAttribute('role', 'textbox');
   sheet.setAttribute('aria-label', 'Screenplay');
   const visible = new Set(), headingIDs = new Set();
-  let composing = false, committing = false, lastOwner = null, pendingPullouts = new Set();
+  let composing = false, committing = false, lastOwner = null, pendingPullouts = new Set(), pendingHeading = null;
   const board = () => model.board(api.document());
   const beatFor = id => board().beats.find(beat => beat.id === id);
   const locked = beat => !beat || beat.locked || blockLocked(board(), beat.blockID) || model.scene(api.document(), beat.sceneID).frontstageTextLocked;
@@ -52,6 +57,8 @@ export function mountContinuousScript(sheet, api) {
     return node === sheet ? null : node;
   };
   function select() {
+    if(composing)return;
+    syncHeadings(document.activeElement===sheet?paragraph():null);
     const node = paragraph(), beat = beatFor(node?.dataset.beatId);
     if (beat) { lastOwner = beat.id; mark(beat.id); api.select(beat.sceneID, beat.id); }
     api.element?.(elements.find(kind => node?.classList.contains('sc-'+kind)) || 'action');
@@ -61,6 +68,18 @@ export function mountContinuousScript(sheet, api) {
     let style=document.getElementById('write-active-scene-style');
     if(!style){style=document.createElement('style');style.id='write-active-scene-style';document.head.append(style);}
     style.textContent='.continuous-editor>[data-beat-id="'+CSS.escape(id)+'"]{background-color:rgba(210,160,30,.12)}';
+  }
+  function syncHeadings(editing) {
+    if(composing)return;
+    for(const node of sheet.querySelectorAll('[data-heading-scene]')){
+      const scene=api.document().project.beats.find(s=>String(s.id)===node.dataset.headingScene);
+      if(!scene||node===editing||node.textContent===inlineHeading(scene))continue;
+      const selection=getSelection(),inside=selection?.rangeCount&&node.contains(selection.anchorNode)&&node.contains(selection.focusNode);
+      const offset=(container,index)=>{const r=document.createRange();r.selectNodeContents(node);r.setEnd(container,index);return r.toString().length;};
+      const anchor=inside?offset(selection.anchorNode,selection.anchorOffset):0,focus=inside?offset(selection.focusNode,selection.focusOffset):0;
+      node.textContent=inlineHeading(scene);if(!node.firstChild)node.append(document.createTextNode(''));
+      if(inside)selection.setBaseAndExtent(node.firstChild,Math.min(anchor,node.textContent.length),node.firstChild,Math.min(focus,node.textContent.length));
+    }
   }
   function splitScene() {
     if(composing||sheet.isComposing)return;
@@ -113,7 +132,8 @@ export function mountContinuousScript(sheet, api) {
           if (!owner || pendingPullouts.has(owner)) continue;
           if (node.dataset.headingScene) {
             const id=node.dataset.headingScene,scene=document.project.beats.find(scene=>String(scene.id)===id);
-            if (!(id in headings) || node.textContent !== inlineHeading(scene)) headings[id]=node.textContent;
+            // The edited occurrence wins over unchanged legacy repetitions.
+            if (!(id in headings) || node===paragraph()) headings[id]=node.textContent;
             continue;
           }
           if (node.classList.contains('sc-slugline') && node.textContent.trim()) {
@@ -137,11 +157,7 @@ export function mountContinuousScript(sheet, api) {
         visible.add(id); headingIDs.add(String(sceneID));
       }
       for (const id of pendingPullouts) visible.delete(id);
-      const editing = paragraph();
-      for (const node of sheet.querySelectorAll('[data-heading-scene]')) {
-        const scene=api.document().project.beats.find(scene=>String(scene.id)===node.dataset.headingScene);
-        if(scene && node!==editing && node.textContent!==inlineHeading(scene)) node.textContent=inlineHeading(scene);
-      }
+      syncHeadings(paragraph());
       acceptedHTML = sheet.innerHTML;
     } catch (error) { sheet.innerHTML = acceptedHTML; api.status(error.message); }
     finally { pendingPullouts.clear(); committing = false; select(); }
@@ -151,11 +167,21 @@ export function mountContinuousScript(sheet, api) {
   sheet.addEventListener('compositionend', () => { composing = false; sheet.isComposing = false; commit(); });
   sheet.addEventListener('input', event => {
     if (event.isComposing || composing) return;
+    if(pendingHeading){
+      const {node,index,sceneID,beatID}=pendingHeading,target=sheet.contains(node)?node:sheet.children[index];
+      if(target){target.dataset.headingScene=sceneID;target.dataset.beatId=beatID;target.className='sc-line sc-slugline';}
+      pendingHeading=null;
+    }
     const node = paragraph();
     if (node && !node.dataset.headingScene && node.classList.contains('sc-action') && /^(INT\.|EXT\.|INT\.\/EXT\.|EXT\.\/INT\.)\s/i.test(node.textContent)) node.className = 'sc-line sc-slugline';
     commit();
   });
   function insertAfterHeading(node, kind = 'action') {
+    syncHeadings(null);
+    const following=node.nextElementSibling;
+    if(kind==='action'&&following?.dataset.beatId===node.dataset.beatId&&!following.dataset.headingScene){
+      const range=document.createRange();range.selectNodeContents(following);range.collapse(true);getSelection().removeAllRanges();getSelection().addRange(range);select();return;
+    }
     const next = document.createElement('p'); next.className = 'sc-line sc-'+kind;
     next.dataset.beatId = node.dataset.beatId; next.innerHTML = '<br>'; node.after(next);
     const range = document.createRange(); range.selectNodeContents(next); range.collapse(true);
@@ -180,7 +206,12 @@ export function mountContinuousScript(sheet, api) {
     if (touched.some(node => locked(beatFor(node.dataset.beatId)))) {
       event.preventDefault(); pendingPullouts.clear(); api.status('This selection contains locked text.'); return;
     }
-    pendingPullouts.clear();
+    pendingPullouts.clear();pendingHeading=null;
+    const heading=touched.length===1&&touched[0].dataset.headingScene?touched[0]:null;
+    if(heading&&!['insertParagraph','insertLineBreak','historyUndo','historyRedo'].includes(event.inputType)&&!/[\r\n]/.test(event.data||'')){
+      pendingHeading={node:heading,index:[...sheet.children].indexOf(heading),sceneID:heading.dataset.headingScene,beatID:heading.dataset.beatId};
+      return;
+    }
     if (!event.inputType?.startsWith('delete') || range.collapsed) return;
     for (const sceneID of headingIDs) {
       const owned = board().beats.filter(beat => String(beat.sceneID) === sceneID && !beat.omitted);
@@ -190,8 +221,15 @@ export function mountContinuousScript(sheet, api) {
       if (range.compareBoundaryPoints(Range.START_TO_START, full) <= 0 && range.compareBoundaryPoints(Range.END_TO_END, full) >= 0) owned.forEach(beat => pendingPullouts.add(beat.id));
     }
   });
+  sheet.addEventListener('paste',event=>{
+    if(composing||api.readonly()||!paragraph()?.dataset.headingScene)return;
+    const range=getSelection()?.getRangeAt(0),node=paragraph();if(!range||!node.contains(range.endContainer))return;
+    if(locked(beatFor(node.dataset.beatId)))return;
+    event.preventDefault();document.execCommand('insertText',false,(event.clipboardData?.getData('text/plain')||'').replace(/[\r\n]+/g,' '));
+  });
+  sheet.addEventListener('blur',()=>{syncHeadings(null);acceptedHTML=sheet.innerHTML;});
   for (const event of ['focus','keyup','mouseup']) sheet.addEventListener(event, select);
   if(api.selection?.())mark(api.selection());
   return {...behavior,split:splitScene, format(kind) { const node = paragraph(); if (node?.dataset.headingScene && kind !== 'slugline') insertAfterHeading(node, kind); else behavior.format(kind); }, commit,
-    reveal(id) { const node = [...sheet.children].find(node => node.dataset.beatId === id); if(node){sheet.focus({preventScroll:true});const range=document.createRange();range.selectNodeContents(node);range.collapse(true);getSelection().removeAllRanges();getSelection().addRange(range);mark(id);node.scrollIntoView({block:'nearest'});} return !!node; }};
+    reveal(id,focus=true) { if(composing)return false;commit();syncHeadings(null);const node = [...sheet.children].find(node => node.dataset.beatId === id); if(node){const range=document.createRange();range.selectNodeContents(node);range.collapse(true);getSelection().removeAllRanges();getSelection().addRange(range);if(focus&&!sheet.closest('.write-center')?.inert)sheet.focus({preventScroll:true});mark(id);centerScriptTarget(node);} return !!node; }};
 }

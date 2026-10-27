@@ -13,7 +13,7 @@ export function mountWritePanels(host,center,api) {
   const layout=el('div',null,'write-panel-layout'),left=el('aside',null,'write-panel write-left'),right=el('aside',null,'write-panel write-right'),bar=el('nav',null,'write-panel-switches');
   host.append(layout);layout.append(left,center,right);center.classList.add('write-center');
   center.querySelector('.dedicated-script-tools').append(bar);
-  let drawer=null,drawerOpener=null,drawerRange=null,announcedDrawer=null;
+  let drawer=null,drawerOpener=null,drawerRange=null,announcedDrawer=null,revealTarget=null,revealFrame=null,pendingNavigation=null;
   left.id='write-scenes-panel';right.id='write-inspector-panel';
   left.setAttribute('aria-label','Scenes and locations');right.setAttribute('aria-label','Writing inspector');
   const backdrop=el('button',null,'write-drawer-backdrop');backdrop.type='button';backdrop.tabIndex=-1;backdrop.hidden=true;backdrop.setAttribute('aria-label','Close writing panel');layout.append(backdrop);
@@ -47,6 +47,7 @@ export function mountWritePanels(host,center,api) {
     }
     scenesToggle?.setAttribute('aria-controls',left.id);scenesToggle?.setAttribute('aria-expanded',layout.dataset.left);inspectorToggle.setAttribute('aria-controls',right.id);inspectorToggle.setAttribute('aria-expanded',layout.dataset.right);
     if(drawer!==announcedDrawer){announcement.textContent=drawer?(drawer==='left'?'Scenes panel opened.':'Inspector opened.'):'Writing panel closed.';announcedDrawer=drawer;}
+    if(revealTarget){cancelAnimationFrame(revealFrame);revealFrame=requestAnimationFrame(()=>{if(center.isConnected&&revealTarget)api.recenter?.(revealTarget.sceneID,revealTarget.beatID);});}
   }
   function closeDrawer(restoreFocus=true){
     if(!drawer)return;
@@ -77,7 +78,17 @@ export function mountWritePanels(host,center,api) {
   for(const [panel,side]of[[left,'left'],[right,'right']]){const handle=el('div',null,'write-resizer');handle.tabIndex=0;handle.setAttribute('role','separator');handle.setAttribute('aria-label','Resize '+side+' panel');handle.onkeydown=e=>{if(['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();pref[side]=Math.max(side==='left'?220:260,Math.min(480,pref[side]+(e.key==='ArrowRight'?10:-10)*(side==='left'?1:-1)));save();widths();}};handle.onpointerdown=e=>{e.preventDefault();const start=e.clientX,width=pref[side];handle.setPointerCapture(e.pointerId);handle.onpointermove=event=>{pref[side]=Math.max(side==='left'?220:260,Math.min(480,width+(event.clientX-start)*(side==='left'?1:-1)));widths();};handle.onpointerup=()=>{handle.onpointermove=null;save();};};panel.append(handle);}
   const leftBody=el('div',null,'write-panel-body'),rightBody=el('div',null,'write-panel-body');left.append(leftBody);right.append(rightBody);
   function tabs(body,values,key){const row=el('nav');for(const value of values){const b=button(value,()=>{pref[key]=value;save();refreshPanels();});b.setAttribute('aria-pressed',String(pref[key]===value));row.append(b);}body.append(row);}
-  function navigate(card,beatID=card.beats[0]?.id){const found=api.reveal(card.scene.id,beatID);if(!found){const notice=el('div',null,'write-reveal');notice.append(el('p','This beat is hidden by screenplay filters.'),button('Reset filters and reveal',()=>api.resetReveal(card.scene.id,beatID)));leftBody.prepend(notice);return;}if(drawer==='left'){const target=center.querySelector('[data-beat-id="'+CSS.escape(beatID)+'"],[data-script-beat-id="'+CSS.escape(beatID)+'"]');if(target){drawerRange=document.createRange();drawerRange.selectNodeContents(target);drawerRange.collapse(true);}}current={sceneID:card.scene.id,beatID};refreshMetadata();renderRight();}
+  function navigate(card,beatID=card.beats[0]?.id){
+    if(center.querySelector('.continuous-editor')?.isComposing){pendingNavigation={card,beatID};return;}
+    const found=api.reveal(card.scene.id,beatID);
+    if(!found){const notice=el('div',null,'write-reveal');notice.append(el('p','This beat is hidden by screenplay filters.'),button('Reset filters and reveal',()=>api.resetReveal(card.scene.id,beatID)));leftBody.prepend(notice);return;}
+    revealTarget={sceneID:card.scene.id,beatID};
+    if(drawer==='left'){const target=center.querySelector('[data-beat-id="'+CSS.escape(beatID)+'"],[data-script-beat-id="'+CSS.escape(beatID)+'"]');if(target){drawerRange=document.createRange();drawerRange.selectNodeContents(target);drawerRange.collapse(true);}}
+    current={sceneID:card.scene.id,beatID};refreshMetadata();renderRight();
+  }
+  function finishComposition(){if(pendingNavigation)queueMicrotask(()=>{if(!center.isConnected||!pendingNavigation)return;const {card,beatID}=pendingNavigation;pendingNavigation=null;navigate(card,beatID);});}
+  function clearReveal(){revealTarget=null;}
+  center.addEventListener('compositionend',finishComposition);for(const event of ['pointerdown','input','keydown'])center.addEventListener(event,clearReveal);
   function beatCards(){const d=api.document(),segments=model.scriptSegments(d),numbers=new Map(segments.map(segment=>[segment.scene.id,segment.number]));return model.board(d).beats.filter(beat=>numbers.has(beat.sceneID)&&!beat.omitted).sort((a,b)=>a.order-b.order).map(beat=>({beat,scene:model.scene(d,beat.sceneID),number:numbers.get(beat.sceneID)}));}
   function conversionReview(){
     const source=structuredClone(api.document()),dialog=el('dialog',null,'conversion-review'),choices={};
@@ -152,5 +163,5 @@ export function mountWritePanels(host,center,api) {
   const resize=new ResizeObserver(widths);resize.observe(host);
   window.addEventListener('resize',widths);window.visualViewport?.addEventListener('resize',widths);window.visualViewport?.addEventListener('scroll',widths);document.addEventListener('keydown',drawerKeys,true);
   widths();refreshPanels();
-  return {toggleLeft:()=>toggle('left'),refreshMetadata,destroy(){resize.disconnect();window.removeEventListener('resize',widths);window.visualViewport?.removeEventListener('resize',widths);window.visualViewport?.removeEventListener('scroll',widths);document.removeEventListener('keydown',drawerKeys,true);center.inert=false;for(const[name,value]of[['aria-controls',oldControls],['aria-expanded',oldExpanded]]){if(value==null)scenesToggle?.removeAttribute(name);else scenesToggle?.setAttribute(name,value);}},select(sceneID,beatID){if(current.sceneID===sceneID&&current.beatID===beatID)return;current={sceneID,beatID};refreshMetadata();renderRight();},refresh:refreshPanels};
+  return {toggleLeft:()=>toggle('left'),reveal(sceneID,beatID){const scene=model.scene(api.document(),sceneID);navigate({scene,beats:[{id:beatID}]},beatID);},refreshMetadata,destroy(){cancelAnimationFrame(revealFrame);center.removeEventListener('compositionend',finishComposition);for(const event of ['pointerdown','input','keydown'])center.removeEventListener(event,clearReveal);resize.disconnect();window.removeEventListener('resize',widths);window.visualViewport?.removeEventListener('resize',widths);window.visualViewport?.removeEventListener('scroll',widths);document.removeEventListener('keydown',drawerKeys,true);center.inert=false;for(const[name,value]of[['aria-controls',oldControls],['aria-expanded',oldExpanded]]){if(value==null)scenesToggle?.removeAttribute(name);else scenesToggle?.setAttribute(name,value);}},select(sceneID,beatID){if(current.sceneID===sceneID&&current.beatID===beatID)return;current={sceneID,beatID};refreshMetadata();renderRight();},refresh:refreshPanels};
 }

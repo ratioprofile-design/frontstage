@@ -23,9 +23,14 @@ enum ScriptCueNames {
         let range = (storage.string as NSString).paragraphRange(for: NSRange(location: location, length: 0))
         let original = (storage.string as NSString).substring(with: range), upper = original.uppercased()
         guard original != upper else { return }
-        let prefix = ((storage.string as NSString).substring(with: NSRange(location: range.location, length: max(0, selected.location - range.location))) as NSString)
+        func mapped(_ position: Int) -> Int {
+            if position <= range.location { return position }
+            if position >= NSMaxRange(range) { return position + upper.utf16.count - original.utf16.count }
+            return range.location + (original as NSString).substring(to: position - range.location).uppercased().utf16.count
+        }
+        let start = mapped(selected.location), end = mapped(NSMaxRange(selected)), affinity = text.selectionAffinity
         storage.replaceCharacters(in: range, with: upper)
-        text.setSelectedRange(NSRange(location: range.location + (prefix as String).uppercased().utf16.count, length: 0))
+        text.setSelectedRange(NSRange(location: start, length: max(0, end - start)), affinity: affinity, stillSelecting: false)
     }
 }
 #endif

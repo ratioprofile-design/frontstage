@@ -1,4 +1,4 @@
-import {mountContinuousScript} from './continuous-script.js';
+import {mountContinuousScript,centerScriptTarget} from './continuous-script.js';
 import {pulledOutBeats,pullOutBeats,restorePulledOutBeats,replaceDocument} from './script-inclusion.js';
 import {mountWritePanels} from './write-panels.js';
 import {createScriptFilter,mountScriptFilter,matchesScriptFilter,gapLabel} from './script-filter.js';
@@ -126,9 +126,10 @@ export function mountWorkspaces(api) {
       }
       if(!segment.beatIDs.length){const p=el('div',null,'script-text');p.innerHTML=api.cleanHTML(segment.html);sheet.append(p);}
     }
-    const reveal=(sid,bid)=>{if(continuous){const found=continuous.reveal(bid);if(found){sceneID=sid;api.selectScene(sid,bid);}return found;}const node=bid?[...sheet.querySelectorAll('[data-script-beat-id]')].find(n=>n.dataset.scriptBeatId===bid):[...sheet.querySelectorAll('[data-scene-id]')].find(n=>n.dataset.sceneId===String(sid));if(!node)return false;sceneID=sid;api.selectScene(sid,bid);node.scrollIntoView({block:'nearest'});return true;};
+    const target=(sid,bid)=>bid?sheet.querySelector('[data-beat-id="'+CSS.escape(bid)+'"],[data-script-beat-id="'+CSS.escape(bid)+'"]'):sheet.querySelector('[data-scene-id="'+CSS.escape(String(sid))+'"]');
+    const reveal=(sid,bid)=>{if(continuous){const found=continuous.reveal(bid);if(found){sceneID=sid;api.selectScene(sid,bid);}return found;}const node=target(sid,bid);if(!node)return false;sceneID=sid;api.selectScene(sid,bid);centerScriptTarget(node);return true;};
     const panelProjectID=api.current()?.id;
-    writePanels=mountWritePanels(outer,wrap,{document:doc,createConvertedCopy:api.createConvertedCopy,selection:()=>({sceneID,beatID:api.selectedBeat()}),openResearch:()=>{kind='pulledOut';navigate('studio');},readonly,change:action=>{if(api.current()?.id!==panelProjectID)throw Error('The open project changed; select the note again.');change(action);},status:api.status,plain:api.plain,rebuild:render,reveal,resetReveal:(sid,bid)=>{scriptFilter.clear();sceneID=sid;render();requestAnimationFrame(()=>root.querySelector(`[data-script-beat-id="${CSS.escape(bid)}"],.continuous-editor [data-beat-id="${CSS.escape(bid)}"]`)?.scrollIntoView({block:'nearest'}));}});
+    writePanels=mountWritePanels(outer,wrap,{document:doc,createConvertedCopy:api.createConvertedCopy,selection:()=>({sceneID,beatID:api.selectedBeat()}),openResearch:()=>{kind='pulledOut';navigate('studio');},readonly,change:action=>{if(api.current()?.id!==panelProjectID)throw Error('The open project changed; select the note again.');change(action);},status:api.status,plain:api.plain,rebuild:render,reveal,recenter:(sid,bid)=>centerScriptTarget(target(sid,bid)),resetReveal:(sid,bid)=>{scriptFilter.clear();sceneID=sid;api.selectScene(sid,bid);render();requestAnimationFrame(()=>writePanels?.reveal(sid,bid));}});
   }
   function applyTypography(node){const t=state().frontstageScriptLayout||{};node.style.setProperty('--script-font',t.fontName||'Courier');node.style.setProperty('--script-size',`${t.fontSize||12}px`);node.style.setProperty('--script-line',`${t.lineHeight||14}px`);node.style.setProperty('--script-spacing',`${t.paragraphSpacing??10}px`);}
   function pagesPage(){

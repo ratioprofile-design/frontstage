@@ -68,17 +68,10 @@ struct ScriptWritingWorkspace: View {
         WritePagePanels(workspace: workspace, navigate: { sceneID, beatID in
             if let beatID, let beat = workspace.whiteboard.beats.first(where: { $0.id == beatID }) {
                 if !matches(beat) || beat.omitted || workspace.whiteboard.isUnused(beat) { hiddenTarget = beatID; return }
-                workspace.selectBoardBeat(beatID)
-                if plain, let text = workspace.scriptController("write-continuous").textView {
-                    var found: NSRange?
-                    text.attributedString().enumerateAttribute(NSAttributedString.Key("FrontstageBeatOwner"), in: NSRange(location: 0, length: text.attributedString().length)) { value, range, stop in if value as? String == beatID { found = range; stop.pointee = true } }
-                    if let found {
-                        text.window?.makeFirstResponder(text)
-                        text.setSelectedRange(NSRange(location: found.location, length: 0))
-                        text.scrollRangeToVisible(found)
-                    }
-                } else { proxy.scrollTo(beatID, anchor: .top) }
-            } else { workspace.selectedSceneID = sceneID; proxy.scrollTo("scene-\(sceneID)", anchor: .top) }
+                if plain, let text = workspace.scriptController("write-continuous").textView as? WritingTextView {
+                    text.revealBeat?(beatID)
+                } else { workspace.selectBoardBeat(beatID); proxy.scrollTo(beatID, anchor: .center) }
+            } else { workspace.selectedSceneID = sceneID; proxy.scrollTo("scene-\(sceneID)", anchor: .center) }
         }) {
         VStack(spacing: 0) {
             tools
