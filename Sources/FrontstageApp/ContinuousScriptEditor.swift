@@ -151,7 +151,7 @@ struct ContinuousScriptEditor: NSViewRepresentable {
             let choices = controller.activeElement == .sceneHeading
                 ? SceneHeading.completions(for: prefix, headings: workspace.project.scenes.map(\.heading))
                 : (completionChoices[controller.activeElement] ?? []).filter { $0.lowercased().hasPrefix(prefix.lowercased()) && $0.lowercased() != prefix.lowercased() }
-            if !choices.isEmpty { index?.pointee = 0 }
+            if controller.activeElement == .sceneHeading, !choices.isEmpty { index?.pointee = 0 }
             return choices.map { String($0.dropFirst(before.count)) }
         }
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool { controller.handleCommand(commandSelector, in: textView) }

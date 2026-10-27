@@ -46,7 +46,8 @@ jobs:
           from pathlib import Path
           p = Path('build/browser-validation.log')
           if p.exists():
-              print('::error::' + p.read_text()[-6000:].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'))
+              log = '\n'.join(line for line in p.read_text().splitlines() if not line.startswith('|'))
+              print('::error::' + log[-3000:].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'))
           PYREPORT
       - name: Test project model and persistence
         if: ${{ !cancelled() }}
