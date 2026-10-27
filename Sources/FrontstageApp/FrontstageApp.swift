@@ -90,8 +90,12 @@ final class Workspace: ObservableObject {
     @Published var selectedBoardBeatID: String?
     @Published var pendingBoardCauseID: String?
     @Published var showBoardScript = true
-    @Published var writeCardsVisible = true
-    @Published var writeInspectorVisible = true
+    @Published var writeCardsVisible = UserDefaults.standard.object(forKey: "write-left-visible") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(writeCardsVisible, forKey: "write-left-visible") }
+    }
+    @Published var writeInspectorVisible = UserDefaults.standard.object(forKey: "write-right-visible") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(writeInspectorVisible, forKey: "write-right-visible") }
+    }
     @Published var writeCardsToggle = 0
     @Published var writeInspectorToggle = 0
     @Published var reader = ScriptReaderSettings()

@@ -2,6 +2,12 @@
 
 Frontstage’s Write page has scene navigation on the left, a continuous screenplay editor in the center, and a scene inspector on the right. This implementation lives in Frontstage; Backstage is unchanged.
 
+The navigation button toggles scene cards in Write. Writing options contains Display, Styling, Filter, Presets and Options; the element toolbar, zoom, paper theme and inspector toggle remain visible. A4 is the initial paper choice. White, Warm, Dark and Red themes are device-local reading preferences and do not change printed/exported ink or paper. Page-boundary marks are reading guides, not frozen production pagination.
+
+Selecting a card places the caret in its screenplay and highlights that beat without saving highlight attributes into the project. The inspector uses the selected beat’s title, including in legacy projects. The paper context menu can split screenplay text at the caret into a new scene/beat; undo restores the original scene and text. Scene notes and production records remain on the original scene.
+
+The Both notes scope displays Scene and Project notes together in independently scrollable sections. Each section has its own Add Note action and captures its owner when editing. Colors show named swatches (Yellow, Blue, Green, Pink and White); choosing a color preserves note content and formatting.
+
 ## Navigation
 
 - Scenes shows one card per whiteboard beat, using Frontstage’s existing dark card styling. The header contains the scene number and beat name; there is no nested beat list or slugline header.
