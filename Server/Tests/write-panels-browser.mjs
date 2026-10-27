@@ -13,8 +13,10 @@ try{
  browser=await chromium.launch({executablePath:process.env.FRONTSTAGE_CHROMIUM||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':chromium.executablePath()),headless:true,args:['--no-sandbox']});
  const context=await browser.newContext({viewport:{width:1440,height:950}}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:17845');await page.locator('#local-mode').click();await page.locator('#back').click();
+ await page.waitForSelector('#projects:not([hidden])');
  await page.locator('#import-project').setInputFiles(path.join(root,'Tests/Fixtures/write-panels.frontstage'));await page.waitForSelector('#workspace:not([hidden])');
  await page.locator('#view-mode').selectOption('edit');
+ await page.locator('.write-left .scene-summary-card').first().waitFor();
  const left=page.locator('.write-left'),right=page.locator('.write-right'),editor=page.locator('.continuous-editor [data-beat-id="beat-1"]:not([data-heading-scene])').first();
  assert.equal(await left.locator('.scene-summary-card').count(),2);assert.ok(await right.isVisible());
  await editor.evaluate(node=>{window.retainedWriteEditor=node;node.focus();const r=document.createRange();r.selectNodeContents(node);r.collapse(false);getSelection().removeAllRanges();getSelection().addRange(r);});
