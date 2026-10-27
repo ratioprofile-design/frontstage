@@ -42,6 +42,7 @@ jobs:
           node Server/Tests/board-operations.mjs
           node Server/Tests/write-navigation-browser.mjs 2>&1 | tee build/browser-navigation.log
           node Server/Tests/writer-typing-browser.mjs
+          node Server/Tests/writer-scroll-browser.mjs
           node Server/Tests/write-mobile-browser.mjs 2>&1 | tee build/browser-mobile.log
           node Server/Tests/browser-smoke.mjs 2>&1 | tee build/browser.log
           node scripts/build-web.mjs

@@ -35,6 +35,7 @@ jobs:
             node Server/Tests/write-interface-browser.mjs
             node Server/Tests/write-navigation-browser.mjs
             node Server/Tests/writer-typing-browser.mjs
+            node Server/Tests/writer-scroll-browser.mjs
             node Server/Tests/write-mobile-browser.mjs
             node Server/Tests/workspace-parity.mjs
             node Server/Tests/timeline-layout.mjs

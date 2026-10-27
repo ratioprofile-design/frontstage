@@ -59,20 +59,50 @@ export function screenplayToolbar(text, changed, editable=true, characters=()=>[
   text.addEventListener('compositionend',()=>{if(capitalizeCue(paragraph()))changed();});
   text.addEventListener('blur',()=>{let updated=false;for(const line of text.querySelectorAll('.sc-character,.sc-slugline,.sc-transition'))updated=capitalizeCue(line)||updated;if(updated)changed();});
   let caretFrame;
-  const followCaret=()=>{cancelAnimationFrame(caretFrame);caretFrame=requestAnimationFrame(()=>{
-    const selection=window.getSelection();if(!text.isConnected||!selection?.rangeCount||!text.contains(selection.focusNode)||!selection.isCollapsed)return;
-    const range=selection.getRangeAt(0);let rect=range.getBoundingClientRect();
-    if(!rect.height)rect=paragraph()?.getBoundingClientRect();if(!rect)return;
+  const followCaret=event=>{if(event?.isComposing||text.isComposing)return;cancelAnimationFrame(caretFrame);caretFrame=requestAnimationFrame(()=>{
+    const selection=window.getSelection();if(text.isComposing||!text.isConnected||!selection?.rangeCount||!text.contains(selection.focusNode)||!selection.isCollapsed)return;
+    let rect=screenplayCaretRect(text,selection);if(!rect)return;
     for(let pane=text;pane&&pane!==document.body;pane=pane.parentElement){
       if(!/(auto|scroll)/.test(getComputedStyle(pane).overflowY)||pane.scrollHeight<=pane.clientHeight)continue;
-      const bounds=pane.getBoundingClientRect(),delta=rect.bottom>bounds.bottom-20?rect.bottom-bounds.bottom+20:rect.top<bounds.top+12?rect.top-bounds.top-12:0;
-      if(delta){pane.scrollTop+=delta;rect=range.getBoundingClientRect();}
+      // Only the editor's nearest scroll container owns caret following. Moving
+      // outer workspaces fights native scrolling and the mobile visual viewport.
+      const bounds=pane.getBoundingClientRect(),viewport=window.visualViewport,top=Math.max(bounds.top,viewport?.offsetTop??0),bottom=Math.min(bounds.bottom,(viewport?.offsetTop??0)+(viewport?.height??innerHeight));
+      if(bottom-top<=32)return;
+      const delta=rect.bottom>bottom-20?rect.bottom-bottom+20:rect.top<top+12?rect.top-top-12:0;
+      if(delta){const scale=bounds.height/pane.offsetHeight||1;pane.scrollTop+=delta/scale;}
+      break;
     }
   });};
   for(const event of ['input','keyup','click','compositionend'])text.addEventListener(event,followCaret);
   const refresh=()=>decorateDialogue(text,options.continuationSeed?.()??null,options.continuationFlags?.()??null);refresh();text.refreshScreenplayPresentation=refresh;
   bar.editor={format:kind=>{text.focus();if(savedRange&&text.contains(savedRange.startContainer)){const selection=window.getSelection();selection.removeAllRanges();selection.addRange(savedRange);}format(kind);},inline:command=>{text.focus();if(savedRange&&text.contains(savedRange.startContainer)){const selection=window.getSelection();selection.removeAllRanges();selection.addRange(savedRange);}document.execCommand(command);changed();},remember,refresh};
   return bar;
+}
+// A collapsed Range has no rectangle on an empty line in Chromium/WebKit.
+// Measure an adjacent glyph or one line of its leaf block, never the bounding
+// box of a multi-page paragraph. Measurement must not touch selection or HTML.
+export function screenplayCaretRect(text,selection=getSelection()) {
+  if(!selection?.rangeCount||!selection.isCollapsed||!text.contains(selection.focusNode))return null;
+  const range=selection.getRangeAt(0),measured=range.getBoundingClientRect();if(measured.height)return measured;
+  const container=range.startContainer,offset=range.startOffset;
+  if(container.nodeType===Node.TEXT_NODE&&container.length){
+    const glyph=range.cloneRange(),forward=offset<container.length;
+    glyph.setStart(container,forward?offset:Math.max(0,offset-1));glyph.setEnd(container,forward?offset+1:offset);
+    const rects=[...glyph.getClientRects()],rect=forward?rects[0]:rects.at(-1);
+    if(rect?.height){const x=forward?rect.left:rect.right;return {top:rect.top,bottom:rect.bottom,left:x,right:x,width:0,height:rect.height};}
+  }
+  let block=container.nodeType===Node.TEXT_NODE?container.parentElement:container,atEnd=false;
+  if(container.nodeType===Node.ELEMENT_NODE&&container.childNodes.length){
+    const forward=!!container.childNodes[offset];let adjacent=container.childNodes[offset]||container.childNodes[offset-1];atEnd=!forward;
+    while(adjacent?.nodeType===Node.ELEMENT_NODE&&adjacent.childNodes.length&&!adjacent.matches('br'))adjacent=forward?adjacent.firstChild:adjacent.lastChild;
+    if(adjacent?.nodeType===Node.TEXT_NODE&&adjacent.length){const glyph=document.createRange();glyph.setStart(adjacent,forward?0:adjacent.length-1);glyph.setEnd(adjacent,forward?1:adjacent.length);const rects=[...glyph.getClientRects()],rect=forward?rects[0]:rects.at(-1);if(rect?.height){const x=forward?rect.left:rect.right;return {top:rect.top,bottom:rect.bottom,left:x,right:x,width:0,height:rect.height};}}
+    block=adjacent?.nodeType===Node.ELEMENT_NODE?adjacent:adjacent?.parentElement||block;
+  }
+  if(!block||block===text)return null;
+  if(block.matches('br')){const rect=block.getBoundingClientRect();if(rect.height)return rect;block=block.parentElement;}
+  const rect=block.getBoundingClientRect(),style=getComputedStyle(block),scale=block.offsetHeight?rect.height/block.offsetHeight:1;
+  const height=(parseFloat(style.lineHeight)||parseFloat(style.fontSize)||14)*(scale||1),top=atEnd?rect.bottom-height:rect.top+(parseFloat(style.paddingTop)||0)*(scale||1);
+  return {top,bottom:top+height,left:rect.left,right:rect.left,width:0,height};
 }
 export function splitAtCaret(text) {
   const selection=window.getSelection();if(!selection?.rangeCount)throw Error('Place the cursor inside the snippet before splitting.');
