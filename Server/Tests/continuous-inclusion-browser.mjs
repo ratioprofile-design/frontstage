@@ -25,6 +25,9 @@ try{
  await heading.selectText();await page.keyboard.type('EXT. ST');
  await suggestions.waitFor();await page.keyboard.press('Tab');assert.equal(await heading.innerText(),'EXT. STATION');
  await page.keyboard.type(' - D');await suggestions.waitFor();await page.keyboard.press('Escape');assert.equal(await suggestions.count(),0);assert.equal(await heading.innerText(),'EXT. STATION - D');
+ await heading.selectText();await page.keyboard.type('INT. STATION - NIGHT');
+ await heading.evaluate(n=>{const r=document.createRange();r.setStart(n.firstChild,0);r.setEnd(n.firstChild,4);getSelection().removeAllRanges();getSelection().addRange(r);});
+ await page.keyboard.type('EX');await suggestions.waitFor();await page.keyboard.press('Tab');assert.equal(await heading.innerText(),'EXT. STATION - NIGHT');
  await editor.locator('[data-heading-scene="1"]').fill('EXT. RIVER - NIGHT');await editor.locator('[data-beat-id="beat-1"]:not([data-heading-scene])').first().fill('தமிழ் — continuous screenplay.');
  await page.getByRole('navigation',{name:'Screenplay elements'}).getByRole('button',{name:'Character',exact:true}).click();assert.ok(await editor.locator('.sc-character').count()>0);
  const right=page.locator('.write-right');await right.getByRole('button',{name:'Notes',exact:true}).click();await right.getByRole('button',{name:'Add Note',exact:true}).click();const note=right.getByRole('textbox',{name:'Note text',exact:true}).last();await note.click();await page.keyboard.type('**Hello**');assert.equal(await note.locator('strong,b').innerText(),'Hello');

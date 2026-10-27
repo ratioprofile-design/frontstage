@@ -8,6 +8,8 @@ final class HeadingCompletionTests: XCTestCase {
         XCTAssertEqual(SceneHeading.completions(for: "EXT. த", headings: headings), ["EXT. தமிழ் வீடு"])
         for separator in [" - ", " – ", " — "] {
             XCTAssertEqual(SceneHeading.completions(for: "EXT. தமிழ் வீடு" + separator + "n", headings: headings), ["EXT. தமிழ் வீடு" + separator + "NIGHT"])
+            let parsed = SceneHeading(inline: "ext. தமிழ் வீடு" + separator + "night")
+            XCTAssertEqual(parsed.location, "தமிழ் வீடு"); XCTAssertEqual(parsed.time, "NIGHT")
         }
         XCTAssertEqual(SceneHeading.completions(for: "INT. HALL - SAME ", headings: headings), ["INT. HALL - SAME TIME"])
         XCTAssertEqual(SceneHeading.completions(for: "INT. HALL - ", headings: headings).count, 10)
