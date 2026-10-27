@@ -16,7 +16,7 @@ final class WritePanelAcceptanceTests: XCTestCase {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false; window.contentView = host; host.layoutSubtreeIfNeeded()
             defer { window.close() }
-            let text = try XCTUnwrap(controller.textView)
+            let text = try XCTUnwrap(controller.textView as? ScreenplayTextView)
             XCTAssertTrue(text.isEditable); XCTAssertTrue(text.isSelectable); XCTAssertTrue(window.makeFirstResponder(text))
             XCTAssertEqual(workspace.paper, .a4)
             XCTAssertEqual(text.frame.width, workspace.paper.width, accuracy: 1)
