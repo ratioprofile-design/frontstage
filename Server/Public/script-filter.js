@@ -42,5 +42,5 @@ export function mountScriptFilter(root,controller,{board,scenes,selection,change
  const gaps=document.createElement('select');gaps.setAttribute('aria-label','Filter gap units');for(const mode of ['Time','Pages','Events'])gaps.append(new Option(mode,mode));gaps.value=state.gaps;gaps.onchange=()=>{update(s=>s.gaps=gaps.value);changed();render();};root.append(gaps);
  const always=document.createElement('strong');always.textContent='Always-On Filters';root.append(always);
  for(const [name,key]of [['Hide Disabled Beats','hideDisabled'],['Hide Empty Beats','hideEmpty'],['Hide Scene Headings','hideHeadings'],['Hide Breaks','hideBreaks'],['Hide Filter Gaps','hideGaps']]){const label=document.createElement('label'),check=document.createElement('input');check.type='checkbox';check.checked=state[key];check.onchange=()=>{update(s=>s[key]=check.checked);changed();render();};label.append(check,document.createTextNode(name));root.append(label);}
- };render();root.parentElement.addEventListener('toggle',()=>{if(root.parentElement.open)render();});
+ };render();root.parentElement.addEventListener('toggle',()=>{if(root.parentElement.open&&!root.contains(document.activeElement))render();});
 }
