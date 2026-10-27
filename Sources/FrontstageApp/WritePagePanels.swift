@@ -94,7 +94,7 @@ struct SimpleWriteBeatCard: View {
     var body: some View {
         content
             .background(Color.secondary.opacity(0.07))
-            .overlay(RoundedRectangle(cornerRadius: 4).stroke(workspace.selectedBoardBeatID == beat.id ? Color.accentColor : Color.gray.opacity(0.35)))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(workspace.selectedBoardBeatID == beat.id ? Color.accentColor : Color.gray.opacity(0.35)))
             .overlay(alignment: .top) { if dropBefore { Rectangle().fill(Color.accentColor).frame(height: 3) } }
             .onTapGesture { if editing == nil { navigate(scene.id, beat.id) } }
             .contextMenu { actions }
@@ -106,26 +106,29 @@ struct SimpleWriteBeatCard: View {
     private var content: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-            Divider()
             synopsis
             Rectangle().fill(dropAfter ? Color.accentColor : Color.clear).frame(height: 12)
                 .dropDestination(for: String.self) { values, _ in move(values, after: true) } isTargeted: { dropAfter = $0 }
         }
     }
     private var header: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text(number).bold().padding(7).background(Color.orange.opacity(0.8)).foregroundStyle(Color.black)
-            VStack(alignment: .leading, spacing: 4) {
-                if editing == "title" { TextField("Beat title", text: $draft).focused($focused).onSubmit { finish(true) } }
-                else { Text(beat.title.isEmpty ? "Untitled Beat" : beat.title).bold().fixedSize(horizontal: false, vertical: true).onTapGesture(count: 2) { begin("title") } }
-                Text(scene.heading.text).font(.caption2).foregroundStyle(Color.secondary).fixedSize(horizontal: false, vertical: true)
+        HStack(alignment: .top, spacing: 6) {
+            Text("\(number) ·")
+            if editing == "title" {
+                TextField("Beat title", text: $draft).focused($focused).onSubmit { finish(true) }
+            } else {
+                Text(beat.title.isEmpty ? "Untitled Beat" : beat.title)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .onTapGesture(count: 2) { begin("title") }
             }
-        }.padding(10)
+            Spacer(minLength: 0)
+        }.padding(8).background(Color.secondary.opacity(0.2))
+            .clipShape(RoundedRectangle(cornerRadius: 4)).padding(10)
     }
     @ViewBuilder private var synopsis: some View {
         if editing == "synopsis" {
             TextEditor(text: $draft).frame(minHeight: 130).focused($focused).accessibilityLabel("Beat summary")
-                .onKeyPress(.return) { press in
+                .onKeyPress(keys: [.return], phases: .down) { press in
                     if press.modifiers.contains(.command) || press.modifiers.contains(.control) { finish(true); return .handled }
                     return .ignored
                 }
@@ -242,29 +245,19 @@ struct WriteNoteCard: View {
     var body: some View {
         VStack(alignment: .leading) {
             if note.editable {
-                HStack(spacing: 5) {
-                    Menu { Button("Move Up") { move(-1) }; Button("Move Down") { move(1) } } label: { Image(systemName: "line.3.horizontal") }
-                        .accessibilityLabel("Move note").onDrag { NSItemProvider(object: "frontstage-note:\(note.id)" as NSString) }
-                    ForEach(["#fff4bc", "#d9edff", "#e1f4dc", "#f8dce7", "#ffffff"], id: \.self) { color in
-                        Button { workspace.edit("Note Color") { try $0.updateWritingNote(sceneID: sceneID, id: note.id, color: color) } } label: { Rectangle().fill(Color(boardHex: color)).frame(width: 13, height: 13) }.buttonStyle(.plain).accessibilityLabel("Note color " + color)
-                    }
-                    Spacer()
-                    Button { workspace.edit("Delete Note") { try $0.removeWritingNote(sceneID: sceneID, id: note.id) } } label: { Image(systemName: "trash") }.buttonStyle(.plain).accessibilityLabel("Delete Note")
-                }
-
                 NoteRichEditor(html: Binding(get: { workspace.project.writingNotes(sceneID: sceneID).first { $0.id == note.id }?.content ?? note.content }, set: { value in workspace.edit("Note Text", key: "note-\(note.id)") { try $0.updateWritingNote(sceneID: sceneID, id: note.id, content: value) } }))
                     .frame(height: 150).accessibilityLabel("Note text")
-
+                Picker("Note color", selection: Binding(get: { note.color }, set: { color in workspace.edit("Note Color") { try $0.updateWritingNote(sceneID: sceneID, id: note.id, color: color) } })) {
+                    ForEach(["#fff4bc", "#d9edff", "#e1f4dc", "#f8dce7", "#ffffff"], id: \.self) { Text($0) }
+                }
+                HStack {
+                    Button("↑") { workspace.edit("Move Note") { try $0.moveWritingNote(sceneID: sceneID, id: note.id, offset: -1) } }.accessibilityLabel("Move Note Up")
+                    Button("↓") { workspace.edit("Move Note") { try $0.moveWritingNote(sceneID: sceneID, id: note.id, offset: 1) } }.accessibilityLabel("Move Note Down")
+                    Button("Delete Note") { workspace.edit("Delete Note") { try $0.removeWritingNote(sceneID: sceneID, id: note.id) } }
+                }
             } else { Text("Imported note · preserved read-only"); Text(note.content.localizedCaseInsensitiveContains("<audio") ? "Audio recording retained in the project" : note.content).textSelection(.enabled) }
         }.disabled(workspace.sharedProjects.linked?.access == "reader" || (sceneID != nil && workspace.project.scenes.first { $0.id == sceneID }?.isTextLocked == true)).padding(8).background(Color(boardHex: note.color).opacity(0.25)).clipShape(RoundedRectangle(cornerRadius: 6))
-        .dropDestination(for: String.self) { values, _ in
-            guard let value = values.first, value.hasPrefix("frontstage-note:") else { return false }
-            let id = String(value.dropFirst("frontstage-note:".count)), notes = workspace.project.writingNotes(sceneID: sceneID)
-            guard let from = notes.firstIndex(where: { $0.id == id }), let to = notes.firstIndex(where: { $0.id == note.id }) else { return false }
-            workspace.edit("Move Note") { try $0.moveWritingNote(sceneID: sceneID, id: id, offset: to - from) }; return true
-        }
     }
-    private func move(_ offset: Int) { workspace.edit("Move Note") { try $0.moveWritingNote(sceneID: sceneID, id: note.id, offset: offset) } }
 }
 final class NoteTextView: NSTextView {
     override func mouseDown(with event: NSEvent) {

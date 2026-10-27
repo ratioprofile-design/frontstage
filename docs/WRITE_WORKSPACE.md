@@ -4,10 +4,11 @@ Frontstage’s Write page has scene navigation on the left, a continuous screenp
 
 ## Navigation
 
-- Scenes shows one card per scene record, including repeated appearances. Expand Beats to navigate to a specific whiteboard beat. Distinct scenes at the same location remain separate cards.
-- Locations groups trimmed, case-insensitive location names. Search covers scene numbers, headings, titles and scene summaries.
-- Scene summaries are independent of individual beat synopses. Long summaries scroll within their field and have an expand/collapse control.
-- Drag a scene card onto another to insert before it. The existing ordering engine validates the move. Interleaved scenes and locked or structurally invalid moves are rejected.
+- Scenes shows one card per whiteboard beat, using Frontstage’s existing dark card styling. The header contains the scene number and beat name; there is no nested beat list or slugline header.
+- Double-click a title or synopsis to edit. Enter commits titles; Cmd/Ctrl+Enter commits multiline summaries; Escape cancels. Long summaries offer Show more.
+- Locations groups trimmed, case-insensitive location names. Search covers scene numbers, headings, beat titles and synopses.
+- New and converted projects use one beat per scene, synchronizing beat titles/synopses with scene titles/summaries. Legacy projects remain usable; Review Converted Copy previews a separate project and metadata allocation without replacing the original.
+- Drag before or after a card to reorder using the validated ordering engine. Locked or structurally invalid moves are rejected.
 - Hidden script targets offer **Reset filters and reveal**. Navigation does not silently change filters.
 
 ## Inspector
@@ -20,7 +21,7 @@ Frontstage’s Write page has scene navigation on the left, a continuous screenp
 
 ## Screenplay and beat inclusion
 
-Final Script and Content Only use one continuous editing surface with an element toolbar. Scene headings are edited directly in the paper. Character names are discovered from screenplay cues as well as explicitly assigned characters. Panel edits do not replace the active editor during Tamil composition. Story-review and index-card display modes remain available separately.
+Write opens in Final Script on each entry. Final Script and Content Only use one continuous editing surface with an element toolbar. Scene headings are edited directly in the paper. Character names are discovered from screenplay cues as well as explicitly assigned characters. Panel edits do not replace the active editor during Tamil composition. Story-review and index-card display modes remain available separately.
 
 New scene headings split the current beat at the insertion point and preserve the preceding text. Cross-paragraph changes are committed together. Rejected changes return to the saved document; deleting a whole visible scene moves its beats to Research rather than destroying their records.
 

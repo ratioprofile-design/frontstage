@@ -83,7 +83,7 @@ try {
   await page.locator('#save').click();
   await wait(async () => {
     const snapshot = await fetch(endpoint, { headers }).then(r => r.json());
-    return snapshot.document.name === 'Remote project rename' && snapshot.document.project.frontstageWhiteboard.beats.some(b => b.html.includes('edited offline')) && snapshot.document.project.beats.some(s => s.content.includes('Remote cause text.') && s.content.includes('edited offline'));
+    return snapshot.document.name === 'Remote project rename' && snapshot.document.project.frontstageWhiteboard.beats.some(b => b.html.includes('edited offline')) && snapshot.document.project.beats.some(s => s.content.includes('Remote cause text.')) && snapshot.document.project.beats.some(s => s.content.includes('edited offline'));
   }, 'Offline/reconnect merge');
   const artifact = path.resolve(root, '../build'); await mkdir(artifact, { recursive: true });
   await page.screenshot({ path: path.join(artifact, `browser-${staticMode ? 'static-' : ''}whiteboard.png`) });

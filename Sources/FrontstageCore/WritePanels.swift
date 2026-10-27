@@ -20,7 +20,7 @@ extension Project {
         return status == "ready" ? "Ready" : "Work in progress"
     }
     public func sceneCards() throws -> [SceneCard] {
-        let segments = try orderedScript(includeInactive: true)
+        let segments = try orderedScript(includeInactive: !usesOneBeatPerScene)
         let ordered = try whiteboard().orderedBeats
         var ids = [Decimal]()
         for id in segments.map({ $0.scene.id }) + scenes.map(\.id) where !ids.contains(id) { ids.append(id) }
