@@ -1,0 +1,41 @@
+{
+  "valid": [
+    {
+      "name": "Two speeches with inline emphasis",
+      "html": "<p class='sc-character'>MAYA</p><p class='sc-dialogue'>Stay <b>here</b>.</p><p class='sc-character'>JAY</p><p class='sc-dialogue'>I <i>will</i>.</p>",
+      "first": 0, "second": 2, "pairIndex": 0,
+      "left": "<p class='sc-character'>MAYA</p><p class='sc-dialogue'>Stay <b>here</b>.</p>",
+      "right": "<p class='sc-character'>JAY</p><p class='sc-dialogue'>I <i>will</i>.</p>"
+    },
+    {
+      "name": "Tamil, emoji, parentheticals, whitespace and surrounding action",
+      "html": "\n<p class=\"sc-action\">இருவரும் பேசுகிறார்கள். 🎬</p>\n<div class='sc-character'>கமல்</div>\n<div class='sc-parenthetical'>(மெதுவாக)</div>\n<div class='sc-dialogue'>நான் <u>இங்கே</u> இருக்கிறேன்.</div>\n<!-- retain this note -->\n<div class='sc-character'>மாயா</div>\n<div class='sc-dialogue'>சரி &amp; நன்றி.<br>போவோம்.</div>\n<div class='sc-action'>They leave.</div>\n",
+      "first": 1, "second": 4, "pairIndex": 1,
+      "left": "<div class='sc-character'>கமல்</div>\n<div class='sc-parenthetical'>(மெதுவாக)</div>\n<div class='sc-dialogue'>நான் <u>இங்கே</u> இருக்கிறேன்.</div>\n<!-- retain this note -->\n",
+      "right": "<div class='sc-character'>மாயா</div>\n<div class='sc-dialogue'>சரி &amp; நன்றி.<br>போவோம்.</div>"
+    },
+    {
+      "name": "Quoted greater-than signs and uppercase HTML",
+      "html": "<P CLASS='sc-character' data-future='a > b'>ONE</P><P class=sc-dialogue><span data-future=\"quoted > value\">Don't</span> stop.</P><P class=sc-character>TWO</P><P class=sc-parenthetical>(overlapping)</P><P class=sc-dialogue>Never.</P><P class=sc-character>THREE</P><P class=sc-dialogue>Later.</P>",
+      "first": 0, "second": 2, "pairIndex": 0,
+      "left": "<P CLASS='sc-character' data-future='a > b'>ONE</P><P class=sc-dialogue><span data-future=\"quoted > value\">Don't</span> stop.</P>",
+      "right": "<P class=sc-character>TWO</P><P class=sc-parenthetical>(overlapping)</P><P class=sc-dialogue>Never.</P>"
+    }
+  ],
+  "invalid": [
+    {"name":"Blank first speaker", "html":"<p class='sc-character'><br></p><p class='sc-dialogue'>One.</p><p class='sc-character'>B</p><p class='sc-dialogue'>Two.</p>", "first":0,"second":2},
+    {"name":"Blank second speech", "html":"<p class='sc-character'>A</p><p class='sc-dialogue'>One.</p><p class='sc-character'>B</p><p class='sc-dialogue'>&nbsp;<br></p>", "first":0,"second":2},
+    {"name":"Conflicting element classes", "html":"<p class='sc-character sc-dialogue'>A</p><p class='sc-dialogue'>One.</p><p class='sc-character'>B</p><p class='sc-dialogue'>Two.</p>", "first":0,"second":2},
+    {"name":"Action between speeches", "html":"<p class='sc-character'>A</p><p class='sc-dialogue'>One.</p><p class='sc-action'>Pause.</p><p class='sc-character'>B</p><p class='sc-dialogue'>Two.</p>", "first":0,"second":3},
+    {"name":"Heading between speeches", "html":"<p class='sc-character'>A</p><p class='sc-dialogue'>One.</p><p class='sc-slugline'>EXT. PARK - DAY</p><p class='sc-character'>B</p><p class='sc-dialogue'>Two.</p>", "first":0,"second":3},
+    {"name":"Missing first dialogue", "html":"<p class='sc-character'>A</p><p class='sc-character'>B</p><p class='sc-dialogue'>Two.</p>", "first":0,"second":1},
+    {"name":"Missing second dialogue", "html":"<p class='sc-character'>A</p><p class='sc-dialogue'>One.</p><p class='sc-character'>B</p>", "first":0,"second":2},
+    {"name":"Intervening third speaker", "html":"<p class='sc-character'>A</p><p class='sc-dialogue'>One.</p><p class='sc-character'>B</p><p class='sc-dialogue'>Two.</p><p class='sc-character'>C</p><p class='sc-dialogue'>Three.</p>", "first":0,"second":4},
+    {"name":"Negative index", "html":"<p class='sc-character'>A</p><p class='sc-dialogue'>One.</p><p class='sc-character'>B</p><p class='sc-dialogue'>Two.</p>", "first":-1,"second":2},
+    {"name":"Reversed index", "html":"<p class='sc-character'>A</p><p class='sc-dialogue'>One.</p><p class='sc-character'>B</p><p class='sc-dialogue'>Two.</p>", "first":2,"second":0},
+    {"name":"Out of range", "html":"<p class='sc-character'>A</p><p class='sc-dialogue'>One.</p>", "first":0,"second":2},
+    {"name":"Malformed HTML", "html":"<p class='sc-character'>A</p><p class='sc-dialogue'><b>One.</p><p class='sc-character'>B</p><p class='sc-dialogue'>Two.</p>", "first":0,"second":2},
+    {"name":"Nested legacy paragraph wrappers", "html":"<div><p class='sc-character'>A</p><p class='sc-dialogue'>One.</p><p class='sc-character'>B</p><p class='sc-dialogue'>Two.</p></div>", "first":0,"second":2},
+    {"name":"Bare legacy text", "html":"Legacy text<p class='sc-character'>A</p><p class='sc-dialogue'>One.</p><p class='sc-character'>B</p><p class='sc-dialogue'>Two.</p>", "first":0,"second":2}
+  ]
+}

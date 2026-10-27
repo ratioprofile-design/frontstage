@@ -12,6 +12,12 @@ Updated 22 October 2026. This ledger covers the five requested close-out workstr
 
 ## What the five workstreams do not close
 
+27 October Write follow-up: the dual-dialogue shared document foundation is
+implemented on a separate validation branch. Lossless Swift/JavaScript operations
+and shared fixtures are available; editor controls, native/browser column layout,
+and export support are still pending. It is not enabled or published. See
+[the dual-dialogue checklist](DUAL_DIALOGUE.md) for the acceptance sequence.
+
 Earlier phase milestones are implementation milestones, not proof of complete Causality equivalence. The remaining feature work in [ROADMAP](ROADMAP.md) still includes dual dialogue, frozen production pagination/revision marks, advanced production/scheduling/drawing, full Office fidelity and Windows parity. Missing hosting/signing configuration does not explain or close those implementation gaps.
 
 ## Reproducible evidence

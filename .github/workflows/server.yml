@@ -38,6 +38,7 @@ jobs:
           node Server/Tests/workspace-model.mjs
           node Server/Tests/merge.mjs
           node Server/Tests/board-operations.mjs
+          node Server/Tests/dual-dialogue.mjs
           node Server/Tests/write-mobile-browser.mjs 2>&1 | tee build/browser-mobile.log
           node Server/Tests/browser-smoke.mjs 2>&1 | tee build/browser.log
           node scripts/build-web.mjs
