@@ -1,4 +1,16 @@
 export const elements = ['action','character','dialogue','parenthetical','transition','shot','lyrics','slugline'];
+export const headingTimes = ['DAY','NIGHT','MORNING','AFTERNOON','EVENING','DAWN','DUSK','LATER','CONTINUOUS','SAME TIME'];
+export function headingCompletions(source,caret,headings=[]) {
+  const before=source.slice(0,caret),prefixes=['INT.','EXT.','INT./EXT.','EXT./INT.','I/E.'];
+  const match=/^(INT\.\/EXT\.|EXT\.\/INT\.|INT\.|EXT\.|I\/E\.)(\s+)/i.exec(source);
+  const separators=[...source.matchAll(/\s[-–—]\s*/g)],separator=separators.at(-1);
+  let start=0,end=match?match[1].length:source.search(/\s/),choices=prefixes;
+  if(separator&&caret>=separator.index+separator[0].length){start=separator.index+separator[0].length;end=source.length;choices=headingTimes;}
+  else if(match&&caret>=match[0].length){start=match[0].length;end=separator?.index??source.length;choices=headings.map(h=>h.replace(/^(?:INT\.\/EXT\.|EXT\.\/INT\.|INT\.|EXT\.|I\/E\.)\s*/i,'').split(/\s[-–—]\s*/)[0].trim()).filter(Boolean);}
+  if(end<0)end=source.length;
+  const typed=before.slice(start).toUpperCase();
+  return {start,end,values:[...new Set(choices.map(v=>v.toUpperCase()))].filter(v=>v.startsWith(typed)&&v!==typed).slice(0,12)};
+}
 export function screenplayToolbar(text, changed, editable=true, characters=()=>[],headings=()=>[]) {
   const bar=document.createElement('div');bar.className='screenplay-toolbar';
   const select=document.createElement('select');select.setAttribute('aria-label','Element');
@@ -86,16 +98,18 @@ export function sluglineFields(getScene, getScenes, commit, editable=true) {
 }
 
 function attachCompletions(text,paragraph,characters,changed,headings=()=>[]) {
-  let popup=null,values=[],index=0,line=null;
+  let popup=null,values=[],index=0,line=null,component=null;
   const close=()=>{popup?.remove();popup=null;values=[];};
-  const choose=(advance=false)=>{if(!line||!values[index])return;const value=values[index];close();text.focus();const range=document.createRange();range.selectNodeContents(line);const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);document.execCommand('insertText',false,value);if(advance&&line.classList.contains('sc-character')){document.execCommand('insertParagraph');let next=window.getSelection()?.anchorNode;if(next?.nodeType===3)next=next.parentElement;while(next&&next.parentElement!==text)next=next.parentElement;if(next)next.className='sc-line sc-dialogue';}changed();};
+  const choose=(advance=false)=>{if(!line||!values[index])return;const value=values[index],part=component;close();text.focus();const range=document.createRange();range.selectNodeContents(line);if(part){const position=offset=>{const walker=document.createTreeWalker(line,NodeFilter.SHOW_TEXT);let node;while((node=walker.nextNode())){if(offset<=node.length)return[node,offset];offset-=node.length;}return[line,line.childNodes.length];};range.setStart(...position(part.start));range.setEnd(...position(part.end));}const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);document.execCommand('insertText',false,value);if(advance&&line.classList.contains('sc-character')){document.execCommand('insertParagraph');let next=window.getSelection()?.anchorNode;if(next?.nodeType===3)next=next.parentElement;while(next&&next.parentElement!==text)next=next.parentElement;if(next)next.className='sc-line sc-dialogue';}changed();};
   const highlight=()=>popup?.querySelectorAll('button').forEach((b,i)=>b.setAttribute('aria-selected',String(i===index)));
   text.addEventListener('input',event=>{
     close();if(event.isComposing||!text.isContentEditable)return;
     line=paragraph();if(!line||line===text)return;const prefix=line.textContent;
     const kind=elements.find(k=>line.classList.contains('sc-'+k));
-    const choices={slugline:[...headings(),...['INT.','EXT.','INT./EXT.'],...(prefix.includes(' - ')?['DAY','NIGHT','MORNING','EVENING','DAWN','DUSK','CONTINUOUS','LATER'].map(time=>prefix.slice(0,prefix.lastIndexOf(' - ')+3)+time):[])],character:characters(),transition:['CUT TO:','DISSOLVE TO:','FADE IN:','FADE OUT.','FADE TO BLACK.','SMASH CUT TO:','MATCH CUT TO:'],parenthetical:['(beat)','(quietly)','(into phone)'],shot:['CLOSE ON','ANGLE ON','INSERT','POV']}[kind]||[];
-    if(!prefix.trim())return;values=[...new Set(choices)].filter(v=>v.toLowerCase().startsWith(prefix.toLowerCase())&&v.toLowerCase()!==prefix.toLowerCase()).slice(0,12);if(!values.length)return;
+    component=null;
+    const choices={character:characters(),transition:['CUT TO:','DISSOLVE TO:','FADE IN:','FADE OUT.','FADE TO BLACK.','SMASH CUT TO:','MATCH CUT TO:'],parenthetical:['(beat)','(quietly)','(into phone)'],shot:['CLOSE ON','ANGLE ON','INSERT','POV']}[kind]||[];
+    if(kind==='slugline'){const caret=window.getSelection()?.getRangeAt(0);if(!caret||!caret.collapsed)return;const before=caret.cloneRange();before.selectNodeContents(line);before.setEnd(caret.endContainer,caret.endOffset);component=headingCompletions(prefix,before.toString().length,headings());values=component.values;}
+    else{if(!prefix.trim())return;values=[...new Set(choices)].filter(v=>v.toLowerCase().startsWith(prefix.toLowerCase())&&v.toLowerCase()!==prefix.toLowerCase()).slice(0,12);}if(!values.length)return;
     popup=document.createElement('div');popup.className='autofill-list';popup.setAttribute('role','listbox');popup.setAttribute('aria-label','Screenplay suggestions');index=0;
     for(const [i,value]of values.entries()){const button=document.createElement('button');button.textContent=value;button.setAttribute('role','option');button.onpointerdown=e=>{e.preventDefault();index=i;choose();};popup.append(button);}
     const rect=window.getSelection()?.getRangeAt(0).getBoundingClientRect()||line.getBoundingClientRect();popup.style.left=Math.min(rect.left,window.innerWidth-220)+'px';popup.style.top=Math.min(rect.bottom+4,window.innerHeight-190)+'px';document.body.append(popup);highlight();

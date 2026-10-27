@@ -5,6 +5,54 @@ import XCTest
 import FrontstageCore
 @testable import FrontstageApp
 final class WritePanelAcceptanceTests: XCTestCase {
+    func testTypingExistingHeadingAndTimeCompletionKeepsSceneIdentity() async throws {
+        try await MainActor.run {
+            _ = NSApplication.shared
+            let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Fixtures/write-panels.frontstage")
+            let workspace = Workspace(); workspace.loadCopy(try Project(data: Data(contentsOf: fixture)))
+            let controller = workspace.scriptController("heading-typing")
+            let coordinator = ContinuousScriptEditor.Coordinator(workspace, controller)
+            let text = ScreenplayTextView(); text.isRichText = true; text.delegate = coordinator; text.screenplayController = controller; controller.textView = text
+            coordinator.load(text)
+            let count = workspace.project.scenes.count, originalBeat = workspace.whiteboard.beats.first { $0.sceneID == 1 }!.id
+            let heading = (text.string as NSString).paragraphRange(for: NSRange(location: 0, length: 0))
+            text.setSelectedRange(NSRange(location: 0, length: heading.length - 1))
+            controller.selectionChanged()
+            text.insertText("ext. தமிழ் வீடு - n", replacementRange: text.selectedRange())
+            XCTAssertEqual(workspace.project.scenes.first { $0.id == 1 }?.heading.location, "தமிழ் வீடு")
+            XCTAssertEqual(workspace.project.scenes.first { $0.id == 1 }?.heading.time, "N")
+            XCTAssertEqual(workspace.project.scenes.count, count)
+            let partial = NSRange(location: text.selectedRange().location - 1, length: 1)
+            var index = -1
+            let choices = coordinator.textView(text, completions: [], forPartialWordRange: partial, indexOfSelectedItem: &index)
+            XCTAssertEqual(choices, ["NIGHT"]); XCTAssertEqual(index, 0)
+            text.insertText("NIGHT", replacementRange: partial)
+            XCTAssertEqual(workspace.project.scenes.first { $0.id == 1 }?.heading.time, "NIGHT")
+            XCTAssertEqual(workspace.whiteboard.beats.first { $0.sceneID == 1 }?.id, originalBeat)
+            XCTAssertFalse(workspace.whiteboard.beats.first { $0.id == originalBeat }!.html.contains("தமிழ் வீடு"))
+            XCTAssertNil(workspace.errorMessage)
+        }
+    }
+    func testNotesMatchBrowserInkAndOpaqueBackgroundInBothAppearances() async throws {
+        try await MainActor.run {
+            _ = NSApplication.shared
+            for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+                for color in ["#fff4bc", "#d9edff", "#e1f4dc", "#f8dce7", "#ffffff"] {
+                    let editor = NoteRichEditor(html: .constant("<p><strong>தமிழ் note</strong></p>"), color: color)
+                    let scroll = NSScrollView(), text = NoteTextView(); scroll.documentView = text; text.appearance = NSAppearance(named: appearance)
+                    text.textStorage?.setAttributedString(try NoteTextCodec.decode("<p><strong>தமிழ் note</strong></p>"))
+                    editor.configure(scroll, text)
+                    XCTAssertTrue(text.drawsBackground); XCTAssertTrue(scroll.drawsBackground)
+                    XCTAssertEqual(text.backgroundColor.alphaComponent, 1)
+                    XCTAssertEqual(scroll.backgroundColor, text.backgroundColor)
+                    XCTAssertEqual(text.insertionPointColor, NoteRichEditor.ink)
+                    XCTAssertEqual(text.typingAttributes[.foregroundColor] as? NSColor, NoteRichEditor.ink)
+                    XCTAssertEqual(text.textStorage?.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor, NoteRichEditor.ink)
+                    XCTAssertTrue(NoteTextCodec.encode(text.attributedString()).contains("<strong>"))
+                }
+            }
+        }
+    }
     func testLiveMarkdownFormattingAndSemanticRoundTrip() async throws {
         try await MainActor.run {
             let text = NSTextView(); text.string = "**Hello தமிழ்**"; text.setSelectedRange(NSRange(location: text.string.utf16.count, length: 0))

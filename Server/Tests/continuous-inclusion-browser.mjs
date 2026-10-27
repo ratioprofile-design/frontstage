@@ -15,6 +15,16 @@ try{
  await page.goto('http://127.0.0.1:17845');await page.locator('#local-mode').click();await page.locator('#back').click();
  await page.locator('#import-project').setInputFiles(path.join(root,'Tests/Fixtures/write-panels.frontstage'));await page.waitForSelector('#workspace:not([hidden])');await page.locator('#view-mode').selectOption('edit');
  const editor=page.getByRole('textbox',{name:'Screenplay',exact:true});await editor.waitFor();assert.equal(await page.locator('.writing-scene-fields').count(),0);
+ const heading=editor.locator('[data-heading-scene="1"]');
+ await heading.click();await page.keyboard.press('Home');await page.keyboard.press('Shift+End');await page.keyboard.type('ext. Tamil house - n');
+ const suggestions=page.getByRole('listbox',{name:'Screenplay suggestions'});await suggestions.waitFor();
+ assert.equal(await suggestions.getByRole('option').first().innerText(),'NIGHT');
+ await page.keyboard.press('Enter');assert.equal(await heading.innerText(),'EXT. TAMIL HOUSE - NIGHT');
+ assert.equal(await editor.locator('[data-heading-scene="1"]').count(),1);
+ await page.keyboard.press('Enter');assert.equal(await editor.evaluate(n=>{let node=getSelection().anchorNode;if(node.nodeType===3)node=node.parentElement;return node.closest('p')?.classList.contains('sc-action');}),true);
+ await heading.click();await page.keyboard.press('Home');await page.keyboard.press('Shift+End');await page.keyboard.type('EXT. ST');
+ await suggestions.waitFor();await page.keyboard.press('Tab');assert.equal(await heading.innerText(),'EXT. STATION');
+ await page.keyboard.type(' - D');await suggestions.waitFor();await page.keyboard.press('Escape');assert.equal(await suggestions.count(),0);assert.equal(await heading.innerText(),'EXT. STATION - D');
  await editor.locator('[data-heading-scene="1"]').fill('EXT. RIVER - NIGHT');await editor.locator('[data-beat-id="beat-1"]:not([data-heading-scene])').first().fill('தமிழ் — continuous screenplay.');
  await page.getByRole('navigation',{name:'Screenplay elements'}).getByRole('button',{name:'Character',exact:true}).click();assert.ok(await editor.locator('.sc-character').count()>0);
  const right=page.locator('.write-right');await right.getByRole('button',{name:'Notes',exact:true}).click();await right.getByRole('button',{name:'Add Note',exact:true}).click();const note=right.getByRole('textbox',{name:'Note text',exact:true}).last();await note.click();await page.keyboard.type('**Hello**');assert.equal(await note.locator('strong,b').innerText(),'Hello');

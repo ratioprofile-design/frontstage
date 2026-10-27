@@ -245,7 +245,7 @@ struct WriteNoteCard: View {
     var body: some View {
         VStack(alignment: .leading) {
             if note.editable {
-                NoteRichEditor(html: Binding(get: { workspace.project.writingNotes(sceneID: sceneID).first { $0.id == note.id }?.content ?? note.content }, set: { value in workspace.edit("Note Text", key: "note-\(note.id)") { try $0.updateWritingNote(sceneID: sceneID, id: note.id, content: value) } }))
+                NoteRichEditor(html: Binding(get: { workspace.project.writingNotes(sceneID: sceneID).first { $0.id == note.id }?.content ?? note.content }, set: { value in workspace.edit("Note Text", key: "note-\(note.id)") { try $0.updateWritingNote(sceneID: sceneID, id: note.id, content: value) } }), color: note.color)
                     .frame(height: 150).accessibilityLabel("Note text")
                 Picker("Note color", selection: Binding(get: { note.color }, set: { color in workspace.edit("Note Color") { try $0.updateWritingNote(sceneID: sceneID, id: note.id, color: color) } })) {
                     ForEach(["#fff4bc", "#d9edff", "#e1f4dc", "#f8dce7", "#ffffff"], id: \.self) { Text($0) }
@@ -256,7 +256,7 @@ struct WriteNoteCard: View {
                     Button("Delete Note") { workspace.edit("Delete Note") { try $0.removeWritingNote(sceneID: sceneID, id: note.id) } }
                 }
             } else { Text("Imported note · preserved read-only"); Text(note.content.localizedCaseInsensitiveContains("<audio") ? "Audio recording retained in the project" : note.content).textSelection(.enabled) }
-        }.disabled(workspace.sharedProjects.linked?.access == "reader" || (sceneID != nil && workspace.project.scenes.first { $0.id == sceneID }?.isTextLocked == true)).padding(8).background(Color(boardHex: note.color).opacity(0.25)).clipShape(RoundedRectangle(cornerRadius: 6))
+        }.foregroundStyle(Color(white: 0.13)).disabled(workspace.sharedProjects.linked?.access == "reader" || (sceneID != nil && workspace.project.scenes.first { $0.id == sceneID }?.isTextLocked == true)).padding(8).background(Color(boardHex: note.color)).clipShape(RoundedRectangle(cornerRadius: 6))
     }
 }
 final class NoteTextView: NSTextView {
@@ -274,18 +274,30 @@ final class NoteTextView: NSTextView {
 // A separate rich text view keeps note formatting and input focus independent of screenplay controllers.
 struct NoteRichEditor: NSViewRepresentable {
     @Binding var html: String
+    var color = "#fff4bc"
+    static let ink = NSColor(srgbRed: 0.13, green: 0.13, blue: 0.13, alpha: 1)
+    func configure(_ scroll: NSScrollView, _ text: NSTextView) {
+        let background = NSColor(Color(boardHex: color))
+        scroll.drawsBackground = true; scroll.backgroundColor = background
+        text.drawsBackground = true; text.backgroundColor = background; text.textColor = Self.ink; text.insertionPointColor = Self.ink
+        text.typingAttributes[.foregroundColor] = Self.ink
+        if let storage = text.textStorage, storage.length > 0 { storage.addAttribute(.foregroundColor, value: Self.ink, range: NSRange(location: 0, length: storage.length)) }
+    }
     func makeCoordinator() -> Coordinator { Coordinator($html) }
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSScrollView(), text = NoteTextView()
         text.isRichText = true; text.isEditable = context.environment.isEnabled; text.allowsUndo = true; text.isAutomaticQuoteSubstitutionEnabled = false
         text.isVerticallyResizable = true; text.autoresizingMask = [.width]; text.textContainer?.widthTracksTextView = true
         text.delegate = context.coordinator; scroll.documentView = text; scroll.hasVerticalScroller = true
-        context.coordinator.load(html, text); return scroll
+        context.coordinator.load(html, text); configure(scroll, text); return scroll
     }
     func updateNSView(_ view: NSScrollView, context: Context) {
         context.coordinator.binding = $html
         (view.documentView as? NSTextView)?.isEditable = context.environment.isEnabled
-        if let text = view.documentView as? NSTextView, context.coordinator.last != html, !text.hasMarkedText() { context.coordinator.load(html, text) }
+        if let text = view.documentView as? NSTextView, !text.hasMarkedText() {
+            if context.coordinator.last != html { context.coordinator.load(html, text) }
+            configure(view, text)
+        }
     }
     @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
@@ -320,10 +332,10 @@ struct NoteRichEditor: NSViewRepresentable {
             let kind = range.location < source.length ? text.attributedString().attribute(NoteTextCodec.blockKey, at: range.location, effectiveRange: nil) as? String : nil
             let prefix = line.hasPrefix("• ") ? "• " : line.hasPrefix("☐ ") || line.hasPrefix("☑ ") ? "☐ " : nil
             guard prefix != nil || ["h1", "h2", "h3", "blockquote"].contains(kind ?? "") else { return false }
-            let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 13), NoteTextCodec.blockKey: prefix == "• " ? "li" : "p"]
+            let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 13), .foregroundColor: NoteRichEditor.ink, NoteTextCodec.blockKey: prefix == "• " ? "li" : "p"]
             if let prefix, line.dropFirst(prefix.count).trimmingCharacters(in: .whitespaces).isEmpty {
                 text.insertText(NSAttributedString(string: "", attributes: attributes), replacementRange: NSRange(location: range.location, length: line.utf16.count))
-                text.typingAttributes = [.font: NSFont.systemFont(ofSize: 13), NoteTextCodec.blockKey: "p"]
+                text.typingAttributes = [.font: NSFont.systemFont(ofSize: 13), .foregroundColor: NoteRichEditor.ink, NoteTextCodec.blockKey: "p"]
             } else {
                 text.insertText(NSAttributedString(string: "\n" + (prefix ?? ""), attributes: attributes), replacementRange: selection)
                 text.typingAttributes = attributes

@@ -135,6 +135,8 @@ export function mountContinuousScript(sheet, api) {
   }
   sheet.addEventListener('keydown', event => {
     if (event.isComposing) return;
+    // Completion's capture handler gets first use of navigation/acceptance keys.
+    if (document.querySelector('.autofill-list')) return;
     const node = paragraph();
     if (event.key === 'Backspace' && node?.dataset.headingScene && getSelection()?.isCollapsed && getSelection().anchorOffset === 0) {
       event.preventDefault(); event.stopImmediatePropagation(); return;

@@ -148,7 +148,11 @@ struct ContinuousScriptEditor: NSViewRepresentable {
             let before = source.substring(with: NSRange(location: paragraph.location, length: range.location - paragraph.location))
             index?.pointee = -1
             guard !prefix.isEmpty else { return [] }
-            return (completionChoices[controller.activeElement] ?? []).filter { $0.lowercased().hasPrefix(prefix.lowercased()) && $0.lowercased() != prefix.lowercased() }.map { String($0.dropFirst(before.count)) }
+            let choices = controller.activeElement == .sceneHeading
+                ? SceneHeading.completions(for: prefix, headings: workspace.project.scenes.map(\.heading))
+                : (completionChoices[controller.activeElement] ?? []).filter { $0.lowercased().hasPrefix(prefix.lowercased()) && $0.lowercased() != prefix.lowercased() }
+            if !choices.isEmpty { index?.pointee = 0 }
+            return choices.map { String($0.dropFirst(before.count)) }
         }
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool { controller.handleCommand(commandSelector, in: textView) }
         func textView(_ textView: NSTextView, shouldChangeTextIn range: NSRange, replacementString: String?) -> Bool {
