@@ -276,8 +276,8 @@ struct ScreenplayEditor: NSViewRepresentable {
             text.textContainer?.containerSize.width = width
             context.coordinator.load(html, into: text)
         } else if context.coordinator.lastHTML != html { context.coordinator.load(html, into: text) }
-        controller.measure()
         if let text = text as? ScreenplayTextView { DialoguePresentation.refresh(text) }
+        controller.measure()
     }
 
     @MainActor

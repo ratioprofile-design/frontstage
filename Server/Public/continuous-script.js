@@ -166,7 +166,7 @@ export function mountContinuousScript(sheet, api) {
     } catch (error) { sheet.innerHTML = acceptedHTML; api.status(error.message); }
     finally { pendingPullouts.clear(); committing = false; refreshDialogue();select(); }
   }
-  const behavior = screenplayToolbar(sheet, commit, !api.readonly(), () => characterNames(api.document(),paragraph()?.dataset.beatId), () => api.document().project.beats.filter(s=>String(s.id)!==paragraph()?.dataset.headingScene).map(inlineHeading)).editor;
+  const behavior = screenplayToolbar(sheet, commit, !api.readonly(), () => characterNames(api.document(),paragraph()?.dataset.beatId), () => api.document().project.beats.filter(s=>String(s.id)!==paragraph()?.dataset.headingScene).map(inlineHeading), {continuationFlags:()=>projectDialogue(api.document(),dialogueCache).flags}).editor;
   sheet.addEventListener('compositionstart', () => { composing = true; sheet.isComposing = true; });
   sheet.addEventListener('compositionend', () => { composing = false; sheet.isComposing = false; commit(); });
   sheet.addEventListener('input', event => {

@@ -1,6 +1,7 @@
 #if os(macOS)
 import AppKit
 import SwiftUI
+import PDFKit
 import XCTest
 import FrontstageCore
 @testable import FrontstageApp
@@ -70,6 +71,19 @@ final class WriterTypingAcceptanceTests: XCTestCase {
             controller.format(.dialogue)
             XCTAssertEqual(text.string, before); XCTAssertEqual(text.selectedRange(), NSRange(location: start + 4, length: 5))
             XCTAssertEqual(ScreenplayTextCodec.element(in: text.attributedString(), at: start), .dialogue)
+        }
+    }
+    func testPDFDOCXMaterializeOnceAndPreserveAuthoredNames() async throws {
+        try await MainActor.run {
+            var project = Project(); let id = project.addScene()
+            let html = "<p class='sc-character'>KAMAL</p><p class='sc-dialogue'>Hello.</p><p class='sc-action'>He waits.</p><p class='sc-character'>KAMAL (V.O.)</p><p class='sc-dialogue'>Again.</p><p class='sc-character'>KAMAL (CONT'D)</p><p class='sc-dialogue'>Manual label.</p>"
+            try project.updateScene(id: id, html: html)
+            let pdf = try ScreenplayPDF.render(project: project, paper: .a4)
+            XCTAssertEqual(pdf.text.string.components(separatedBy: "(CONT'D)").count - 1, 2)
+            XCTAssertTrue(PDFDocument(data: pdf.data)?.string?.contains("CONT'D") == true)
+            let restored = try NSAttributedString(data: ScreenplayDOCX.render(project), options: [.documentType: NSAttributedString.DocumentType.officeOpenXML], documentAttributes: nil)
+            XCTAssertEqual(restored.string.components(separatedBy: "(CONT'D)").count - 1, 2)
+            XCTAssertEqual(project.scenes[0].html, html)
         }
     }
     func testContinuationIsPresentationOnlyAndHeadingIsOnlyHighlight() async throws {

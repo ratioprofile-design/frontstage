@@ -2,7 +2,7 @@ import {screenplayElements as elements,headingTimes,headingCompletions,character
 export {elements,headingTimes,headingCompletions};
 export function screenplayToolbar(text, changed, editable=true, characters=()=>[],headings=()=>[],options={}) {
   const authoredChange=changed;let commanding=false;
-  changed=()=>{if(commanding)return;authoredChange();decorateDialogue(text,options.continuationSeed?.()??null);};
+  changed=()=>{if(commanding)return;authoredChange();decorateDialogue(text,options.continuationSeed?.()??null,options.continuationFlags?.()??null);};
   const transaction=action=>{const prior=commanding;commanding=true;try{return action();}finally{commanding=prior;if(!prior)changed();}};
   text.addEventListener('input',event=>{if(commanding)event.stopImmediatePropagation();},true);
   const bar=document.createElement('div');bar.className='screenplay-toolbar';
@@ -70,7 +70,7 @@ export function screenplayToolbar(text, changed, editable=true, characters=()=>[
     }
   });};
   for(const event of ['input','keyup','click','compositionend'])text.addEventListener(event,followCaret);
-  const refresh=()=>decorateDialogue(text,options.continuationSeed?.()??null);refresh();text.refreshScreenplayPresentation=refresh;
+  const refresh=()=>decorateDialogue(text,options.continuationSeed?.()??null,options.continuationFlags?.()??null);refresh();text.refreshScreenplayPresentation=refresh;
   bar.editor={format:kind=>{text.focus();if(savedRange&&text.contains(savedRange.startContainer)){const selection=window.getSelection();selection.removeAllRanges();selection.addRange(savedRange);}format(kind);},inline:command=>{text.focus();if(savedRange&&text.contains(savedRange.startContainer)){const selection=window.getSelection();selection.removeAllRanges();selection.addRange(savedRange);}document.execCommand(command);changed();},remember,refresh};
   return bar;
 }
