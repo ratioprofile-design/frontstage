@@ -13,5 +13,7 @@ final class HeadingCompletionTests: XCTestCase {
         }
         XCTAssertEqual(SceneHeading.completions(for: "INT. HALL - SAME ", headings: headings), ["INT. HALL - SAME TIME"])
         XCTAssertEqual(SceneHeading.completions(for: "INT. HALL - ", headings: headings).count, 10)
+        XCTAssertEqual(SceneHeading(inline: "INT. HOUSE - KITCHEN - NIGHT").location, "HOUSE - KITCHEN")
+        XCTAssertEqual(SceneHeading.completions(for: "INT. HOUSE - KITCHEN - N", headings: headings), ["INT. HOUSE - KITCHEN - NIGHT"])
     }
 }

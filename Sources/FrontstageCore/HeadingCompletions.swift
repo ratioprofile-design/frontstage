@@ -1,13 +1,18 @@
 import Foundation
 
 extension SceneHeading {
+    static func finalSeparator(in source: String) -> Range<String.Index>? {
+        guard let expression = try? NSRegularExpression(pattern: #"\s+[-–—]\s*"#),
+              let match = expression.matches(in: source, range: NSRange(source.startIndex..., in: source)).last else { return nil }
+        return Range(match.range, in: source)
+    }
     public static let timeSuggestions = ["DAY", "NIGHT", "MORNING", "AFTERNOON", "EVENING", "DAWN", "DUSK", "LATER", "CONTINUOUS", "SAME TIME"]
 
     /// Full prefixes through the caret; TextKit replaces only its partial-word range.
     public static func completions(for prefix: String, headings: [SceneHeading]) -> [String] {
         let prefixes = ["INT.", "EXT.", "INT./EXT.", "EXT./INT.", "I/E."]
         let source = prefix.uppercased()
-        let separator = source.range(of: #"\s[-–—]\s*"#, options: [.regularExpression, .backwards])
+        let separator = finalSeparator(in: source)
         let choices: [String]
         if let separator {
             let base = String(source[..<separator.upperBound])

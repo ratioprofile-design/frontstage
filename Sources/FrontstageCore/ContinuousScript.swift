@@ -13,7 +13,7 @@ extension SceneHeading {
         let prefixes = ["INT./EXT.", "EXT./INT.", "INT.", "EXT.", "I/E."]
         let prefix = prefixes.first { source.hasPrefix($0) } ?? ""
         let rest = String(source.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
-        let split = rest.range(of: #"\s+[-–—]\s*"#, options: [.regularExpression, .backwards])
+        let split = Self.finalSeparator(in: rest)
         self.init(prefix: prefix, location: split.map { String(rest[..<$0.lowerBound]) } ?? rest, time: split.map { String(rest[$0.upperBound...]) } ?? "")
     }
 }

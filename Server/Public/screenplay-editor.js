@@ -6,7 +6,7 @@ export function headingCompletions(source,caret,headings=[]) {
   const separators=[...source.matchAll(/\s[-–—]\s*/g)],separator=separators.at(-1);
   let start=0,end=match?match[1].length:source.search(/\s/),choices=prefixes;
   if(separator&&caret>=separator.index+separator[0].length){start=separator.index+separator[0].length;end=source.length;choices=headingTimes;}
-  else if(match&&caret>=match[0].length){start=match[0].length;end=separator?.index??source.length;choices=headings.map(h=>h.replace(/^(?:INT\.\/EXT\.|EXT\.\/INT\.|INT\.|EXT\.|I\/E\.)\s*/i,'').split(/\s[-–—]\s*/)[0].trim()).filter(Boolean);}
+  else if(match&&caret>=match[0].length){start=match[0].length;end=separator?.index??source.length;choices=headings.map(h=>{const rest=h.replace(/^(?:INT\.\/EXT\.|EXT\.\/INT\.|INT\.|EXT\.|I\/E\.)\s*/i,'');const split=[...rest.matchAll(/\s+[-–—]\s*/g)].at(-1);return(split?rest.slice(0,split.index):rest).trim();}).filter(Boolean);}
   if(end<0)end=source.length;
   const typed=before.slice(start).toUpperCase();
   return {start,end,values:[...new Set(choices.map(v=>v.toUpperCase()))].filter(v=>v.startsWith(typed)&&v!==typed).slice(0,12)};
