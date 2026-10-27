@@ -417,7 +417,7 @@ struct WorkspaceView: View {
     @ObservedObject var workspace: Workspace
     @State private var columns = NavigationSplitViewVisibility.all
 
-    var body: some View {
+    private var workspaceLayout: some View {
         NavigationSplitView(columnVisibility: $columns) {
             ScriptSidePaper(workspace: workspace)
                 .navigationSplitViewColumnWidth(min: 320, ideal: 460, max: 700)
@@ -455,6 +455,9 @@ struct WorkspaceView: View {
             }
             }.background(Color(boardHex: WorkspaceDesign.panelColor))
         }
+    }
+    var body: some View {
+        workspaceLayout
         .onAppear { if workspace.mode == .edit { columns = .detailOnly } }
         .onChange(of: workspace.mode) { old, mode in if mode == .edit { columns = .detailOnly } else if old == .edit { columns = workspace.showBoardScript ? .all : .detailOnly } }
         .onChange(of: workspace.showBoardScript) { visible in columns = workspace.mode != .edit && visible ? .all : .detailOnly }
@@ -466,24 +469,7 @@ struct WorkspaceView: View {
             }.font(.caption).foregroundStyle(.secondary).padding(8).background(.regularMaterial)
         }
         .toolbar(removing: .sidebarToggle)
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button("Toggle navigation", systemImage: "sidebar.left") {
-                    if workspace.mode == .edit { workspace.writeCardsToggle += 1 }
-                    else { workspace.showBoardScript.toggle() }
-                }
-            }
-            Picker("View", selection: $workspace.mode) {
-                ForEach(Workspace.Mode.allCases, id: \.self) { mode in Text(mode.rawValue).tag(mode) }
-            }.pickerStyle(.menu).frame(width: 140)
-            Picker("Paper", selection: $workspace.paper) {
-                ForEach(ScreenplayPaper.allCases, id: \.self) { paper in Text(paper.label).tag(paper) }
-            }.frame(width: 120)
-            Button("Add Scene", systemImage: "plus", action: workspace.addScene)
-            Button("Save", systemImage: "square.and.arrow.down", action: workspace.save)
-            Button("Export PDF", systemImage: "doc.richtext", action: workspace.exportPDF)
-                .disabled(!workspace.hasActiveScenes)
-        }
+        .toolbar { workspaceToolbar }
         .preferredColorScheme(.dark)
         .font(.system(size: 12))
         .onChange(of: workspace.mode) { _, mode in if mode == .pages { workspace.makePreview() } }
@@ -504,6 +490,25 @@ struct WorkspaceView: View {
             set: { if !$0 { workspace.errorMessage = nil } })) {
                 Button("OK") { workspace.errorMessage = nil }
             } message: { Text(workspace.errorMessage ?? "") }
+    }
+    @ToolbarContentBuilder private var workspaceToolbar: some ToolbarContent {
+        ToolbarItem(placement: .navigation) {
+            Button("Toggle navigation", systemImage: "sidebar.left") {
+                if workspace.mode == .edit { workspace.writeCardsToggle += 1 }
+                else { workspace.showBoardScript.toggle() }
+            }
+        }
+        ToolbarItemGroup {
+            Picker("View", selection: $workspace.mode) {
+                ForEach(Workspace.Mode.allCases, id: \.self) { mode in Text(mode.rawValue).tag(mode) }
+            }.pickerStyle(.menu).frame(width: 140)
+            Picker("Paper", selection: $workspace.paper) {
+                ForEach(ScreenplayPaper.allCases, id: \.self) { paper in Text(paper.label).tag(paper) }
+            }.frame(width: 120)
+            Button("Add Scene", systemImage: "plus", action: workspace.addScene)
+            Button("Save", systemImage: "square.and.arrow.down", action: workspace.save)
+            Button("Export PDF", systemImage: "doc.richtext", action: workspace.exportPDF).disabled(!workspace.hasActiveScenes)
+        }
     }
 }
 
