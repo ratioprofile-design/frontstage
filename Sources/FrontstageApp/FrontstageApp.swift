@@ -220,7 +220,8 @@ final class Workspace: ObservableObject {
         for id in popup.panels.keys { popup.controller(for: id)?.textView?.undoManager?.removeAllActions() }
         for controller in scriptEditors.values { controller.textView?.undoManager?.removeAllActions() }
         if !whiteboard.beats.contains(where: { $0.id == selectedBoardBeatID }) { selectedBoardBeatID = whiteboard.orderedBeats.first?.id }
-        if let beat = whiteboard.beats.first(where: { $0.id == selectedBoardBeatID }) { selectedSceneID = beat.sceneID }
+        if let beat = whiteboard.beats.first(where: { $0.id == selectedBoardBeatID }), project.scenes.contains(where: { $0.id == beat.sceneID }) { selectedSceneID = beat.sceneID }
+        if project.scenes.isEmpty { selectedSceneID = nil; selectedBoardBeatID = nil }
     }
 
     private func didSave() {

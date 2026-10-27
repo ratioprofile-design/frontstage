@@ -9,11 +9,28 @@ enum WritingPaperTheme: String, CaseIterable {
     var paper: NSColor { switch self { case .white: .white; case .warm: NSColor(srgbRed: 0.98, green: 0.94, blue: 0.85, alpha: 1); case .dark: NSColor(white: 0.13, alpha: 1); case .red: NSColor(srgbRed: 0.13, green: 0.04, blue: 0.04, alpha: 1) } }
     var ink: NSColor { switch self { case .white, .warm: .black; case .dark: NSColor(white: 0.92, alpha: 1); case .red: NSColor(srgbRed: 0.91, green: 0.65, blue: 0.65, alpha: 1) } }
 }
-final class WritingClipView: NSClipView {
-    override func constrainBoundsRect(_ proposedBounds: NSRect) -> NSRect {
-        var result = super.constrainBoundsRect(proposedBounds)
-        if let documentView, documentView.frame.width < result.width { result.origin.x = -(result.width - documentView.frame.width) / 2 }
-        return result
+final class WritingCanvasView: NSView {
+    weak var paperView: WritingTextView?
+    var paperWidth: CGFloat = 595.2756
+    var minimumPaperHeight: CGFloat = 841.8898
+    private var arranging = false
+    override var isFlipped: Bool { true }
+    override func resizeSubviews(withOldSize oldSize: NSSize) { layoutPaper() }
+    override func layout() { super.layout(); layoutPaper() }
+    func layoutPaper() {
+        guard !arranging, let text = paperView else { return }
+        arranging = true; defer { arranging = false }
+        var height = minimumPaperHeight
+        if let manager = text.layoutManager, let container = text.textContainer {
+            manager.ensureLayout(for: container)
+            height = max(height, ceil(manager.usedRect(for: container).height + text.textContainerInset.height * 2 + 8))
+        }
+        let size = NSSize(width: paperWidth, height: height)
+        if text.frame.size != size { text.setFrameSize(size) }
+        let viewport = enclosingScrollView?.contentSize ?? .zero
+        let canvas = NSSize(width: max(viewport.width, paperWidth + 48), height: max(viewport.height, height + 48))
+        if frame.size != canvas { super.setFrameSize(canvas) }
+        text.setFrameOrigin(NSPoint(x: (canvas.width - paperWidth) / 2, y: 24))
     }
 }
 final class WritingTextView: ScreenplayTextView {
@@ -38,16 +55,16 @@ struct ContinuousScriptEditor: NSViewRepresentable {
     var theme = WritingPaperTheme.white
     func makeCoordinator() -> Coordinator { Coordinator(workspace, controller) }
     func makeNSView(context: Context) -> NSScrollView {
-        let scroll = NSScrollView(), text = WritingTextView()
-        scroll.contentView = WritingClipView()
+        let scroll = NSScrollView(), text = WritingTextView(), canvas = WritingCanvasView()
         scroll.drawsBackground = true; scroll.backgroundColor = NSColor(white: 0.3, alpha: 1)
-        scroll.documentView = text; scroll.hasVerticalScroller = true; scroll.hasHorizontalScroller = true
+        canvas.paperView = text; canvas.addSubview(text); canvas.autoresizingMask = [.width]
+        scroll.documentView = canvas; scroll.hasVerticalScroller = true; scroll.hasHorizontalScroller = true; scroll.autohidesScrollers = true
         text.isRichText = true; text.importsGraphics = false; text.allowsUndo = true; text.isAutomaticQuoteSubstitutionEnabled = false
-        text.backgroundColor = .white; text.textColor = .black; text.isVerticallyResizable = true; text.isHorizontallyResizable = true
+        text.backgroundColor = .white; text.textColor = .black; text.isVerticallyResizable = true; text.isHorizontallyResizable = false; text.autoresizingMask = []
         text.textContainerInset = NSSize(width: 60, height: 60); text.textContainer?.widthTracksTextView = false
         text.screenplayController = controller; text.delegate = context.coordinator; controller.textView = text
         text.splitScene = { [weak coordinator = context.coordinator, weak text] in if let text { coordinator?.splitAtCaret(text) } }
-        configure(text); context.coordinator.load(text); applyAppearance(text); return scroll
+        configure(text); context.coordinator.load(text); canvas.layoutPaper(); applyAppearance(text); return scroll
     }
     private func configure(_ text: NSTextView) {
         controller.contentWidth = width * zoom
@@ -58,6 +75,7 @@ struct ContinuousScriptEditor: NSViewRepresentable {
         text.maxSize = NSSize(width: workspace.paper.width * zoom, height: .greatestFiniteMagnitude)
         text.setFrameSize(NSSize(width: workspace.paper.width * zoom, height: max(text.frame.height, workspace.paper.height * zoom)))
         (text as? WritingTextView)?.pageHeight = workspace.paper.height * zoom
+        if let canvas = text.superview as? WritingCanvasView { canvas.paperWidth = workspace.paper.width * zoom; canvas.minimumPaperHeight = workspace.paper.height * zoom }
         text.isSelectable = true
         text.isEditable = workspace.sharedProjects.linked?.access != "reader"
     }
@@ -73,10 +91,11 @@ struct ContinuousScriptEditor: NSViewRepresentable {
         }
     }
     func updateNSView(_ view: NSScrollView, context: Context) {
-        guard let text = view.documentView as? NSTextView else { return }
+        guard let canvas = view.documentView as? WritingCanvasView, let text = canvas.paperView else { return }
         configure(text)
         let signature = context.coordinator.signature()
         if !context.coordinator.committing && !text.hasMarkedText() && signature != context.coordinator.lastSignature { context.coordinator.load(text) }
+        canvas.layoutPaper()
         applyAppearance(text)
     }
     @MainActor final class Coordinator: NSObject, NSTextViewDelegate {
@@ -132,6 +151,7 @@ struct ContinuousScriptEditor: NSViewRepresentable {
                 }
             }
             let selection = text.selectedRange(); text.textStorage?.setAttributedString(result)
+            (text.superview as? WritingCanvasView)?.layoutPaper()
             text.setSelectedRange(NSRange(location: min(selection.location, result.length), length: 0)); lastSignature = signature()
         }
         func textDidChange(_ notification: Notification) {
@@ -195,6 +215,7 @@ struct ContinuousScriptEditor: NSViewRepresentable {
             }
             visible.subtract(pendingPullouts); pendingPullouts.removeAll()
             if missingHeading || repeatedHeadingChanged { load(text) }
+            (text.superview as? WritingCanvasView)?.layoutPaper()
             lastSignature = signature(); controller.selectionChanged(); text.scrollRangeToVisible(text.selectedRange())
             if !completing, !(completionChoices[controller.activeElement] ?? []).isEmpty {
                 completing = true; text.complete(nil); completing = false

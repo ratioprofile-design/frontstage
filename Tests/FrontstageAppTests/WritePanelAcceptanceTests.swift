@@ -28,6 +28,14 @@ final class WritePanelAcceptanceTests: XCTestCase {
             XCTAssertEqual(workspace.project.scenes.first { $0.id == 1 }?.heading.location, "PARK")
             XCTAssertEqual(workspace.project.scenes.first { $0.id == 1 }?.heading.time, "NIGHT")
             XCTAssertEqual(workspace.project.scenes.count, count)
+            let firstHeading = (text.string as NSString).paragraphRange(for: NSRange(location: 0, length: 0))
+            let firstBody = (text.string as NSString).paragraphRange(for: NSRange(location: NSMaxRange(firstHeading), length: 0))
+            text.setSelectedRange(firstBody)
+            text.insertText(String(repeating: "Long screenplay scrolling check.\n", count: 150), replacementRange: firstBody)
+            let scroll = try XCTUnwrap(text.enclosingScrollView)
+            text.scrollRangeToVisible(NSRange(location: max(0, text.string.utf16.count - 1), length: 0))
+            XCTAssertGreaterThan(scroll.documentView!.frame.height, scroll.contentSize.height)
+            XCTAssertGreaterThan(scroll.contentView.bounds.origin.y, 0)
             var body: NSRange?
             text.attributedString().enumerateAttributes(in: NSRange(location: 0, length: text.attributedString().length)) { attributes, range, stop in
                 if attributes[NSAttributedString.Key("FrontstageBeatOwner")] as? String == "beat-1", attributes[NSAttributedString.Key("FrontstageSceneHeading")] == nil { body = range; stop.pointee = true }
