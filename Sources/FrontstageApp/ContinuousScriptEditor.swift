@@ -64,12 +64,15 @@ final class WritingTextView: ScreenplayTextView {
             // an empty body paragraph. Its scene identity must never follow text
             // into the body and make that text replace the real slugline.
             let source = attributedString()
+            let destination = min(range.location, max(0, source.length - 1))
+            let paragraph = (source.string as NSString).paragraphRange(for: NSRange(location: destination, length: 0))
+            let bodyDestination = source.length > 0 && range.location <= source.length && source.attribute(headingKey, at: destination, effectiveRange: nil) == nil
             if !hasMarkedText(), source.length > 0, range.location <= source.length,
                source.attribute(headingKey, at: min(range.location, source.length - 1), effectiveRange: nil) == nil,
                typingAttributes[headingKey] != nil {
                 typingAttributes = source.attributes(at: min(range.location, source.length - 1), effectiveRange: nil)
             }
-            if let attributed = insertString as? NSAttributedString, ScriptHeadingEditing.context(in: self, replacing: range) == nil {
+            if let attributed = insertString as? NSAttributedString, bodyDestination, NSMaxRange(range) <= NSMaxRange(paragraph) {
                 let body = NSMutableAttributedString(attributedString: attributed)
                 body.removeAttribute(headingKey, range: NSRange(location: 0, length: body.length))
                 super.insertText(body, replacementRange: replacementRange)

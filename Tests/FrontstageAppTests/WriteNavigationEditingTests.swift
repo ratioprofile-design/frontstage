@@ -70,7 +70,7 @@ final class WriteNavigationEditingTests: XCTestCase {
         try await MainActor.run {
             var project = try Self.fixture()
             for scene in project.scenes { try project.updateScene(id: scene.id, heading: SceneHeading(inline: scene.heading.inlineText)) }
-            let (workspace, _, window, text) = try Self.editor(project); defer { window.close() }
+            let (workspace, controller, window, text) = try Self.editor(project); defer { window.close() }
             let headings = workspace.project.scenes.map(\.heading)
             let bodyStart = NSMaxRange((text.string as NSString).paragraphRange(for: NSRange(location: 0, length: 0)))
             var paste = text.attributedString().attributes(at: bodyStart, effectiveRange: nil)
@@ -85,6 +85,10 @@ final class WriteNavigationEditingTests: XCTestCase {
             XCTAssertTrue(text.string.hasSuffix("Final body paragraph."))
             XCTAssertNil(text.typingAttributes[ScriptHeadingEditing.heading])
             XCTAssertEqual(try Project(data: workspace.project.encoded()).scenes.map(\.heading), headings)
+            text.setSelectedRange(NSRange(location: 0, length: text.string.utf16.count))
+            controller.toggleInlineStyle("bold")
+            XCTAssertEqual(workspace.project.scenes.map(\.heading), headings)
+            XCTAssertEqual(workspace.project.scenes.count, project.scenes.count)
         }
     }
     func testHeadingDeletePasteAndReturnDoNotConsumeSceneBody() async throws {
