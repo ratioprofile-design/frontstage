@@ -73,6 +73,25 @@ final class WriterTypingAcceptanceTests: XCTestCase {
             XCTAssertEqual(ScreenplayTextCodec.element(in: text.attributedString(), at: start), .dialogue)
         }
     }
+    func testCharacterCompletionDoesNotPreviewOrMoveCaret() async throws {
+        try await MainActor.run {
+            let (_, controller, window, text) = try Self.editor("<p class='sc-character'>KAMAL KUMAR</p><p class='sc-dialogue'>First.</p><p class='sc-action'>Target</p>"); defer { window.close() }
+            window.orderFront(nil)
+            let target = (text.string as NSString).range(of: "Target")
+            text.setSelectedRange(target); controller.format(.character)
+            text.insertText("kam", replacementRange: text.selectedRange())
+            let coordinator = try XCTUnwrap(text.delegate as? ContinuousScriptEditor.Coordinator)
+            XCTAssertTrue(coordinator.headingSuggestions.isShown)
+            XCTAssertEqual(text.selectedRange(), NSRange(location: target.location + 3, length: 0))
+            XCTAssertEqual((text.string as NSString).substring(with: NSRange(location: target.location, length: 3)), "KAM")
+            try Self.press(text, "\t"); XCTAssertEqual(Self.kind(text), .character)
+            text.insertText(" (", replacementRange: text.selectedRange())
+            XCTAssertTrue(coordinator.headingSuggestions.isShown)
+            try Self.press(text, "\t")
+            XCTAssertTrue(text.string.contains("KAMAL KUMAR (V.O.)"))
+            try Self.press(text, "\n"); XCTAssertEqual(Self.kind(text), .dialogue)
+        }
+    }
     func testPDFDOCXMaterializeOnceAndPreserveAuthoredNames() async throws {
         try await MainActor.run {
             var project = Project(); let id = project.addScene()

@@ -99,6 +99,7 @@ final class ScreenplayEditingTests: XCTestCase {
             XCTAssertTrue(controller.handleCommand(#selector(NSResponder.insertTab(_:)), in: text))
             XCTAssertEqual(controller.activeElement, .character)
             XCTAssertTrue(text.string.contains("Action text"))
+            text.insertText("RANGA", replacementRange: text.selectedRange())
             XCTAssertTrue(controller.handleCommand(#selector(NSResponder.insertNewline(_:)), in: text))
             XCTAssertEqual(controller.activeElement, .dialogue)
             text.insertText("Dialogue", replacementRange: text.selectedRange())
