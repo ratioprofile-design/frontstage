@@ -354,7 +354,7 @@ struct ContinuousScriptEditor: NSViewRepresentable {
                (source.string as NSString).character(at: range.location) == 10,
                source.attribute(headingKey, at: range.location, effectiveRange: nil) != nil { return false }
             pendingHeading = (replacementString == "\n" && range.length == 0) ? nil : ScriptHeadingEditing.context(in: textView, replacing: range)
-            offerCompletions = replacementString?.last?.isLetter == true
+            offerCompletions = replacementString?.last?.isLetter == true || (pendingHeading != nil && replacementString?.last?.isWhitespace == true && replacementString?.contains("\n") != true)
             var allowed = true
             let checked = NSRange(location: min(range.location, source.length - 1), length: max(1, min(range.length, source.length - min(range.location, source.length - 1))))
             source.enumerateAttribute(ownerKey, in: checked) { value, _, _ in

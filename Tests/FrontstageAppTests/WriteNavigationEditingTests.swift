@@ -179,6 +179,13 @@ final class WriteNavigationEditingTests: XCTestCase {
             XCTAssertTrue(text.string.hasPrefix("EXT. PARK - NIGHT\n"))
             XCTAssertTrue(coordinator.textView(text, doCommandBy: #selector(NSResponder.insertNewline(_:))))
             XCTAssertEqual(text.selectedRange().location, "EXT. PARK - NIGHT\n".utf16.count)
+            let updated = (text.string as NSString).paragraphRange(for: NSRange(location: 0, length: 0))
+            text.setSelectedRange(NSRange(location: 0, length: updated.length - 1))
+            text.insertText("EXT. PARK - ", replacementRange: text.selectedRange())
+            XCTAssertTrue(coordinator.headingSuggestions.isShown, "Show day/night choices after the separator without inserting one")
+            XCTAssertTrue(text.string.hasPrefix("EXT. PARK - \n"))
+            XCTAssertTrue(coordinator.textView(text, doCommandBy: #selector(NSResponder.insertTab(_:))))
+            XCTAssertEqual(workspace.project.scenes[0].heading.time, "DAY")
         }
     }
 }
