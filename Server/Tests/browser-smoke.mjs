@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import {syncSceneMetadata} from '../Public/scene-model.js';
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.FRONTSTAGE_PLAYWRIGHT_MODULE || 'playwright-core');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -92,8 +93,11 @@ try {
   const latest = await fetch(endpoint, { headers }).then(r => r.json());
   const secondDocument = structuredClone(latest.document); secondDocument.name = 'Second project';
   secondDocument.project.frontstageWhiteboard.beats.find(b => b.title === 'The Consequence').title = 'Another project beat';
+  syncSceneMetadata(secondDocument);
   secondDocument.project.beats.forEach(scene => { scene.frontstageTextLocked = true; });
-  const secondProject = await fetch(address + '/api/projects', { method: 'POST', headers, body: JSON.stringify({ document: secondDocument }) }).then(r => r.json());
+  const secondResponse = await fetch(address + '/api/projects', { method: 'POST', headers, body: JSON.stringify({ document: secondDocument }) });
+  assert.equal(secondResponse.status, 200, 'The second project must satisfy scene validation');
+  const secondProject = await secondResponse.json();
   let releaseResponse, responseHeld = false;
   const responseGate = new Promise(resolve => { releaseResponse = resolve; });
   await page.route(endpoint, async route => {
