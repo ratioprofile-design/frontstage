@@ -37,7 +37,7 @@ final class WriterTypingAcceptanceTests: XCTestCase {
             let (_, controller, window, text) = try Self.editor("<p class='sc-action'><br></p>"); defer { window.close() }
             let original = text.string, start = text.selectedRange().location
             try Self.press(text, "\t")
-            XCTAssertEqual(text.string, original); XCTAssertEqual(text.selectedRange().location, start)
+            XCTAssertEqual(text.string.debugDescription, original.debugDescription); XCTAssertEqual(text.selectedRange().location, start)
             XCTAssertEqual(Self.kind(text), .character)
             let style = try XCTUnwrap(text.typingAttributes[.paragraphStyle] as? NSParagraphStyle)
             XCTAssertEqual(style.headIndent, controller.contentWidth * 0.33, accuracy: 0.1)
