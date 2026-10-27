@@ -47,6 +47,46 @@ final class WriteNavigationEditingTests: XCTestCase {
             XCTAssertNil(workspace.errorMessage)
         }
     }
+    func testStaleHeadingTypingAttributesCannotReplaceSluglineFromBody() async throws {
+        try await MainActor.run {
+            var project = try Self.fixture()
+            for scene in project.scenes { try project.updateScene(id: scene.id, heading: SceneHeading(inline: scene.heading.inlineText)) }
+            let (workspace, _, window, text) = try Self.editor(project); defer { window.close() }
+            let headings = workspace.project.scenes.map(\.heading)
+            let first = (text.string as NSString).paragraphRange(for: NSRange(location: 0, length: 0))
+            let bodyStart = NSMaxRange(first), before = text.string
+            text.setSelectedRange(NSRange(location: bodyStart, length: 0))
+            // Reproduce TextKit retaining the preceding paragraph's identity.
+            text.typingAttributes = text.attributedString().attributes(at: 0, effectiveRange: nil)
+            for character in "ordinary body text. " { text.insertText(String(character), replacementRange: text.selectedRange()) }
+            XCTAssertEqual(workspace.project.scenes.map(\.heading), headings)
+            XCTAssertTrue(text.string.hasPrefix((before as NSString).substring(with: first) + "ordinary body text. "))
+            XCTAssertNil(text.attributedString().attribute(ScriptHeadingEditing.heading, at: bodyStart, effectiveRange: nil))
+            XCTAssertEqual(ScreenplayTextCodec.element(in: text.attributedString(), at: bodyStart), .action)
+            XCTAssertEqual(text.selectedRange().location, bodyStart + "ordinary body text. ".utf16.count)
+        }
+    }
+    func testBodyPasteAndEndOfDocumentTypingDoNotCarryHeadingIdentity() async throws {
+        try await MainActor.run {
+            var project = try Self.fixture()
+            for scene in project.scenes { try project.updateScene(id: scene.id, heading: SceneHeading(inline: scene.heading.inlineText)) }
+            let (workspace, _, window, text) = try Self.editor(project); defer { window.close() }
+            let headings = workspace.project.scenes.map(\.heading)
+            let bodyStart = NSMaxRange((text.string as NSString).paragraphRange(for: NSRange(location: 0, length: 0)))
+            var paste = text.attributedString().attributes(at: bodyStart, effectiveRange: nil)
+            paste[ScriptHeadingEditing.heading] = "1"
+            text.setSelectedRange(NSRange(location: bodyStart, length: 0))
+            text.insertText(NSAttributedString(string: "Pasted body. ", attributes: paste), replacementRange: text.selectedRange())
+            XCTAssertEqual(workspace.project.scenes.map(\.heading), headings)
+            text.setSelectedRange(NSRange(location: text.string.utf16.count, length: 0))
+            text.typingAttributes = text.attributedString().attributes(at: 0, effectiveRange: nil)
+            text.insertText("Final body paragraph.", replacementRange: text.selectedRange())
+            XCTAssertEqual(workspace.project.scenes.map(\.heading), headings)
+            XCTAssertTrue(text.string.hasSuffix("Final body paragraph."))
+            XCTAssertNil(text.typingAttributes[ScriptHeadingEditing.heading])
+            XCTAssertEqual(try Project(data: workspace.project.encoded()).scenes.map(\.heading), headings)
+        }
+    }
     func testHeadingDeletePasteAndReturnDoNotConsumeSceneBody() async throws {
         try await MainActor.run {
             let (workspace, _, window, text) = try Self.editor(Self.fixture()); defer { window.close() }

@@ -59,7 +59,22 @@ final class WritingTextView: ScreenplayTextView {
         let range = replacementRange.location == NSNotFound ? selectedRange() : replacementRange
         if let replacement = ScriptHeadingEditing.replacement(insertString, in: self, range: range) {
             super.insertText(replacement, replacementRange: replacementRange)
-        } else { super.insertText(insertString, replacementRange: replacementRange) }
+        } else {
+            // TextKit can retain a heading's typing attributes after moving into
+            // an empty body paragraph. Its scene identity must never follow text
+            // into the body and make that text replace the real slugline.
+            let source = attributedString()
+            if !hasMarkedText(), source.length > 0, range.location <= source.length,
+               source.attribute(headingKey, at: min(range.location, source.length - 1), effectiveRange: nil) == nil,
+               typingAttributes[headingKey] != nil {
+                typingAttributes = source.attributes(at: min(range.location, source.length - 1), effectiveRange: nil)
+            }
+            if let attributed = insertString as? NSAttributedString, ScriptHeadingEditing.context(in: self, replacing: range) == nil {
+                let body = NSMutableAttributedString(attributedString: attributed)
+                body.removeAttribute(headingKey, range: NSRange(location: 0, length: body.length))
+                super.insertText(body, replacementRange: replacementRange)
+            } else { super.insertText(insertString, replacementRange: replacementRange) }
+        }
     }
     @discardableResult func centerBeat(_ id: String) -> Bool {
         guard !hasMarkedText(), let canvas = superview as? WritingCanvasView, let scroll = enclosingScrollView,
@@ -166,7 +181,25 @@ struct ContinuousScriptEditor: NSViewRepresentable {
         var registeredHeadings = [SceneHeading]()
         var dialogueCache = [String: DialoguePresentation.CachedBeat]()
         func refreshDialogue(_ text: NSTextView) {
-            if let text = text as? ScreenplayTextView { text.continuationFlags = DialoguePresentation.projectFlags(workspace.project, cache: &dialogueCache); DialoguePresentation.refresh(text) }
+            if let text = text as? ScreenplayTextView {
+                // The live attributed paragraphs are already decoded. AppKit's
+                // HTML importer runs a nested event loop; using it per keystroke
+                // can process a second edit before the first one has committed.
+                let source = text.attributedString(), string = source.string as NSString
+                var lines = [String: [(ScreenplayElement, String)]](), location = 0
+                while location < source.length {
+                    let range = string.paragraphRange(for: NSRange(location: location, length: 0))
+                    if source.attribute(headingKey, at: location, effectiveRange: nil) == nil,
+                       let id = source.attribute(ownerKey, at: location, effectiveRange: nil) as? String {
+                        lines[id, default: []].append((ScreenplayTextCodec.element(in: source, at: location), string.substring(with: range)))
+                    }
+                    location = NSMaxRange(range)
+                }
+                for beat in workspace.whiteboard.beats where visible.contains(beat.id) {
+                    dialogueCache[beat.id] = DialoguePresentation.CachedBeat(html: beat.html, lines: lines[beat.id] ?? [])
+                }
+                text.continuationFlags = DialoguePresentation.projectFlags(workspace.project, cache: &dialogueCache); DialoguePresentation.refresh(text)
+            }
         }
         init(_ workspace: Workspace, _ controller: ScreenplayEditorController) { self.workspace = workspace; self.controller = controller }
         func showSuggestions(_ text: NSTextView) {
@@ -342,7 +375,8 @@ struct ContinuousScriptEditor: NSViewRepresentable {
             if let text = notification.object as? NSTextView { synchronizeHeadings(text, excluding: nil) }
         }
         var completionChoices: [ScreenplayElement: [String]] {
-            var choices = workspace.screenplayCompletions
+            var choices = Workspace.screenplayFixedCompletions
+            choices[.character] = registeredNames.union(workspace.project.characters.map(\.name)).union(workspace.whiteboard.beats.flatMap(\.characters)).sorted()
             choices[.sceneHeading] = Array(Set(workspace.project.scenes.map { $0.heading.text } + ["INT.", "EXT.", "INT./EXT."])).sorted()
             return choices
         }

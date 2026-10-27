@@ -74,8 +74,9 @@ enum DialoguePresentation {
                 let style = (storage.attribute(.paragraphStyle, at: location, effectiveRange: nil) as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
                 let tail = reserved ? -width : kind == .dialogue ? -(text.screenplayController?.contentWidth ?? 432) * WorkspaceDesign.dialogueIndent / 100 : kind == .parenthetical ? -(text.screenplayController?.contentWidth ?? 432) * WorkspaceDesign.parentheticalRight / 100 : 0
                 if style.tailIndent != tail { style.tailIndent = tail; storage.addAttribute(.paragraphStyle, value: style, range: paragraph) }
-                if reserved { storage.addAttribute(reservation, value: true, range: paragraph) }
-                else { storage.removeAttribute(reservation, range: paragraph) }
+                let hadReservation = storage.attribute(reservation, at: location, effectiveRange: nil) != nil
+                if reserved && !hadReservation { storage.addAttribute(reservation, value: true, range: paragraph) }
+                else if !reserved && hadReservation { storage.removeAttribute(reservation, range: paragraph) }
             }
             if let range = generated[location], range.length > 0 { tokens.append(DialoguePresentationToken(range: range, width: width)) }
             location = NSMaxRange(paragraph)
