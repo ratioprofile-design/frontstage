@@ -16,11 +16,12 @@ try{
  fixture.project.frontstageWhiteboard.beats[0].html='<p class="sc-line sc-action"><br></p>';
  fixture.project.frontstageWhiteboard.beats[1].html='<p class="sc-line sc-character">KAMAL KUMAR (O.S.)</p><p class="sc-line sc-dialogue">Hello.</p><p class="sc-line sc-character">கமல்</p><p class="sc-line sc-dialogue">வணக்கம்.</p>';
  for(const scene of fixture.project.beats)scene.content=fixture.project.frontstageWhiteboard.beats.filter(b=>b.sceneID===scene.id).map(b=>b.html).join('');
- await page.goto('http://127.0.0.1:17845');await page.locator('#local-mode').click();await page.locator('#back').click();
+ await page.goto('http://127.0.0.1:17845');await page.locator('#local-mode').click();await page.locator('#back').click();await page.waitForSelector('#projects:not([hidden])');
  await page.locator('#import-project').setInputFiles({name:'Writer typing.frontstage',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(fixture))});await page.waitForSelector('#workspace:not([hidden])');await page.locator('#view-mode').selectOption('edit');
  const sheet=page.locator('.continuous-editor'),body=()=>sheet.locator('[data-beat-id="beat-1"]:not([data-heading-scene])');
  const active=()=>sheet.evaluate(()=>{let n=getSelection()?.anchorNode;if(n?.nodeType===3)n=n.parentElement;while(n&&n.parentElement&&!n.parentElement.classList.contains('continuous-editor'))n=n.parentElement;return {text:n?.textContent,kind:n?.className,caret:getSelection()?.anchorOffset};});
- await body().first().click();const count=await body().count();await page.keyboard.press('Tab');
+ try{await body().first().click();}catch(error){throw Error('Writer fixture did not open: '+JSON.stringify(await page.evaluate(()=>({status:document.querySelector('#status')?.textContent,page:document.querySelector('#workspace-page')?.textContent?.slice(0,500),mode:document.querySelector('#view-mode')?.value})))+' errors='+JSON.stringify(errors)+' '+error.message);}
+ const count=await body().count();await page.keyboard.press('Tab');
  assert.equal(await body().count(),count);assert.match((await active()).kind,/sc-character/);
  await page.keyboard.type('kam');assert.equal((await active()).text,'KAM');assert.ok(await page.getByRole('option',{name:'KAMAL KUMAR',exact:true}).isVisible());
  assert.equal((await active()).caret,3,'Showing a suggestion must not move the caret or select a suffix');
