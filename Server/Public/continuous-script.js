@@ -207,6 +207,11 @@ export function mountContinuousScript(sheet, api) {
       event.preventDefault(); pendingPullouts.clear(); api.status('This selection contains locked text.'); return;
     }
     pendingPullouts.clear();pendingHeading=null;
+    if(range.collapsed&&event.inputType?.startsWith('delete')){
+      const node=paragraph();if(node){const before=document.createRange();before.selectNodeContents(node);before.setEnd(range.startContainer,range.startOffset);const offset=before.toString().length;
+        if((event.inputType.endsWith('Forward')&&node.dataset.headingScene&&offset===node.textContent.length)||(event.inputType.endsWith('Backward')&&offset===0&&(node.dataset.headingScene||node.previousElementSibling?.dataset.headingScene))){event.preventDefault();return;}
+      }
+    }
     const heading=touched.length===1&&touched[0].dataset.headingScene?touched[0]:null;
     if(heading&&!['insertParagraph','insertLineBreak','historyUndo','historyRedo'].includes(event.inputType)&&!/[\r\n]/.test(event.data||'')){
       pendingHeading={node:heading,index:[...sheet.children].indexOf(heading),sceneID:heading.dataset.headingScene,beatID:heading.dataset.beatId};
@@ -227,7 +232,8 @@ export function mountContinuousScript(sheet, api) {
     if(locked(beatFor(node.dataset.beatId)))return;
     event.preventDefault();document.execCommand('insertText',false,(event.clipboardData?.getData('text/plain')||'').replace(/[\r\n]+/g,' '));
   });
-  sheet.addEventListener('blur',()=>{syncHeadings(null);acceptedHTML=sheet.innerHTML;});
+  // Never mutate a subtree synchronously while a page rebuild is removing it.
+  sheet.addEventListener('blur',()=>queueMicrotask(()=>{if(sheet.isConnected&&!sheet.closest('.write-center')?.inert){syncHeadings(null);acceptedHTML=sheet.innerHTML;}}));
   for (const event of ['focus','keyup','mouseup']) sheet.addEventListener(event, select);
   if(api.selection?.())mark(api.selection());
   return {...behavior,split:splitScene, format(kind) { const node = paragraph(); if (node?.dataset.headingScene && kind !== 'slugline') insertAfterHeading(node, kind); else behavior.format(kind); }, commit,

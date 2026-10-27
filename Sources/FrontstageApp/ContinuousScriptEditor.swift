@@ -147,9 +147,11 @@ struct ContinuousScriptEditor: NSViewRepresentable {
         var pendingHeading: ScriptHeadingEditing.Context?
         var pendingReveal: String?
         var offerCompletions = false
+        let headingSuggestions = HeadingSuggestionPanel()
         init(_ workspace: Workspace, _ controller: ScreenplayEditorController) { self.workspace = workspace; self.controller = controller }
         func reveal(_ id: String, in text: WritingTextView) {
             if text.hasMarkedText() { pendingReveal = id; return }
+            headingSuggestions.close()
             synchronizeHeadings(text, excluding: nil)
             if text.centerBeat(id) { workspace.selectBoardBeat(id) }
         }
@@ -214,6 +216,7 @@ struct ContinuousScriptEditor: NSViewRepresentable {
             guard let text = notification.object as? NSTextView, !loading, !committing, !text.hasMarkedText() else { return }
             committing = true; defer { committing = false }
             loading = true
+            let changedHeading = pendingHeading?.range.location
             if let context = pendingHeading { ScriptHeadingEditing.repair(text, context: context); pendingHeading = nil }
             if let storage = text.textStorage, storage.length > 0 {
                 let position = min(text.selectedRange().location, storage.length - 1)
@@ -242,7 +245,7 @@ struct ContinuousScriptEditor: NSViewRepresentable {
                     let kind = ScreenplayElement(rawValue: attributes[.screenplayElement] as? String ?? "action") ?? .action
                     if let scene = attributes[headingKey] as? String, let sceneID = Decimal(string: scene) {
                         if let existing = headings.firstIndex(where: { $0.sceneID == sceneID }) {
-                            if range == editing { headings[existing] = ScriptHeadingEdit(sceneID: sceneID, text: line) }
+                            if range.location == changedHeading || (changedHeading == nil && range == editing) { headings[existing] = ScriptHeadingEdit(sceneID: sceneID, text: line) }
                         } else { headings.append(ScriptHeadingEdit(sceneID: sceneID, text: line)) }
                     } else if kind == .sceneHeading && !line.trimmingCharacters(in: .whitespaces).isEmpty {
                         let newID = try project.insertScriptScene(afterSplitting: id, beforeHTML: html[id] ?? "", afterHTML: "", heading: line)
@@ -277,16 +280,20 @@ struct ContinuousScriptEditor: NSViewRepresentable {
             lastSignature = signature(); controller.selectionChanged(); text.scrollRangeToVisible(text.selectedRange())
             if let id = pendingReveal, let writing = text as? WritingTextView { pendingReveal = nil; reveal(id, in: writing) }
             if offerCompletions, !completing, !(completionChoices[controller.activeElement] ?? []).isEmpty {
-                completing = true; text.complete(nil); completing = false
-            }
+                if controller.activeElement == .sceneHeading { headingSuggestions.show(in: text, headings: workspace.project.scenes.map(\.heading)) }
+                else { headingSuggestions.close(); completing = true; text.complete(nil); completing = false }
+            } else { headingSuggestions.close() }
             offerCompletions = false
         }
         func textViewDidChangeSelection(_ notification: Notification) {
             guard !loading, let text = notification.object as? NSTextView, !text.hasMarkedText() else { return }
+            headingSuggestions.close()
             controller.selectionChanged()
             let index = min(text.selectedRange().location, max(0, text.attributedString().length - 1))
             let active = text.attributedString().length > 0 ? (text.string as NSString).paragraphRange(for: NSRange(location: index, length: 0)) : nil
-            synchronizeHeadings(text, excluding: active)
+            // Selection can move into the body before a heading replacement's
+            // didChange notification. Commit that draft before normalizing it.
+            if pendingHeading == nil { synchronizeHeadings(text, excluding: active) }
             let position = min(text.selectedRange().location, max(0, text.attributedString().length - 1))
             if text.attributedString().length > 0, text.attributedString().attribute(headingKey, at: position, effectiveRange: nil) != nil {
                 text.typingAttributes = text.attributedString().attributes(at: position, effectiveRange: nil)
@@ -297,6 +304,7 @@ struct ContinuousScriptEditor: NSViewRepresentable {
             }
         }
         func textDidEndEditing(_ notification: Notification) {
+            headingSuggestions.close()
             if let text = notification.object as? NSTextView { synchronizeHeadings(text, excluding: nil) }
         }
         var completionChoices: [ScreenplayElement: [String]] {
@@ -318,8 +326,14 @@ struct ContinuousScriptEditor: NSViewRepresentable {
         }
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
             guard !textView.hasMarkedText() else { return false }
+            if headingSuggestions.handle(commandSelector) { return true }
             if let context = ScriptHeadingEditing.context(in: textView, replacing: textView.selectedRange()) {
                 if commandSelector == #selector(NSResponder.deleteBackward(_:)), textView.selectedRange() == NSRange(location: context.range.location, length: 0) { return true }
+                if [#selector(NSResponder.deleteBackward(_:)), #selector(NSResponder.deleteForward(_:))].contains(commandSelector),
+                   textView.selectedRange().length > 0, NSMaxRange(textView.selectedRange()) == NSMaxRange(context.range),
+                   (textView.string as NSString).substring(with: context.range).hasSuffix("\n") {
+                    textView.insertText("", replacementRange: textView.selectedRange()); return true
+                }
                 if commandSelector == #selector(NSResponder.insertNewline(_:)) {
                     synchronizeHeadings(textView, excluding: nil)
                     let heading = (textView.string as NSString).paragraphRange(for: NSRange(location: context.range.location, length: 0))
@@ -336,7 +350,10 @@ struct ContinuousScriptEditor: NSViewRepresentable {
         func textView(_ textView: NSTextView, shouldChangeTextIn range: NSRange, replacementString: String?) -> Bool {
             pendingPullouts.removeAll()
             let source = textView.attributedString(); guard source.length > 0 else { return true }
-            pendingHeading = (replacementString?.contains("\n") == true) ? nil : ScriptHeadingEditing.context(in: textView, replacing: range)
+            if replacementString == "", range.length == 1, range.location < source.length,
+               (source.string as NSString).character(at: range.location) == 10,
+               source.attribute(headingKey, at: range.location, effectiveRange: nil) != nil { return false }
+            pendingHeading = (replacementString == "\n" && range.length == 0) ? nil : ScriptHeadingEditing.context(in: textView, replacing: range)
             offerCompletions = replacementString?.last?.isLetter == true
             var allowed = true
             let checked = NSRange(location: min(range.location, source.length - 1), length: max(1, min(range.length, source.length - min(range.location, source.length - 1))))
