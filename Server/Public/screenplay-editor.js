@@ -107,12 +107,13 @@ export function sluglineFields(getScene, getScenes, commit, editable=true) {
 }
 
 function attachCompletions(text,paragraph,characters,changed,headings=()=>[],advanceCharacter=()=>{},transaction=action=>action()) {
-  let popup=null,values=[],index=0,line=null,component=null;
+  let popup=null,values=[],index=0,line=null,component=null,expected='',anchor=null,anchorOffset=0;
   let choosing=false;
   const knownNames=new Set([...characters(),...committedCharacters(text)].map(n=>characterCue(n).name)),knownHeadings=new Set(headings());
   const close=()=>{popup?.remove();popup=null;values=[];};
   const choose=(advance=false)=>{
-    if(!line||!values[index]||!text.contains(line))return;
+    const current=getSelection();
+    if(!text.isContentEditable||text.isComposing||!line||!values[index]||!text.contains(line)||line.textContent!==expected||!current?.isCollapsed||current.anchorNode!==anchor||current.anchorOffset!==anchorOffset){close();return;}
     const value=values[index],part=component,character=line.classList.contains('sc-character');close();choosing=true;
     try{transaction(()=>{text.focus();const range=document.createRange();range.selectNodeContents(line);
       if(part){const position=offset=>{const walker=document.createTreeWalker(line,NodeFilter.SHOW_TEXT);let node;while((node=walker.nextNode())){if(offset<=node.length)return[node,offset];offset-=node.length;}return[line,line.childNodes.length];};range.setStart(...position(part.start));range.setEnd(...position(part.end));}
@@ -137,6 +138,7 @@ function attachCompletions(text,paragraph,characters,changed,headings=()=>[],adv
     else if(kind==='parenthetical')component=parentheticalCompletions(prefix);
     if(component)values=component.values;
     else{if(!prefix.trim())return;values=[...new Set(choices)].filter(v=>normalized(v).startsWith(normalized(prefix))&&normalized(v)!==normalized(prefix)).slice(0,12);}if(!values.length)return;
+    expected=prefix;anchor=getSelection().anchorNode;anchorOffset=getSelection().anchorOffset;
     popup=document.createElement('div');popup.className='autofill-list';popup.setAttribute('role','listbox');popup.setAttribute('aria-label','Screenplay suggestions');index=0;
     for(const [i,value]of values.entries()){const button=document.createElement('button');button.textContent=value;button.setAttribute('role','option');button.onpointerdown=e=>{e.preventDefault();index=i;choose();};popup.append(button);}
     const rect=window.getSelection()?.getRangeAt(0).getBoundingClientRect()||line.getBoundingClientRect();popup.style.left=Math.min(rect.left,window.innerWidth-220)+'px';popup.style.top=Math.min(rect.bottom+4,window.innerHeight-190)+'px';document.body.append(popup);highlight();

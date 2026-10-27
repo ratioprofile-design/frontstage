@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 
 @MainActor
 enum ScreenplayDOCX {
-    static func render(_ project: Project) throws -> Data {
+    static func render(_ project: Project, paper: ScreenplayPaper = .letter) throws -> Data {
         let xml = OfficeArchive.xml
         var paragraphs = ""
         for segment in try project.orderedScript() {
@@ -29,11 +29,11 @@ enum ScreenplayDOCX {
             }
         }
         let namespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-        let document = "<w:document xmlns:w=\"\(namespace)\"><w:body>\(paragraphs)<w:sectPr><w:pgSz w:w=\"12240\" w:h=\"15840\"/><w:pgMar w:top=\"1440\" w:right=\"1440\" w:bottom=\"1440\" w:left=\"2160\"/></w:sectPr></w:body></w:document>"
+        let document = "<w:document xmlns:w=\"\(namespace)\"><w:body>\(paragraphs)<w:sectPr><w:pgSz w:w=\"\(Int(paper.width * 20))\" w:h=\"\(Int(paper.height * 20))\"/><w:pgMar w:top=\"1440\" w:right=\"1440\" w:bottom=\"1440\" w:left=\"2160\"/></w:sectPr></w:body></w:document>"
         var styles = "<w:styles xmlns:w=\"\(namespace)\"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii=\"\(xml(project.scriptLayout.fontName))\" w:hAnsi=\"\(xml(project.scriptLayout.fontName))\"/><w:sz w:val=\"\(Int(project.scriptLayout.fontSize * 2))\"/></w:rPr></w:rPrDefault></w:docDefaults>"
         for type in ScreenplayElement.allCases {
-            let indent = Int(432 * 20 * (type == .character ? WorkspaceDesign.characterIndent : type == .dialogue ? WorkspaceDesign.dialogueIndent : type == .parenthetical ? WorkspaceDesign.parentheticalIndent : 0) / 100)
-            let right = Int(432 * 20 * (type == .dialogue ? WorkspaceDesign.dialogueIndent : type == .parenthetical ? WorkspaceDesign.parentheticalRight : 0) / 100)
+            let indent = Int(paper.contentWidth * 20 * (type == .character ? WorkspaceDesign.characterIndent : type == .dialogue ? WorkspaceDesign.dialogueIndent : type == .parenthetical ? WorkspaceDesign.parentheticalIndent : 0) / 100)
+            let right = Int(paper.contentWidth * 20 * (type == .dialogue ? WorkspaceDesign.dialogueIndent : type == .parenthetical ? WorkspaceDesign.parentheticalRight : 0) / 100)
             styles += "<w:style w:type=\"paragraph\" w:styleId=\"\(type.rawValue)\"><w:name w:val=\"\(type.label)\"/><w:pPr><w:ind w:left=\"\(indent)\" w:right=\"\(right)\"/><w:spacing w:after=\"\(type == .character || type == .parenthetical ? 0 : 160)\"/>\(type.keepsWithNext ? "<w:keepNext/>" : "")</w:pPr></w:style>"
         }
         styles += "</w:styles>"
@@ -72,7 +72,7 @@ extension Workspace {
         } catch { errorMessage = error.localizedDescription }
     }
     func exportDOCX() {
-        do { try saveOffice(try ScreenplayDOCX.render(project), ext: "docx", name: project.name) }
+        do { try saveOffice(try ScreenplayDOCX.render(project, paper: paper), ext: "docx", name: project.name) }
         catch { errorMessage = error.localizedDescription }
     }
     func exportScheduleXLSX() {

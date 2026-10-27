@@ -11,6 +11,8 @@ final class WriterTypingAcceptanceTests: XCTestCase {
         _ = NSApplication.shared
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Fixtures/write-panels.frontstage")
         var project = try Project(data: Data(contentsOf: url))
+        // Isolate paragraph commands from the legacy fixture's mixed-case heading.
+        for scene in project.scenes { try project.updateScene(id: scene.id, heading: SceneHeading(inline: scene.heading.inlineText)) }
         try project.editWhiteboard { board in board.beats[0].html = html }
         let workspace = Workspace(); workspace.loadCopy(project)
         let controller = workspace.scriptController("typing-acceptance")
@@ -100,7 +102,7 @@ final class WriterTypingAcceptanceTests: XCTestCase {
             let pdf = try ScreenplayPDF.render(project: project, paper: .a4)
             XCTAssertEqual(pdf.text.string.components(separatedBy: "(CONT'D)").count - 1, 2)
             XCTAssertTrue(PDFDocument(data: pdf.data)?.string?.contains("CONT'D") == true)
-            let restored = try NSAttributedString(data: ScreenplayDOCX.render(project), options: [.documentType: NSAttributedString.DocumentType.officeOpenXML], documentAttributes: nil)
+            let restored = try NSAttributedString(data: ScreenplayDOCX.render(project, paper: .a4), options: [.documentType: NSAttributedString.DocumentType.officeOpenXML], documentAttributes: nil)
             XCTAssertEqual(restored.string.components(separatedBy: "(CONT'D)").count - 1, 2)
             XCTAssertEqual(project.scenes[0].html, html)
         }

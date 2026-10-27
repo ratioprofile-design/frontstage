@@ -4,7 +4,7 @@ Frontstage’s Write page has scene navigation on the left, a continuous screenp
 
 The navigation button toggles scene cards in Write. Writing options contains Display, Styling, Filter, Presets and Options; the element toolbar, zoom, paper theme and inspector toggle remain visible. A4 is the initial paper choice. White, Warm, Dark and Red themes are device-local reading preferences and do not change printed/exported ink or paper. Page-boundary marks are reading guides, not frozen production pagination.
 
-Selecting a card places the caret in its screenplay and highlights that beat without saving highlight attributes into the project. The inspector uses the selected beat’s title, including in legacy projects. The paper context menu can split screenplay text at the caret into a new scene/beat; undo restores the original scene and text. Scene notes and production records remain on the original scene.
+Selecting a card places the caret in its screenplay and highlights only the scene occurrence's slugline with a subtle background and margin marker. The highlight is temporary and does not enter saved formatting, undo, or exports. The inspector uses the selected beat’s title, including in legacy projects. The paper context menu can split screenplay text at the caret into a new scene/beat; undo restores the original scene and text. Scene notes and production records remain on the original scene.
 
 The Both notes scope displays Scene and Project notes together in independently scrollable sections. Each section has its own Add Note action and captures its owner when editing. Colors show named swatches (Yellow, Blue, Green, Pink and White); choosing a color preserves note content and formatting.
 
@@ -28,6 +28,12 @@ Responsive Write panels have an independent header and Close button. Tap the sha
 **History** lists scene snapshots newest-first, with summary and screenplay comparison. Restoration creates a backup and leaves notes and breakdown records intact. Locked beats, missing containers, and legacy snapshots without boundaries in multi-beat scenes cannot be restored unsafely.
 
 ## Screenplay and beat inclusion
+
+Mac and browser use the same paragraph-command fixtures. Empty Action + Tab changes to Character in place; filled Action + Tab creates one following Character paragraph. Character Enter advances to Dialogue, while empty Character Enter returns to Action. Dialogue Tab enters Parenthetical; Parenthetical Enter returns to Dialogue. Empty Dialogue Enter returns to Action without a blank spacer. Shift-Tab changes style without moving text. Character, dialogue, and parenthetical indents use the shared design constants (33%, 16%/16%, and 25%/20%).
+
+Suggestions are explicit choices, not inline previews. Committed screenplay cues and character profiles provide names, with Unicode-normalized matching and recognized extensions excluded from name comparisons. Enter accepts a character and advances; Tab accepts and stays. Heading suggestions replace only the prefix, location, or time component, and accept in place. Character extensions and delivery parentheticals remain editable custom text. Composition, focus changes, locks, and stale selections suspend completion.
+
+Automatic `(CONT'D)` is generated when the last speaking character continues within the same scene occurrence, even after action. Another speaker or scene occurrence resets it; unspoken cues do not reset it. Manual labels and voice extensions are retained. Native layout adornments and browser CSS tokens keep generated labels outside authored text and caret offsets. PDF/DOCX materialize labels in an export copy; Pages uses the same continuation rules. Filtered views calculate eligibility from the full active narrative, avoiding false continuation when another speaker is hidden.
 
 Write opens in Final Script on each entry. Final Script and Content Only use one continuous editing surface with an element toolbar. Scene headings are edited directly in the paper. Character names are discovered from screenplay cues as well as explicitly assigned characters. Panel edits do not replace the active editor during Tamil composition. Story-review and index-card display modes remain available separately.
 

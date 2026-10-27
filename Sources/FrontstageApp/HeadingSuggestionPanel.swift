@@ -68,7 +68,7 @@ final class HeadingSuggestionPanel: NSObject {
     }
     @objc private func clicked(_ sender: NSButton) { selected = sender.tag; accept() }
     private func accept(advance: Bool = false) {
-        guard let text, choices.indices.contains(selected), !text.hasMarkedText(), text.selectedRange() == caret,
+        guard let text, text.isEditable, choices.indices.contains(selected), !text.hasMarkedText(), text.selectedRange() == caret,
               NSMaxRange(replacement) <= text.string.utf16.count, (text.string as NSString).substring(with: replacement) == expected else { close(); return }
         let value = choices[selected], range = replacement, character = kind == .character; close()
         text.window?.makeFirstResponder(text); text.insertText(value, replacementRange: range)
