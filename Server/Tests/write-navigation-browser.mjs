@@ -43,6 +43,9 @@ try{
  async function navigateWithoutWait(id){await page.locator(`.simple-beat-card[data-beat-id="${id}"] [data-card-field="title"]`).click();}
  // Save/reopen keeps the shared heading and scene identities.
  await page.locator('#save').click();await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('Saved on this device'));await page.reload();await page.locator('#local-mode').click();await page.getByRole('button',{name:fixture.name+' · on this device',exact:true}).click();await page.locator('#view-mode').selectOption('edit');assert.equal(await page.locator('.continuous-editor [data-heading-scene="1"]').first().innerText(),'EXT. தமிழ் வீடு - NIGHT');assert.equal(await page.locator('.simple-beat-card').count(),3);
+ // A hidden destination remains filtered until the user chooses the explicit reset.
+ await page.getByText('Writing options',{exact:true}).click();await page.locator('.dedicated-script-tools summary').filter({hasText:/^Filter$/}).click();const filter=page.locator('.dedicated-script-tools').getByLabel('Filter script',{exact:true});await filter.fill('no-scene-matches-this-query');await filter.press('Tab');
+ await page.waitForFunction(()=>document.querySelectorAll('.continuous-editor>[data-beat-id]').length===0);await navigateWithoutWait('beat-2');await page.getByRole('button',{name:'Reset filters and reveal',exact:true}).click();await page.waitForFunction(()=>document.querySelector('.continuous-editor')?.dataset.activeBeat==='beat-2');await centered('beat-2');
  await mkdir(path.join(root,'build/parity'),{recursive:true});await page.screenshot({path:path.join(root,'build/parity/write-navigation.png')});assert.deepEqual(errors,[]);
  console.log('PASS: real heading typing/replacement, repeated occurrences, Tamil/time suggestions, unchanged bodies, centered scene navigation, zoom, composition deferral and reopen');
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}

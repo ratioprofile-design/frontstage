@@ -6,11 +6,11 @@ import FrontstageCore
 @testable import FrontstageApp
 
 final class WriteNavigationEditingTests: XCTestCase {
-    @MainActor private func fixture() throws -> Project {
+    @MainActor private static func fixture() throws -> Project {
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Fixtures/write-panels.frontstage")
         return try Project(data: Data(contentsOf: url))
     }
-    @MainActor private func editor(_ project: Project) throws -> (Workspace, ScreenplayEditorController, NSWindow, WritingTextView) {
+    @MainActor private static func editor(_ project: Project) throws -> (Workspace, ScreenplayEditorController, NSWindow, WritingTextView) {
         _ = NSApplication.shared
         let workspace = Workspace(); workspace.loadCopy(project)
         let controller = workspace.scriptController("navigation-test")
@@ -23,7 +23,7 @@ final class WriteNavigationEditingTests: XCTestCase {
     }
     func testHostedHeadingReplacementKeepsDraftCaretAndIdentity() async throws {
         try await MainActor.run {
-            let (workspace, _, window, text) = try editor(fixture()); defer { window.close() }
+            let (workspace, _, window, text) = try Self.editor(Self.fixture()); defer { window.close() }
             let count = workspace.project.scenes.count, notes = workspace.project.writingNotes(sceneID: 1)
             let range = (text.string as NSString).paragraphRange(for: NSRange(location: 0, length: 0))
             text.setSelectedRange(NSRange(location: 0, length: range.length - 1))
@@ -49,7 +49,7 @@ final class WriteNavigationEditingTests: XCTestCase {
     }
     func testHeadingDeletePasteAndReturnDoNotConsumeSceneBody() async throws {
         try await MainActor.run {
-            let (workspace, _, window, text) = try editor(fixture()); defer { window.close() }
+            let (workspace, _, window, text) = try Self.editor(Self.fixture()); defer { window.close() }
             let count = workspace.project.scenes.count, originalBody = workspace.whiteboard.beats.first { $0.id == "beat-1" }!.html
             let bodyText = try ScreenplayTextCodec.decode(originalBody).string
             var heading = (text.string as NSString).paragraphRange(for: NSRange(location: 0, length: 0))
@@ -74,11 +74,11 @@ final class WriteNavigationEditingTests: XCTestCase {
     }
     func testRepeatedHeadingUpdatesInPlaceAndKeepsBothOccurrences() async throws {
         try await MainActor.run {
-            var project = try fixture()
+            var project = try Self.fixture()
             try project.editWhiteboard { board in
                 var repeated = board.beats[0]; repeated.id = "repeat"; repeated.order = 10; board.beats.append(repeated)
             }
-            let (workspace, _, window, text) = try editor(project); defer { window.close() }
+            let (workspace, _, window, text) = try Self.editor(project); defer { window.close() }
             let first = (text.string as NSString).paragraphRange(for: NSRange(location: 0, length: 0))
             text.setSelectedRange(NSRange(location: 0, length: first.length - 1))
             for character in "ext. pier - " { text.insertText(String(character), replacementRange: text.selectedRange()) }
@@ -95,11 +95,11 @@ final class WriteNavigationEditingTests: XCTestCase {
     }
     func testNavigationCentersTheActualHeadingAndPreservesHorizontalScroll() async throws {
         try await MainActor.run {
-            var project = try fixture()
+            var project = try Self.fixture()
             try project.editWhiteboard { board in
                 for index in board.beats.indices { board.beats[index].html = String(repeating: "<p class='sc-action'>Long screenplay paragraph.</p>", count: 120) }
             }
-            let (workspace, _, window, text) = try editor(project); defer { window.close() }
+            let (workspace, _, window, text) = try Self.editor(project); defer { window.close() }
             let scroll = try XCTUnwrap(text.enclosingScrollView), canvas = try XCTUnwrap(scroll.documentView as? WritingCanvasView)
             canvas.layoutPaper()
             let horizontal = scroll.contentView.bounds.minX
@@ -123,7 +123,7 @@ final class WriteNavigationEditingTests: XCTestCase {
     }
     func testReloadKeepsIncompleteHeadingAndRelativeSelection() async throws {
         try await MainActor.run {
-            let (workspace, controller, window, text) = try editor(fixture()); defer { window.close() }
+            let (workspace, controller, window, text) = try Self.editor(Self.fixture()); defer { window.close() }
             let heading = (text.string as NSString).paragraphRange(for: NSRange(location: 0, length: 0))
             text.setSelectedRange(NSRange(location: 0, length: heading.length - 1))
             text.insertText("ext. தமிழ் வீடு - ", replacementRange: text.selectedRange())
@@ -143,7 +143,7 @@ final class WriteNavigationEditingTests: XCTestCase {
     }
     func testCompositionDefersNavigationAndCapitalizationPreservesSelection() async throws {
         try await MainActor.run {
-            let (workspace, _, window, text) = try editor(fixture()); defer { window.close() }
+            let (workspace, _, window, text) = try Self.editor(Self.fixture()); defer { window.close() }
             text.setSelectedRange(NSRange(location: 5, length: 0))
             text.setMarkedText("தமிழ்", selectedRange: NSRange(location: 5, length: 0), replacementRange: text.selectedRange())
             XCTAssertTrue(text.hasMarkedText())

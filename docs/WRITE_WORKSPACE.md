@@ -31,6 +31,15 @@ Responsive Write panels have an independent header and Close button. Tap the sha
 
 Write opens in Final Script on each entry. Final Script and Content Only use one continuous editing surface with an element toolbar. Scene headings are edited directly in the paper. Character names are discovered from screenplay cues as well as explicitly assigned characters. Panel edits do not replace the active editor during Tamil composition. Story-review and index-card display modes remain available separately.
 
+Heading replacements retain scene identity, including temporarily empty or incomplete
+headings. The active draft keeps its caret and spacing while typing; repeated legacy
+occurrences update in place. Leaving the heading normalizes its display, and Enter
+moves into the existing screenplay text. Heading-only deletion never pulls out a scene.
+Scene-card navigation centers the exact beat's heading in the screenplay viewport,
+with clamping at document boundaries. It preserves horizontal scroll/zoom and waits
+for Tamil composition to finish before changing the target. Mobile drawer dismissal
+reapplies the requested position without replacing the editor or notes.
+
 New scene headings split the current beat at the insertion point and preserve the preceding text. Cross-paragraph changes are committed together. Rejected changes return to the saved document; deleting a whole visible scene moves its beats to Research rather than destroying their records.
 
 - **Active:** participates in the screenplay and page export.
