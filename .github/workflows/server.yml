@@ -34,6 +34,7 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p build
+          {
           node scripts/generate-workspace-design.mjs --check
           node Server/Tests/workspace-model.mjs
           node Server/Tests/merge.mjs
@@ -43,6 +44,17 @@ jobs:
           node Server/Tests/browser-smoke.mjs 2>&1 | tee build/browser.log
           node scripts/build-web.mjs
           FRONTSTAGE_STATIC_BROWSER=1 node Server/Tests/browser-smoke.mjs 2>&1 | tee build/browser-static.log
+          } 2>&1 | tee build/browser-validation.log
+      - name: Report browser validation failure
+        if: failure()
+        run: |
+          python3 - <<'PYREPORT'
+          from pathlib import Path
+          p = Path('build/browser-validation.log')
+          if p.exists():
+              log = '\n'.join(line for line in p.read_text().splitlines() if not line.startswith('|'))
+              print('::error::' + log[-3000:].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'))
+          PYREPORT
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -51,3 +63,5 @@ jobs:
             build/browser-*.png
             build/browser.log
             build/browser-mobile.log
+            build/browser-navigation.log
+            build/browser-validation.log
