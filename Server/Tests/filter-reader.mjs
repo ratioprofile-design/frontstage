@@ -13,6 +13,7 @@ try{
  browser=await chromium.launch({executablePath:process.env.FRONTSTAGE_CHROMIUM||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':chromium.executablePath()),headless:true,args:['--no-sandbox']});
  const context=await browser.newContext({viewport:{width:1440,height:950}}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:17845');await page.locator('#local-mode').click();await page.locator('#back').click();
+ await page.waitForSelector('#projects:not([hidden])');
  const fixture=JSON.parse(await readFile(path.join(root,'Tests/Fixtures/workspace-parity.frontstage'),'utf8'));fixture.project.frontstageWhiteboard.layers[0].unused=true;fixture.project.frontstageWhiteboard.beats[1].omitted=true;for(const scene of fixture.project.beats)scene.content='';
  await page.locator('#import-project').setInputFiles({name:'filters.frontstage',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(fixture))});await page.waitForSelector('#workspace:not([hidden])');
  assert.deepEqual(errors,[]);await page.locator('#view-mode').selectOption('board');

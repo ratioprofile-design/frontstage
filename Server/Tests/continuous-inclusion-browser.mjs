@@ -13,6 +13,7 @@ try{
  browser=await chromium.launch({executablePath:process.env.FRONTSTAGE_CHROMIUM||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':chromium.executablePath()),headless:true,args:['--no-sandbox']});
  const context=await browser.newContext({viewport:{width:1440,height:950}}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:17845');await page.locator('#local-mode').click();await page.locator('#back').click();
+ await page.waitForSelector('#projects:not([hidden])');
  await page.locator('#import-project').setInputFiles(path.join(root,'Tests/Fixtures/write-panels.frontstage'));await page.waitForSelector('#workspace:not([hidden])');await page.locator('#view-mode').selectOption('edit');
  const editor=page.getByRole('textbox',{name:'Screenplay',exact:true});await editor.waitFor();assert.equal(await page.locator('.writing-scene-fields').count(),0);
  const heading=editor.locator('[data-heading-scene="1"]');

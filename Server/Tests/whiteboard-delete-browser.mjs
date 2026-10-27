@@ -13,6 +13,7 @@ try{
  browser=await chromium.launch({executablePath:process.env.FRONTSTAGE_CHROMIUM||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':chromium.executablePath()),headless:true,args:['--no-sandbox']});
  const context=await browser.newContext({viewport:{width:1440,height:950}}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:17845');await page.locator('#local-mode').click();await page.locator('#back').click();
+ await page.waitForSelector('#projects:not([hidden])');
  await page.locator('#import-project').setInputFiles(path.join(root,'Tests/Fixtures/workspace-parity.frontstage'));await page.waitForSelector('#workspace:not([hidden])');
  await page.locator('#view-mode').selectOption('board');const before=await page.locator('#blocks>[data-block-id]').count();
  await page.locator('#add-beat').click();const popup=page.locator('.beat-popup.active');await popup.getByLabel('Beat name',{exact:true}).fill('Delete this loose beat');const id=await popup.getAttribute('data-beat-id');await popup.getByRole('button',{name:'Close editor',exact:true}).click();
