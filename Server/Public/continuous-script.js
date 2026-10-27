@@ -63,6 +63,7 @@ export function mountContinuousScript(sheet, api) {
     style.textContent='.continuous-editor>[data-beat-id="'+CSS.escape(id)+'"]{background-color:rgba(210,160,30,.12)}';
   }
   function splitScene() {
+    if(composing||sheet.isComposing)return;
     const node=paragraph(),selection=getSelection();
     if(!node||node.dataset.headingScene||!selection?.isCollapsed||locked(beatFor(node.dataset.beatId)))throw Error('Place the cursor inside unlocked screenplay text to split the scene.');
     const id=node.dataset.beatId,parts=[...sheet.children].filter(n=>n.dataset.beatId===id&&!n.dataset.headingScene),caret=selection.getRangeAt(0),full=document.createRange();
@@ -77,7 +78,7 @@ export function mountContinuousScript(sheet, api) {
   let contextCaret;
   sheet.addEventListener('pointerdown',event=>{if(event.button===2){const selection=getSelection();contextCaret=selection?.rangeCount&&selection.isCollapsed?selection.getRangeAt(0).cloneRange():null;}},true);
   sheet.addEventListener('contextmenu',event=>{
-    if(api.readonly())return;event.preventDefault();document.querySelector('.write-script-menu')?.remove();
+    if(api.readonly()||composing||sheet.isComposing)return;event.preventDefault();document.querySelector('.write-script-menu')?.remove();
     if(contextCaret&&sheet.contains(contextCaret.startContainer)){getSelection().removeAllRanges();getSelection().addRange(contextCaret);}
     const menu=document.createElement('div');menu.className='write-script-menu';menu.setAttribute('role','menu');menu.style.left=event.clientX+'px';menu.style.top=event.clientY+'px';
     const item=document.createElement('button');item.textContent='Split scene at cursor';item.setAttribute('role','menuitem');item.onmousedown=e=>e.preventDefault();item.onclick=()=>{menu.remove();try{splitScene();}catch(e){api.status(e.message);}};menu.append(item);document.body.append(menu);

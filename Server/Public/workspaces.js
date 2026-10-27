@@ -34,6 +34,7 @@ export function mountWorkspaces(api) {
   function navigate(id){if(!design.pages.some(p=>p.id===id))return;if(id==='edit'&&mode!=='edit')scriptView.display='Final Script';mode=id;selector.value=id;render();}
   selector.onchange=()=>navigate(selector.value);
   $('scenes-toggle').textContent='Script';$('scenes-toggle').onclick=()=>{if(mode==='edit')writePanels?.toggleLeft();else $('script').hidden=!$('script').hidden;};
+  $('scenes-toggle').onpointerdown=event=>{if(mode==='edit')event.preventDefault();};
   $('paper-mode').onchange=()=>{paper=$('paper-mode').value;let style=$('print-paper-size');if(!style){style=document.createElement('style');style.id='print-paper-size';document.head.append(style);}style.textContent=`@page { size: ${paper==='a4'?'A4':'letter'}; margin: 0; }`;render();};
   $('print-script').onclick=()=>{navigate('pages');requestAnimationFrame(()=>window.print());};
   $('add-scene').onclick=()=>{api.addScene();sceneID=api.selectedScene();render();};
