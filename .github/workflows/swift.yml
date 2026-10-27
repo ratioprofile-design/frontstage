@@ -23,6 +23,7 @@ jobs:
             npm install --prefix Server/Tests --no-save --no-package-lock playwright@1.56.1
             Server/Tests/node_modules/.bin/playwright install chromium
             node scripts/generate-workspace-design.mjs --check
+            node Server/Tests/screenplay-writing-rules.mjs
             node Server/Tests/story-timeline.mjs
             node Server/Tests/workspace-model.mjs
             node Server/Tests/scene-model.mjs

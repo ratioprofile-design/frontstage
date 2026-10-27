@@ -109,7 +109,14 @@
 #snippet-list .side-script-text{padding:12px var(--reader-inset,16px);font-size:var(--reader-font,14px);line-height:1.4;}
 #snippet-list .script-heading{font-size:var(--reader-font,14px)!important;margin:0 0 8px!important;}
 .reader-synopsis{padding:8px;}.reader-boundary{background:#222;padding:6px;}
-.script-text .sc-character{margin-left:33%;}.script-text .sc-dialogue{margin-left:16%;margin-right:16%;}.script-text .sc-parenthetical{margin-left:25%;margin-right:20%;}
+.script-text .sc-character,.paper-desk [data-field="snippet-editor"] .sc-character{margin-left:var(--fs-characterIndent)!important;margin-right:0!important;margin-top:0;margin-bottom:0;font-weight:normal}
+.script-text .sc-dialogue,.paper-desk [data-field="snippet-editor"] .sc-dialogue{margin-left:var(--fs-dialogueIndent)!important;margin-right:var(--fs-dialogueIndent)!important}
+.script-text .sc-parenthetical,.paper-desk [data-field="snippet-editor"] .sc-parenthetical{margin-left:var(--fs-parentheticalIndent)!important;margin-right:var(--fs-parentheticalRight)!important;margin-top:0;margin-bottom:0;font-style:normal}
+.script-text .sc-dialogue:has(+.sc-parenthetical),.paper-desk .sc-dialogue:has(+.sc-parenthetical){margin-bottom:0}
+.sc-character[data-auto-continuation="true"]::after{content:" (CONT'D)";font:inherit;color:inherit;white-space:nowrap}
+.continuous-editor>[data-active-heading="true"]{position:relative;background-color:rgba(112,184,237,.12)}
+.continuous-editor>[data-active-heading="true"]::before{content:"";position:absolute;left:-8px;top:0;bottom:0;width:3px;background:var(--fs-accent)}
+@media print{.continuous-editor>[data-active-heading="true"]{background:transparent}.continuous-editor>[data-active-heading="true"]::before{display:none}}
 .autofill-list{position:fixed;z-index:2147483647;background:#303030;color:white;border:1px solid #777;max-height:180px;overflow:auto;min-width:180px;box-shadow:0 4px 12px #0008;}
 .autofill-list button{display:block;width:100%;text-align:left;border:0;}.autofill-list button[aria-selected=true]{background:#2466a2;}
 input::-webkit-calendar-picker-indicator{display:none!important;}

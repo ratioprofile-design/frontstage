@@ -626,7 +626,7 @@ extension Workspace {
         [.character: Array(Set((project.characters.map(\.name) + whiteboard.beats.flatMap(\.characters) + whiteboard.beats.flatMap { ScriptCueNames.characters(in: $0.html) } + project.scenes.flatMap { ScriptCueNames.characters(in: $0.html) }).map { $0.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() })).filter { !$0.isEmpty }.sorted(),
          .sceneHeading: project.scenes.map { $0.heading.inlineText },
          .transition: ["CUT TO:", "DISSOLVE TO:", "FADE IN:", "FADE OUT.", "FADE TO BLACK.", "SMASH CUT TO:", "MATCH CUT TO:"],
-         .parenthetical: ["(beat)", "(quietly)", "(into phone)"],
+         .parenthetical: CharacterCue.deliveryNotes,
          .shot: ["CLOSE ON", "ANGLE ON", "INSERT", "POV"]]
     }
 }

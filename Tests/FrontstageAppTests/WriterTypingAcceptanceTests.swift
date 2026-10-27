@@ -1,0 +1,95 @@
+#if os(macOS)
+import AppKit
+import SwiftUI
+import XCTest
+import FrontstageCore
+@testable import FrontstageApp
+
+final class WriterTypingAcceptanceTests: XCTestCase {
+    @MainActor private static func editor(_ html: String) throws -> (Workspace, ScreenplayEditorController, NSWindow, WritingTextView) {
+        _ = NSApplication.shared
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Fixtures/write-panels.frontstage")
+        var project = try Project(data: Data(contentsOf: url))
+        try project.editWhiteboard { board in board.beats[0].html = html }
+        let workspace = Workspace(); workspace.loadCopy(project)
+        let controller = workspace.scriptController("typing-acceptance")
+        let host = NSHostingView(rootView: ContinuousScriptEditor(workspace: workspace, controller: controller, width: workspace.paper.contentWidth, zoom: 1))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host; host.layoutSubtreeIfNeeded()
+        let text = try XCTUnwrap(controller.textView as? WritingTextView)
+        window.makeFirstResponder(text)
+        let body = NSMaxRange((text.string as NSString).paragraphRange(for: NSRange(location: 0, length: 0)))
+        text.setSelectedRange(NSRange(location: body, length: 0))
+        return (workspace, controller, window, text)
+    }
+    @MainActor private static func press(_ text: WritingTextView, _ key: String) throws {
+        let code: UInt16 = key == "\t" ? 48 : 36
+        let event = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: text.window!.windowNumber, context: nil, characters: key, charactersIgnoringModifiers: key, isARepeat: false, keyCode: code))
+        text.keyDown(with: event)
+    }
+    @MainActor private static func kind(_ text: NSTextView) -> ScreenplayElement {
+        if text.selectedRange().location == text.string.utf16.count { return (text.typingAttributes[.screenplayElement] as? String).flatMap(ScreenplayElement.init(rawValue:)) ?? .action }
+        return ScreenplayTextCodec.element(in: text.attributedString(), at: text.selectedRange().location)
+    }
+    func testActualTabReturnFlowCreatesNoSpacerParagraphs() async throws {
+        try await MainActor.run {
+            let (_, controller, window, text) = try Self.editor("<p class='sc-action'><br></p>"); defer { window.close() }
+            let original = text.string, start = text.selectedRange().location
+            try Self.press(text, "\t")
+            XCTAssertEqual(text.string, original); XCTAssertEqual(text.selectedRange().location, start)
+            XCTAssertEqual(Self.kind(text), .character)
+            let style = try XCTUnwrap(text.typingAttributes[.paragraphStyle] as? NSParagraphStyle)
+            XCTAssertEqual(style.headIndent, controller.contentWidth * 0.33, accuracy: 0.1)
+            text.insertText("கமல்", replacementRange: text.selectedRange())
+            try Self.press(text, "\n"); XCTAssertEqual(Self.kind(text), .dialogue)
+            let dialogueStart = text.selectedRange().location
+            try Self.press(text, "\t"); XCTAssertEqual(Self.kind(text), .parenthetical)
+            XCTAssertEqual(text.selectedRange().location, dialogueStart)
+            text.insertText("(custom delivery)", replacementRange: text.selectedRange())
+            try Self.press(text, "\n"); XCTAssertEqual(Self.kind(text), .dialogue)
+            let emptyStart = text.selectedRange().location, count = text.string.utf16.count
+            try Self.press(text, "\n"); XCTAssertEqual(Self.kind(text), .action)
+            XCTAssertEqual(text.selectedRange().location, emptyStart); XCTAssertEqual(text.string.utf16.count, count)
+            XCTAssertFalse(text.string.contains("\n\n\n"))
+        }
+    }
+    func testFilledActionTabPreservesWholeParagraphAndSelectionFormatting() async throws {
+        try await MainActor.run {
+            let (_, controller, window, text) = try Self.editor("<p class='sc-action'>She walks across the room.</p>"); defer { window.close() }
+            let start = text.selectedRange().location
+            text.setSelectedRange(NSRange(location: start + 3, length: 0))
+            let count = text.string.components(separatedBy: "\n").count
+            try Self.press(text, "\t")
+            XCTAssertEqual(text.string.components(separatedBy: "\n").count, count + 1)
+            XCTAssertTrue(text.string.contains("She walks across the room.\n"))
+            XCTAssertEqual(Self.kind(text), .character)
+            let before = text.string, caret = text.selectedRange()
+            try Self.press(text, "\t")
+            XCTAssertEqual(text.string, before); XCTAssertEqual(text.selectedRange(), caret)
+            text.setSelectedRange(NSRange(location: start + 4, length: 5))
+            controller.format(.dialogue)
+            XCTAssertEqual(text.string, before); XCTAssertEqual(text.selectedRange(), NSRange(location: start + 4, length: 5))
+            XCTAssertEqual(ScreenplayTextCodec.element(in: text.attributedString(), at: start), .dialogue)
+        }
+    }
+    func testContinuationIsPresentationOnlyAndHeadingIsOnlyHighlight() async throws {
+        try await MainActor.run {
+            let html = "<p class='sc-character'>KAMAL</p><p class='sc-dialogue'>Hello.</p><p class='sc-action'>He waits.</p><p class='sc-character'>KAMAL (V.O.)</p><p class='sc-dialogue'>Again.</p><p class='sc-character'>JAY</p><p class='sc-dialogue'>Yes.</p><p class='sc-character'>KAMAL</p><p class='sc-dialogue'>Last.</p>"
+            let (workspace, _, window, text) = try Self.editor(html); defer { window.close() }
+            XCTAssertEqual(text.continuationTokens.count, 1)
+            XCTAssertFalse(text.string.contains("CONT'D"))
+            XCTAssertNotNil(DialoguePresentation.tokenRect(try XCTUnwrap(text.continuationTokens.first), in: text))
+            let exported = DialoguePresentation.materialized(text.attributedString())
+            XCTAssertEqual(exported.string.components(separatedBy: "(CONT'D)").count - 1, 1)
+            let saved = try ScreenplayTextCodec.encode(text.attributedString())
+            XCTAssertFalse(saved.contains("CONT'D")); XCTAssertFalse(saved.contains("ContinuationReservation"))
+            text.revealBeat?("beat-1")
+            let manager = try XCTUnwrap(text.layoutManager)
+            XCTAssertNotNil(manager.temporaryAttribute(.backgroundColor, atCharacterIndex: 0, effectiveRange: nil))
+            let body = NSMaxRange((text.string as NSString).paragraphRange(for: NSRange(location: 0, length: 0)))
+            XCTAssertNil(manager.temporaryAttribute(.backgroundColor, atCharacterIndex: body, effectiveRange: nil))
+            XCTAssertFalse(workspace.whiteboard.beats[0].html.contains("CONT'D"))
+        }
+    }
+}
+#endif

@@ -4,6 +4,7 @@ import {createScriptFilter,mountScriptFilter,matchesScriptFilter,gapLabel} from 
 import { timelineModel, mountTimeline, timelinePreferences } from './story-timeline.js';
 import { mountWorkspaces } from './workspaces.js';
 import { splitAtCaret, screenplayToolbar, sluglineFields, characterNames } from './screenplay-editor.js';
+import {dialogueSeed} from './dialogue-rules.js';
 import { splitBeat, scriptSegments, heading, captureRevision, restoreRevision } from './workspace-model.js';
 import { mergeDocuments } from './merge.js';
 import { apiOrigin as configuredOrigin } from './config.js';
@@ -404,7 +405,7 @@ function render() {
 
       const text=element('div',undefined,'side-script-text script-text');text.innerHTML=cleanHTML(beat.html);text.dataset.scriptBeat=id;text.dataset.placeholder='Write this beat’s screenplay here…';text.tabIndex=0;text.setAttribute('aria-label',`Edit script: ${beat.title}`);text.contentEditable=current.access!=='reader'&&!segment.scene.frontstageTextLocked;text.setAttribute('role','textbox');
       text.onfocus=()=>{selected=id;selectedBeats=new Set([id]);highlightScript();document.querySelectorAll('[data-beat-id]').forEach(n=>n.classList.toggle('selected',n.dataset.beatId===id));};
-      text.oninput=()=>edit(()=>{board().beats.find(b=>b.id===id).html=cleanHTML(text.innerHTML);});screenplayToolbar(text,()=>text.dispatchEvent(new Event('input')),text.contentEditable==='true',()=>characterNames(doc));text.ondblclick=()=>openEditor(id);
+      text.oninput=()=>edit(()=>{board().beats.find(b=>b.id===id).html=cleanHTML(text.innerHTML);});screenplayToolbar(text,()=>text.dispatchEvent(new Event('input')),text.contentEditable==='true',()=>characterNames(doc,id),()=>doc.project.beats.map(heading),{continuationSeed:()=>dialogueSeed(doc,id)});text.ondblclick=()=>openEditor(id);
       body.append(text);section.append(body);$('snippet-list').append(section);
     }
     if(!segment.beatIDs.length){const text=element('div',undefined,'script-text');text.innerHTML=cleanHTML(segment.html);$('snippet-list').append(text);}
@@ -543,6 +544,7 @@ function refreshEditors(force = false) {
     const headingNode=panel.querySelector('.popup-slugline');if(headingNode)headingNode.textContent=heading(doc.project.beats.find(s=>s.id===beat.sceneID));
     const text = panel.querySelector('[data-field="snippet-editor"]'), html = cleanHTML(beat.html);
     if (cleanHTML(text.innerHTML) !== html) text.innerHTML = html;
+    text.refreshScreenplayPresentation?.();
   }
 }
 function closeEditors() { for (const id of [...editors.keys()]) closeEditor(id); }
@@ -590,7 +592,7 @@ function openEditor(id) {
   const text = field('snippet-editor'); text.before(element('h3',heading(doc.project.beats.find(s=>s.id===sceneID)),'popup-slugline script-heading')); text.innerHTML = cleanHTML(beat.html);
   text.contentEditable = current.access === 'reader' || doc.project.beats.find(s => s.id === beat.sceneID)?.frontstageTextLocked ? 'false' : 'true';
   text.oninput = () => { const html = cleanHTML(text.innerHTML); edit(() => { const target = board().beats.find(b => b.id === id); if (target) target.html = html; }); };
-  const toolbar=screenplayToolbar(text, () => text.dispatchEvent(new Event('input')), text.contentEditable === 'true',()=>characterNames(doc));field('element').parentElement.replaceWith(toolbar);panel.querySelector('.version-row').append(toolbar);const options=element('button','⋯');options.setAttribute('aria-label','Formatting options');options.onclick=()=>panel.classList.toggle('format-expanded');panel.querySelector('.version-row').append(options);refreshEditors();
+  const toolbar=screenplayToolbar(text, () => text.dispatchEvent(new Event('input')), text.contentEditable === 'true',()=>characterNames(doc,id),()=>doc.project.beats.map(heading),{continuationSeed:()=>dialogueSeed(doc,id)});field('element').parentElement.replaceWith(toolbar);panel.querySelector('.version-row').append(toolbar);const options=element('button','⋯');options.setAttribute('aria-label','Formatting options');options.onclick=()=>panel.classList.toggle('format-expanded');panel.querySelector('.version-row').append(options);refreshEditors();
   const place = (x, y) => {
     const rect = panel.getBoundingClientRect();
     panel.style.left = `${Math.max(8, Math.min(x, innerWidth - rect.width - 8))}px`;

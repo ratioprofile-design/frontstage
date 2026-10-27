@@ -37,6 +37,20 @@ final class WritingTextView: ScreenplayTextView {
     var pageHeight: CGFloat = 842
     var revealBeat: ((String) -> Void)?
     var compositionFinished: (() -> Void)?
+    private(set) var activeHeadingRange: NSRange?
+    func highlightHeading(for id: String?) {
+        guard !hasMarkedText(), let manager = layoutManager else { return }
+        let source = attributedString(); var location = 0, heading: NSRange?
+        manager.removeTemporaryAttribute(.backgroundColor, forCharacterRange: NSRange(location: 0, length: source.length)); activeHeadingRange = nil
+        while location < source.length {
+            let range = (source.string as NSString).paragraphRange(for: NSRange(location: location, length: 0))
+            if source.attribute(headingKey, at: location, effectiveRange: nil) != nil { heading = range }
+            if let id, source.attribute(ownerKey, at: location, effectiveRange: nil) as? String == id { activeHeadingRange = heading; break }
+            location = NSMaxRange(range)
+        }
+        if let range = activeHeadingRange { manager.addTemporaryAttribute(.backgroundColor, value: NSColor.controlAccentColor.withAlphaComponent(0.10), forCharacterRange: range) }
+        needsDisplay = true
+    }
     override func unmarkText() {
         super.unmarkText()
         DispatchQueue.main.async { [weak self] in if let self, !self.hasMarkedText() { self.compositionFinished?() } }
@@ -65,14 +79,17 @@ final class WritingTextView: ScreenplayTextView {
         let heading = canvas.convert(rect, from: self), clip = scroll.contentView
         let y = max(0, min(canvas.bounds.height - clip.bounds.height, heading.midY - clip.bounds.height / 2))
         clip.scroll(to: NSPoint(x: clip.bounds.origin.x, y: y)); scroll.reflectScrolledClipView(clip)
-        manager.removeTemporaryAttribute(.backgroundColor, forCharacterRange: NSRange(location: 0, length: source.length))
-        source.enumerateAttribute(ownerKey, in: NSRange(location: 0, length: source.length)) { value, range, _ in
-            if value as? String == id { manager.addTemporaryAttribute(.backgroundColor, value: NSColor.systemYellow.withAlphaComponent(0.12), forCharacterRange: range) }
-        }
+        highlightHeading(for: id)
         return true
     }
     override func drawBackground(in rect: NSRect) {
         super.drawBackground(in: rect)
+        if let range = activeHeadingRange, let manager = layoutManager, let container = textContainer, NSMaxRange(range) <= attributedString().length {
+            let glyphs = manager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            let bounds = manager.boundingRect(forGlyphRange: glyphs, in: container)
+            NSColor.controlAccentColor.setFill()
+            NSRect(x: textContainerOrigin.x - 8, y: textContainerOrigin.y + bounds.minY, width: 3, height: bounds.height).fill()
+        }
         guard pageHeight > 0 else { return }
         let first = max(1, Int(rect.minY / pageHeight)), last = Int(rect.maxY / pageHeight)
         if first <= last { for page in first...last {
@@ -96,11 +113,13 @@ struct ContinuousScriptEditor: NSViewRepresentable {
         canvas.paperView = text; canvas.addSubview(text); canvas.autoresizingMask = [.width]
         scroll.documentView = canvas; scroll.hasVerticalScroller = true; scroll.hasHorizontalScroller = true; scroll.autohidesScrollers = true
         text.isRichText = true; text.importsGraphics = false; text.allowsUndo = true; text.isAutomaticQuoteSubstitutionEnabled = false
+        text.isAutomaticTextCompletionEnabled = false
         text.backgroundColor = .white; text.textColor = .black; text.isVerticallyResizable = true; text.isHorizontallyResizable = false; text.autoresizingMask = []
         text.textContainerInset = NSSize(width: 60, height: 60); text.textContainer?.widthTracksTextView = false
         text.screenplayController = controller; text.delegate = context.coordinator; controller.textView = text
         text.splitScene = { [weak coordinator = context.coordinator, weak text] in if let text { coordinator?.splitAtCaret(text) } }
         text.revealBeat = { [weak coordinator = context.coordinator, weak text] id in if let text { coordinator?.reveal(id, in: text) } }
+        controller.completionRequest = { [weak coordinator = context.coordinator, weak text] in if let text { coordinator?.showSuggestions(text) } }
         text.compositionFinished = { [weak coordinator = context.coordinator, weak text] in
             if let coordinator, coordinator.pendingReveal != nil, let text { coordinator.textDidChange(Notification(name: NSText.didChangeNotification, object: text)) }
         }
@@ -123,12 +142,7 @@ struct ContinuousScriptEditor: NSViewRepresentable {
         guard !text.hasMarkedText() else { return }
         text.backgroundColor = theme.paper; text.textColor = theme.ink; text.insertionPointColor = theme.ink
         text.typingAttributes[.foregroundColor] = theme.ink
-        let length = text.attributedString().length
-        guard length > 0, let manager = text.layoutManager else { return }
-        manager.removeTemporaryAttribute(.backgroundColor, forCharacterRange: NSRange(location: 0, length: length))
-        text.attributedString().enumerateAttribute(ownerKey, in: NSRange(location: 0, length: length)) { id, range, _ in
-            if id as? String == workspace.selectedBoardBeatID { manager.addTemporaryAttribute(.backgroundColor, value: NSColor.systemYellow.withAlphaComponent(0.12), forCharacterRange: range) }
-        }
+        if let writing = text as? WritingTextView { DialoguePresentation.refresh(writing); writing.highlightHeading(for: workspace.selectedBoardBeatID) }
     }
     func updateNSView(_ view: NSScrollView, context: Context) {
         guard let canvas = view.documentView as? WritingCanvasView, let text = canvas.paperView else { return }
@@ -148,7 +162,21 @@ struct ContinuousScriptEditor: NSViewRepresentable {
         var pendingReveal: String?
         var offerCompletions = false
         let headingSuggestions = HeadingSuggestionPanel()
+        var registeredNames = Set<String>()
+        var registeredHeadings = [SceneHeading]()
+        var dialogueCache = [String: DialoguePresentation.CachedBeat]()
+        func refreshDialogue(_ text: NSTextView) {
+            if let text = text as? ScreenplayTextView { text.continuationFlags = DialoguePresentation.projectFlags(workspace.project, cache: &dialogueCache); DialoguePresentation.refresh(text) }
+        }
         init(_ workspace: Workspace, _ controller: ScreenplayEditorController) { self.workspace = workspace; self.controller = controller }
+        func showSuggestions(_ text: NSTextView) {
+            guard !text.hasMarkedText(), text.attributedString().length > 0 else { headingSuggestions.close(); return }
+            let location = min(text.selectedRange().location, text.attributedString().length - 1)
+            let range = (text.string as NSString).paragraphRange(for: NSRange(location: location, length: 0))
+            registeredNames.formUnion(ScriptCueNames.committed(in: text.attributedString(), excluding: range))
+            let names = registeredNames.union(workspace.project.characters.map(\.name)).union(workspace.whiteboard.beats.flatMap(\.characters)).sorted()
+            headingSuggestions.show(in: text, headings: registeredHeadings + workspace.project.scenes.map(\.heading), names: names, choices: completionChoices)
+        }
         func reveal(_ id: String, in text: WritingTextView) {
             if text.hasMarkedText() { pendingReveal = id; return }
             headingSuggestions.close()
@@ -192,6 +220,8 @@ struct ContinuousScriptEditor: NSViewRepresentable {
         func load(_ text: NSTextView) {
             loading = true; defer { loading = false }; visible.removeAll(); headingScenes.removeAll()
             let bookmark = ScriptHeadingEditing.bookmark(text)
+            if lastSignature.isEmpty { registeredNames.formUnion(workspace.screenplayCompletions[.character] ?? []) }
+            if registeredHeadings.isEmpty { registeredHeadings = workspace.project.scenes.map(\.heading) }
             let result = NSMutableAttributedString(string: "")
             for segment in (try? workspace.project.orderedScript()) ?? [] {
                 let beats = segment.beatIDs.compactMap { id in workspace.whiteboard.beats.first { $0.id == id } }.filter { workspace.reader.filters.matches($0, board: workspace.whiteboard, scenes: workspace.project.scenes) }
@@ -209,6 +239,7 @@ struct ContinuousScriptEditor: NSViewRepresentable {
             }
             let selection = bookmark.flatMap { ScriptHeadingEditing.restore($0, in: result, project: workspace.project) } ?? NSRange(location: min(text.selectedRange().location, result.length), length: 0)
             text.textStorage?.setAttributedString(result)
+            refreshDialogue(text)
             (text.superview as? WritingCanvasView)?.layoutPaper()
             text.setSelectedRange(selection, affinity: bookmark?.affinity ?? .downstream, stillSelecting: false); lastSignature = signature()
         }
@@ -276,12 +307,12 @@ struct ContinuousScriptEditor: NSViewRepresentable {
             visible.subtract(pendingPullouts); pendingPullouts.removeAll()
             if missingHeading { load(text) }
             synchronizeHeadings(text, excluding: editing)
+            refreshDialogue(text)
             (text.superview as? WritingCanvasView)?.layoutPaper()
             lastSignature = signature(); controller.selectionChanged(); text.scrollRangeToVisible(text.selectedRange())
             if let id = pendingReveal, let writing = text as? WritingTextView { pendingReveal = nil; reveal(id, in: writing) }
-            if offerCompletions, !completing, !(completionChoices[controller.activeElement] ?? []).isEmpty {
-                if controller.activeElement == .sceneHeading { headingSuggestions.show(in: text, headings: workspace.project.scenes.map(\.heading)) }
-                else { headingSuggestions.close(); completing = true; text.complete(nil); completing = false }
+            if offerCompletions, !completing {
+                showSuggestions(text)
             } else { headingSuggestions.close() }
             offerCompletions = false
         }
@@ -291,6 +322,9 @@ struct ContinuousScriptEditor: NSViewRepresentable {
             controller.selectionChanged()
             let index = min(text.selectedRange().location, max(0, text.attributedString().length - 1))
             let active = text.attributedString().length > 0 ? (text.string as NSString).paragraphRange(for: NSRange(location: index, length: 0)) : nil
+            if text.attributedString().length > 0, text.attributedString().attribute(headingKey, at: index, effectiveRange: nil) == nil {
+                for heading in workspace.project.scenes.map(\.heading) where !registeredHeadings.contains(heading) { registeredHeadings.append(heading) }
+            }
             // Selection can move into the body before a heading replacement's
             // didChange notification. Commit that draft before normalizing it.
             if pendingHeading == nil { synchronizeHeadings(text, excluding: active) }
@@ -334,7 +368,7 @@ struct ContinuousScriptEditor: NSViewRepresentable {
                    (textView.string as NSString).substring(with: context.range).hasSuffix("\n") {
                     textView.insertText("", replacementRange: textView.selectedRange()); return true
                 }
-                if commandSelector == #selector(NSResponder.insertNewline(_:)) {
+                if commandSelector == #selector(NSResponder.insertNewline(_:)) || commandSelector == #selector(NSResponder.insertTab(_:)) {
                     synchronizeHeadings(textView, excluding: nil)
                     let heading = (textView.string as NSString).paragraphRange(for: NSRange(location: context.range.location, length: 0))
                     let next = NSMaxRange(heading)
@@ -354,7 +388,7 @@ struct ContinuousScriptEditor: NSViewRepresentable {
                (source.string as NSString).character(at: range.location) == 10,
                source.attribute(headingKey, at: range.location, effectiveRange: nil) != nil { return false }
             pendingHeading = (replacementString == "\n" && range.length == 0) ? nil : ScriptHeadingEditing.context(in: textView, replacing: range)
-            offerCompletions = replacementString?.last?.isLetter == true || (pendingHeading != nil && replacementString?.last?.isWhitespace == true && replacementString?.contains("\n") != true)
+            offerCompletions = replacementString?.isEmpty == false && replacementString?.contains("\n") != true
             var allowed = true
             let checked = NSRange(location: min(range.location, source.length - 1), length: max(1, min(range.length, source.length - min(range.location, source.length - 1))))
             source.enumerateAttribute(ownerKey, in: checked) { value, _, _ in

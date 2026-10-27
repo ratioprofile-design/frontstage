@@ -68,6 +68,12 @@ export const workspaceDesign = {
     "lineHeight": 14,
     "paragraphSpacing": 10
   },
+  "paragraphs": {
+    "characterIndent": 33,
+    "dialogueIndent": 16,
+    "parentheticalIndent": 25,
+    "parentheticalRight": 20
+  },
   "colors": {
     "chrome": "#303133",
     "panel": "#3d3e40",

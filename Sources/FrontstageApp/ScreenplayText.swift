@@ -16,16 +16,15 @@ enum ScreenplayTypography {
         paragraph.paragraphSpacing = settings.paragraphSpacing
         switch element {
         case .character:
-            paragraph.headIndent = width * 0.37
-            paragraph.tailIndent = -width * 0.18
-            paragraph.paragraphSpacingBefore = 10
+            paragraph.headIndent = width * WorkspaceDesign.characterIndent / 100
+            paragraph.tailIndent = 0
             paragraph.paragraphSpacing = 0
         case .dialogue:
-            paragraph.headIndent = width * 0.20
-            paragraph.tailIndent = -width * 0.20
+            paragraph.headIndent = width * WorkspaceDesign.dialogueIndent / 100
+            paragraph.tailIndent = -width * WorkspaceDesign.dialogueIndent / 100
         case .parenthetical:
-            paragraph.headIndent = width * 0.29
-            paragraph.tailIndent = -width * 0.26
+            paragraph.headIndent = width * WorkspaceDesign.parentheticalIndent / 100
+            paragraph.tailIndent = -width * WorkspaceDesign.parentheticalRight / 100
             paragraph.paragraphSpacing = 0
         case .transition:
             paragraph.headIndent = width * 0.55
@@ -38,10 +37,8 @@ enum ScreenplayTypography {
         paragraph.firstLineHeadIndent = paragraph.headIndent
         let base = NSFont(name: settings.fontName, size: settings.fontSize) ?? .monospacedSystemFont(ofSize: settings.fontSize, weight: .regular)
         let font: NSFont
-        if [.sceneHeading, .character, .transition, .shot].contains(element) {
+        if [.sceneHeading, .transition, .shot].contains(element) {
             font = NSFontManager.shared.convert(base, toHaveTrait: .boldFontMask)
-        } else if element == .parenthetical {
-            font = NSFontManager.shared.convert(base, toHaveTrait: .italicFontMask)
         } else { font = base }
         return [.font: font, .paragraphStyle: paragraph,
                 .foregroundColor: printing ? NSColor.black : NSColor.textColor,

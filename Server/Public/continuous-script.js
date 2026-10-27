@@ -2,6 +2,7 @@ import {pullOutBeats,replaceDocument} from './script-inclusion.js';
 import * as model from './workspace-model.js';
 import {blockLocked} from './board-operations.js';
 import {screenplayToolbar,characterNames,elements} from './screenplay-editor.js';
+import {decorateDialogue,projectDialogue} from './dialogue-rules.js';
 export function parseHeading(text){const source=text.trim().toUpperCase(),prefix=['INT./EXT.','EXT./INT.','INT.','EXT.','I/E.'].find(p=>source.startsWith(p))||'',rest=source.slice(prefix.length).trim(),split=[...rest.matchAll(/\s+[-–—]\s*/g)].at(-1);return {prefix,location:split?rest.slice(0,split.index):rest,time:split?rest.slice(split.index+split[0].length):''};}
 export function applyScriptDocument(document,html,headings){const b=model.board(document);for(const[id,value]of Object.entries(html)){const beat=b.beats.find(b=>b.id===id);if(!beat)throw Error('A screenplay beat no longer exists.');if(beat.html!==value&&(beat.locked||beat.omitted||blockLocked(b,beat.blockID)||model.scene(document,beat.sceneID).frontstageTextLocked))throw Error('This selection contains locked or inactive text.');}for(const[id,text]of Object.entries(headings)){const s=document.project.beats.find(s=>String(s.id)===id);if(!s)throw Error('Scene no longer exists.');const heading=parseHeading(text);if(s.frontstageTextLocked&&JSON.stringify(heading)!==JSON.stringify({prefix:s.slug?.prefix||'',location:s.slug?.location||'',time:s.slug?.time||''}))throw Error('Unlock the scene heading first.');s.slug={...s.slug,...heading};}for(const[id,value]of Object.entries(html))b.beats.find(b=>b.id===id).html=value;}
 export function insertScriptScene(document,id,beforeHTML,afterHTML,heading){const b=model.board(document),beat=b.beats.find(b=>b.id===id);if(!beat||beat.locked||beat.omitted||blockLocked(b,beat.blockID)||model.scene(document,beat.sceneID).frontstageTextLocked)throw Error('Select an unlocked active beat.');const ordered=[...b.beats].sort((a,b)=>a.order-b.order),index=ordered.indexOf(beat),sceneID=Math.max(document.project.nextId||1,...document.project.beats.map(s=>s.id+1));const s={id:sceneID,title:'Untitled Scene',summary:'',content:'',slug:parseHeading(heading)};document.project.beats.push(s);document.project.nextId=sceneID+1;
@@ -19,6 +20,8 @@ export function mountContinuousScript(sheet, api) {
   sheet.setAttribute('role', 'textbox');
   sheet.setAttribute('aria-label', 'Screenplay');
   const visible = new Set(), headingIDs = new Set();
+  const dialogueCache=new Map();
+  const refreshDialogue=()=>decorateDialogue(sheet,null,projectDialogue(api.document(),dialogueCache).flags);
   let composing = false, committing = false, lastOwner = null, pendingPullouts = new Set(), pendingHeading = null;
   const board = () => model.board(api.document());
   const beatFor = id => board().beats.find(beat => beat.id === id);
@@ -65,9 +68,10 @@ export function mountContinuousScript(sheet, api) {
   }
   function mark(id) {
     sheet.dataset.activeBeat=id;
-    let style=document.getElementById('write-active-scene-style');
-    if(!style){style=document.createElement('style');style.id='write-active-scene-style';document.head.append(style);}
-    style.textContent='.continuous-editor>[data-beat-id="'+CSS.escape(id)+'"]{background-color:rgba(210,160,30,.12)}';
+    for(const node of sheet.querySelectorAll('[data-active-heading]'))delete node.dataset.activeHeading;
+    let node=[...sheet.children].find(node=>node.dataset.beatId===id);
+    while(node&&!node.dataset.headingScene)node=node.previousElementSibling;
+    if(node)node.dataset.activeHeading='true';
   }
   function syncHeadings(editing) {
     if(composing)return;
@@ -160,9 +164,9 @@ export function mountContinuousScript(sheet, api) {
       syncHeadings(paragraph());
       acceptedHTML = sheet.innerHTML;
     } catch (error) { sheet.innerHTML = acceptedHTML; api.status(error.message); }
-    finally { pendingPullouts.clear(); committing = false; select(); }
+    finally { pendingPullouts.clear(); committing = false; refreshDialogue();select(); }
   }
-  const behavior = screenplayToolbar(sheet, commit, !api.readonly(), () => characterNames(api.document()), () => api.document().project.beats.map(inlineHeading)).editor;
+  const behavior = screenplayToolbar(sheet, commit, !api.readonly(), () => characterNames(api.document(),paragraph()?.dataset.beatId), () => api.document().project.beats.filter(s=>String(s.id)!==paragraph()?.dataset.headingScene).map(inlineHeading)).editor;
   sheet.addEventListener('compositionstart', () => { composing = true; sheet.isComposing = true; });
   sheet.addEventListener('compositionend', () => { composing = false; sheet.isComposing = false; commit(); });
   sheet.addEventListener('input', event => {
@@ -235,6 +239,7 @@ export function mountContinuousScript(sheet, api) {
   // Never mutate a subtree synchronously while a page rebuild is removing it.
   sheet.addEventListener('blur',()=>queueMicrotask(()=>{if(sheet.isConnected&&!sheet.closest('.write-center')?.inert){syncHeadings(null);acceptedHTML=sheet.innerHTML;}}));
   for (const event of ['focus','keyup','mouseup']) sheet.addEventListener(event, select);
+  refreshDialogue();
   if(api.selection?.())mark(api.selection());
   return {...behavior,split:splitScene, format(kind) { const node = paragraph(); if (node?.dataset.headingScene && kind !== 'slugline') insertAfterHeading(node, kind); else behavior.format(kind); }, commit,
     reveal(id,focus=true) { if(composing)return false;commit();syncHeadings(null);const node = [...sheet.children].find(node => node.dataset.beatId === id); if(node){const range=document.createRange();range.selectNodeContents(node);range.collapse(true);getSelection().removeAllRanges();getSelection().addRange(range);if(focus&&!sheet.closest('.write-center')?.inert)sheet.focus({preventScroll:true});mark(id);centerScriptTarget(node);} return !!node; }};

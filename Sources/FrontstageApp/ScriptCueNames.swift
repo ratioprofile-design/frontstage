@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import FrontstageCore
 
 @MainActor
 enum ScriptCueNames {
@@ -7,14 +8,21 @@ enum ScriptCueNames {
     static func characters(in html: String) -> [String] {
         if let names = cache[html] { return names }
         guard let text = try? ScreenplayTextCodec.decode(html) else { return [] }
-        var names = [String]()
-        text.enumerateAttribute(.screenplayElement, in: NSRange(location: 0, length: text.length)) { value, range, _ in
-            if value as? String == "character" {
-                names += (text.string as NSString).substring(with: range).components(separatedBy: .newlines).map { $0.replacingOccurrences(of: #"\s*\((?:CONT['’]D|V\.O\.|O\.S\.)\)\s*$"#, with: "", options: [.regularExpression, .caseInsensitive]).trimmingCharacters(in: .whitespaces).uppercased() }.filter { !$0.isEmpty }
-            }
-        }
+        let names = committed(in: text)
         if cache.count > 256 { cache.removeAll() }; cache[html] = names
         return names
+    }
+    static func committed(in text: NSAttributedString, excluding excluded: NSRange? = nil) -> [String] {
+        var names = [String](), location = 0, candidate: String?
+        while location < text.length {
+            let range = (text.string as NSString).paragraphRange(for: NSRange(location: location, length: 0))
+            let kind = ScreenplayTextCodec.element(in: text, at: location)
+            if kind == .character { candidate = range == excluded ? nil : CharacterCue((text.string as NSString).substring(with: range)).name }
+            else if kind == .dialogue { if let candidate, !candidate.isEmpty { names.append(candidate) } }
+            else if kind != .parenthetical { candidate = nil }
+            location = NSMaxRange(range)
+        }
+        return Array(Set(names)).sorted()
     }
     static func capitalize(in text: NSTextView) {
         guard let storage = text.textStorage, storage.length > 0, !text.hasMarkedText() else { return }

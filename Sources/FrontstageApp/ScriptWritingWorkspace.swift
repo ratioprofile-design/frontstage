@@ -211,7 +211,8 @@ struct ContinuousSnippet: View {
             ScreenplaySuggestions(workspace: workspace, controller: controller).disabled(scene?.isTextLocked == true)
             }
             ScreenplayEditor(html: html, controller: controller, width: compact || !showControls ? readerWidth : workspace.paper.contentWidth,
-                typography: displayTypography, onError: { workspace.errorMessage = $0 }, editable: scene?.isTextLocked != true && !(beat.map { workspace.whiteboard.isLocked($0) } ?? false), continuous: true, suggestions: workspace.screenplayCompletions)
+                typography: displayTypography, onError: { workspace.errorMessage = $0 }, editable: scene?.isTextLocked != true && !(beat.map { workspace.whiteboard.isLocked($0) } ?? false), continuous: true, suggestions: workspace.screenplayCompletions,
+                continuationSeed: beatID.flatMap { DialoguePresentation.seed(project: workspace.project, beatID: $0) }, explicitCharacters: workspace.project.characters.map(\.name) + workspace.whiteboard.beats.flatMap(\.characters))
                 .frame(height: controller.layoutHeight)
         }
     }

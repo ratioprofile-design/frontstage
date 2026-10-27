@@ -8,6 +8,7 @@ import { baminiPairs } from './bamini.js';
 import { blockLocked } from './board-operations.js';
 import { paginateParagraphs } from './pagination.js';
 import { screenplayToolbar, sluglineFields, characterNames, elements, splitAtCaret } from './screenplay-editor.js';
+import {decorateDialogue,dialogueSeed} from './dialogue-rules.js';
 const el=(tag,text,className)=>{const e=document.createElement(tag);if(text!=null)e.textContent=text;if(className)e.className=className;return e;};
 const $=id=>document.getElementById(id);
 const download=(name,data,type='text/plain')=>{const url=URL.createObjectURL(new Blob([data],{type})),a=el('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
@@ -116,7 +117,7 @@ export function mountWorkspaces(api) {
           const text=el('div',null,'script-text');text.contentEditable=!(readonly()||s.frontstageTextLocked||beat.locked||blockLocked(model.board(doc()),beat.blockID));text.setAttribute('role','textbox');text.setAttribute('aria-label',`Script: ${beat.title}`);text.innerHTML=api.cleanHTML(beat.html);text.dataset.beatId=id;text.hidden=!plain&&((scriptView.display==='Collapse All')!==expandedBeats.has(id));
           const changed=()=>{if(text.isComposing)return;change(d=>{const target=model.board(d).beats.find(b=>b.id===id);if(target)target.html=api.cleanHTML(text.innerHTML);});};
           text.addEventListener('compositionstart',()=>text.isComposing=true);text.addEventListener('compositionend',()=>{text.isComposing=false;changed();});text.oninput=changed;
-          const behavior=screenplayToolbar(text,changed,text.contentEditable==='true',()=>characterNames(doc())).editor;
+          const behavior=screenplayToolbar(text,changed,text.contentEditable==='true',()=>characterNames(doc(),id),()=>scenes().map(model.heading),{continuationSeed:()=>dialogueSeed(doc(),id)}).editor;
           behavior.split=()=>{const [first,last]=splitAtCaret(text);change(d=>model.splitBeat(d,id,first,last),true);};behavior.open=()=>api.openBeat(id);
           text.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'&&!e.isComposing){e.preventDefault();try{behavior.split();}catch(error){api.status(error.message);}}});
           text.onfocus=()=>{activeEditor=behavior;sceneID=s.id;api.selectScene(s.id,id);writePanels?.select(s.id,id);enableFormatting(text.isContentEditable);};
@@ -140,6 +141,7 @@ export function mountWorkspaces(api) {
     for(const segment of model.scriptSegments(doc())){
       nodes.push({node:el('p',`${segment.number}  ${model.heading(segment.scene)}${segment.continuation?' (CONTINUED)':''}`,'sc-line sc-slugline'),newPage:segment.scene.frontstagePageStart&&!segment.continuation});
       const source=el('div');source.innerHTML=api.cleanHTML(segment.html);
+      decorateDialogue(source);
       for(const node of [...source.childNodes])nodes.push({node:node.nodeType===1?node:el('p',node.textContent)});
     }
     paginateParagraphs(makePage,nodes,height-144);

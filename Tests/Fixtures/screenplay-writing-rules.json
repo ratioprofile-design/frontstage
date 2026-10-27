@@ -1,0 +1,34 @@
+{
+  "commands": [
+    {"element":"action","key":"Tab","empty":true,"target":"character","placement":"inPlace"},
+    {"element":"action","key":"Tab","empty":false,"target":"character","placement":"afterParagraph"},
+    {"element":"action","key":"Tab","empty":false,"selection":true,"target":"character","placement":"inPlace"},
+    {"element":"character","key":"Tab","empty":false,"target":"character","placement":"suggestions"},
+    {"element":"character","key":"Enter","empty":false,"target":"dialogue","placement":"afterParagraph"},
+    {"element":"character","key":"Enter","empty":true,"target":"action","placement":"inPlace"},
+    {"element":"dialogue","key":"Tab","empty":true,"target":"parenthetical","placement":"inPlace"},
+    {"element":"dialogue","key":"Tab","empty":false,"target":"parenthetical","placement":"afterParagraph"},
+    {"element":"dialogue","key":"Enter","empty":true,"target":"action","placement":"inPlace"},
+    {"element":"dialogue","key":"Enter","empty":false,"target":"action","placement":"split"},
+    {"element":"parenthetical","key":"Enter","empty":true,"target":"dialogue","placement":"inPlace"},
+    {"element":"parenthetical","key":"Enter","empty":false,"target":"dialogue","placement":"afterParagraph"},
+    {"element":"slugline","key":"Enter","empty":false,"target":"action","placement":"body"},
+    {"element":"slugline","key":"Tab","empty":false,"target":"action","placement":"body"},
+    {"element":"dialogue","key":"Backtab","empty":false,"target":"character","placement":"inPlace"}
+  ],
+  "cues": [
+    {"source":"kamal (V.O.) (CONT’D)","name":"KAMAL","extensions":["(V.O.)","(CONT’D)"],"continued":true},
+    {"source":"மாயா (O.S.)","name":"மாயா","extensions":["(O.S.)"],"continued":false},
+    {"source":"MARY JANE (over the phone)","name":"MARY JANE","extensions":["(over the phone)"],"continued":false},
+    {"source":"THE MAN (YOUNG)","name":"THE MAN (YOUNG)","extensions":[],"continued":false},
+    {"source":"KAMAL (CONT'D) (O.C.)","name":"KAMAL","extensions":["(CONT'D)","(O.C.)"],"continued":true}
+  ],
+  "dialogues": [
+    {"name":"Action between the same speaker","lines":[["slugline","INT. PARK - DAY"],["character","KAMAL"],["dialogue","First."],["action","He turns."],["character","kamal (V.O.)"],["dialogue","Again."]],"continued":[4]},
+    {"name":"Another speaker resets","lines":[["character","A"],["dialogue","One."],["character","B"],["dialogue","Two."],["character","A"],["dialogue","Three."]],"continued":[]},
+    {"name":"New scene resets","lines":[["character","A"],["dialogue","One."],["slugline","EXT. STREET - NIGHT"],["character","A"],["dialogue","Two."]],"continued":[]},
+    {"name":"Empty cues do not count","lines":[["character","A"],["dialogue","One."],["character","B"],["dialogue",""],["action","Pause."],["character","A"],["dialogue","Two."]],"continued":[5]},
+    {"name":"Manual continuation is retained once","lines":[["character","A"],["dialogue","One."],["action","Pause."],["character","A (O.S.) (CONT'D)"],["dialogue","Two."]],"continued":[]},
+    {"name":"Tamil and parenthetical","lines":[["character","கமல்"],["parenthetical","(மெதுவாக)"],["dialogue","நான் இங்கே."],["action","அவர் திரும்புகிறார்."],["character","கமல்"],["dialogue","போவோம்."]],"continued":[4]}
+  ]
+}

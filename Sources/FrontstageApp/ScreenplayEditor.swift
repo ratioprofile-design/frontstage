@@ -11,6 +11,7 @@ final class ScreenplayEditorController: ObservableObject {
     var minimumHeight: CGFloat = 48
     var contentWidth: CGFloat = 432
     var typography = ScriptLayoutSettings()
+    var completionRequest: (() -> Void)?
     func measure() {
         guard let textView, let container = textView.textContainer, let manager = textView.layoutManager else { return }
         manager.ensureLayout(for: container)
@@ -78,7 +79,10 @@ final class ScreenplayEditorController: ObservableObject {
             textView.insertText(replacement, replacementRange: range)
             textView.setSelectedRange(selection)
         }
-        textView.typingAttributes = ScreenplayTypography.attributes(element, width: contentWidth, settings: typography)
+        var typing = ScreenplayTypography.attributes(element, width: contentWidth, settings: typography)
+        let source = textView.attributedString()
+        if source.length > 0, let owner = source.attribute(ScriptHeadingEditing.owner, at: min(selection.location, source.length - 1), effectiveRange: nil) { typing[ScriptHeadingEditing.owner] = owner }
+        textView.typingAttributes = typing
         activeElement = element
     }
 
@@ -104,36 +108,45 @@ final class ScreenplayEditorController: ObservableObject {
     @discardableResult
     func handleCommand(_ selector: Selector, in textView: NSTextView) -> Bool {
         guard textView.isEditable, !textView.hasMarkedText() else { return false }
-        if selector == #selector(NSResponder.insertTab(_:)) || selector == #selector(NSResponder.insertBacktab(_:)) {
-            if selector == #selector(NSResponder.insertBacktab(_:)) { format(activeElement.cycled(backward: true)); return true }
-            if activeElement == .character { textView.complete(nil); return true }
-            let paragraph = (textView.string as NSString).paragraphRange(for: textView.selectedRange())
-            let empty = (textView.string as NSString).substring(with: paragraph).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            let next: ScreenplayElement = activeElement == .dialogue ? .parenthetical : activeElement == .parenthetical ? .dialogue : .character
-            if !empty || activeElement == .action { textView.insertText("\n", replacementRange: textView.selectedRange()) }
-            format(next)
-            return true
+        let key: String
+        switch selector {
+        case #selector(NSResponder.insertTab(_:)): key = "Tab"
+        case #selector(NSResponder.insertBacktab(_:)): key = "Backtab"
+        case #selector(NSResponder.insertNewline(_:)): key = "Enter"
+        default: return false
         }
-        guard selector == #selector(NSResponder.insertNewline(_:)) else { return false }
+        selectionChanged()
         let selected = textView.selectedRange()
-        let paragraph = (textView.string as NSString).paragraphRange(for: selected)
-        let line = (textView.string as NSString).substring(with: paragraph).trimmingCharacters(in: .whitespacesAndNewlines)
-        let next = activeElement.afterReturn(isEmpty: line.isEmpty)
-        if line.isEmpty, ![.action, .character, .dialogue].contains(activeElement) {
-            format(next)
-            return true
-        }
-        // A literal insertion bypasses command dispatch and leaves IME composition to TextKit.
-        let attributes = ScreenplayTypography.attributes(next, width: contentWidth, settings: typography)
-        textView.insertText(NSAttributedString(string: "\n", attributes: attributes), replacementRange: selected)
-        let caret = textView.selectedRange()
-        let nextRange = (textView.string as NSString).paragraphRange(for: caret)
-        if nextRange.length > 0 {
-            let replacement = NSMutableAttributedString(attributedString: textView.attributedString().attributedSubstring(from: nextRange))
-            ScreenplayTypography.apply(next, to: replacement,
-                range: NSRange(location: 0, length: replacement.length), width: contentWidth, settings: typography)
-            textView.insertText(replacement, replacementRange: nextRange)
-            textView.setSelectedRange(caret)
+        let source = textView.attributedString(), string = source.string as NSString
+        let paragraph = string.paragraphRange(for: NSRange(location: selected.location, length: 0))
+        let empty = string.substring(with: paragraph).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let decision = ScreenplayCommand.resolve(element: activeElement, key: key, empty: empty, selection: selected.length > 0)
+        if decision.placement == .suggestions { completionRequest?(); return true }
+        textView.undoManager?.beginUndoGrouping(); defer { textView.undoManager?.endUndoGrouping() }
+        if decision.placement == .inPlace { format(decision.element); return true }
+        let next = decision.element
+        var attributes = ScreenplayTypography.attributes(next, width: contentWidth, settings: typography)
+        let owner = source.length > 0 ? source.attribute(ScriptHeadingEditing.owner, at: min(paragraph.location, source.length - 1), effectiveRange: nil) : nil
+        if let owner { attributes[ScriptHeadingEditing.owner] = owner }
+        let end = NSMaxRange(paragraph)
+        if decision.placement == .body || decision.placement == .afterParagraph {
+            if end < source.length {
+                let following = string.paragraphRange(for: NSRange(location: end, length: 0))
+                let sameOwner = (source.attribute(ScriptHeadingEditing.owner, at: end, effectiveRange: nil) as? String) == (owner as? String)
+                if sameOwner, decision.placement == .body || (string.substring(with: following).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && source.attribute(ScriptHeadingEditing.heading, at: end, effectiveRange: nil) == nil) {
+                    textView.setSelectedRange(NSRange(location: end, length: 0))
+                    if decision.placement == .body { textView.typingAttributes = source.attributes(at: end, effectiveRange: nil); selectionChanged() }
+                    else { format(next) }
+                    return true
+                }
+            }
+            let terminated = paragraph.length > 0 && string.substring(with: paragraph).hasSuffix("\n")
+            textView.insertText(NSAttributedString(string: "\n", attributes: attributes), replacementRange: NSRange(location: end, length: 0))
+            textView.setSelectedRange(NSRange(location: terminated ? end : end + 1, length: 0))
+        } else {
+            textView.insertText(NSAttributedString(string: "\n", attributes: attributes), replacementRange: selected)
+            let caret = textView.selectedRange()
+            format(next); textView.setSelectedRange(caret)
         }
         textView.typingAttributes = attributes
         activeElement = next
@@ -144,6 +157,10 @@ final class ScreenplayEditorController: ObservableObject {
 class ScreenplayTextView: NSTextView {
     weak var screenplayController: ScreenplayEditorController?
     var splitScene: (() -> Void)?
+    var continuationSeed: String?
+    var continuationFlags: [String: [Bool]]?
+    var continuationTokens = [DialoguePresentationToken]()
+    override func draw(_ dirtyRect: NSRect) { super.draw(dirtyRect); DialoguePresentation.draw(in: self, dirty: dirtyRect) }
     private var splitCaret: NSRange?
     override func rightMouseDown(with event: NSEvent) {
         if splitScene != nil, selectedRange().length == 0 { splitCaret = selectedRange() }
@@ -194,6 +211,8 @@ struct ScreenplayEditor: NSViewRepresentable {
     var paperTopInset: CGFloat = 72
     var continuous = false
     var suggestions: [ScreenplayElement: [String]] = [:]
+    var continuationSeed: String?
+    var explicitCharacters = [String]()
 
     func makeCoordinator() -> Coordinator { Coordinator(html: $html, controller: controller, onError: onError) }
 
@@ -209,6 +228,7 @@ struct ScreenplayEditor: NSViewRepresentable {
         text.importsGraphics = false
         text.allowsUndo = true
         text.isAutomaticQuoteSubstitutionEnabled = false
+        text.isAutomaticTextCompletionEnabled = false
         text.textContainerInset = NSSize(width: paper ? 90 : continuous ? 0 : 24, height: paper ? paperTopInset : continuous ? 0 : 24)
         text.leadingAdjustment = paper ? 18 : 0
         if continuous {
@@ -226,12 +246,15 @@ struct ScreenplayEditor: NSViewRepresentable {
         text.textContainer?.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
         text.textContainer?.lineFragmentPadding = 0
         context.coordinator.suggestions = suggestions
+        context.coordinator.explicitCharacters = explicitCharacters
+        text.continuationSeed = continuationSeed
         text.screenplayController = controller
         text.delegate = context.coordinator
         controller.textView = text
         controller.minimumHeight = continuous ? typography.lineHeight : 48
         controller.contentWidth = width
         controller.typography = typography
+        controller.completionRequest = { [weak coordinator = context.coordinator, weak text] in if let text { coordinator?.showSuggestions(text) } }
         context.coordinator.load(html, into: text)
         controller.measure()
         return scroll
@@ -239,10 +262,12 @@ struct ScreenplayEditor: NSViewRepresentable {
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         context.coordinator.suggestions = suggestions
+        context.coordinator.explicitCharacters = explicitCharacters
         context.coordinator.html = $html
         context.coordinator.onError = onError
         guard let text = scroll.documentView as? NSTextView else { return }
         text.isEditable = editable
+        (text as? ScreenplayTextView)?.continuationSeed = continuationSeed
         controller.textView = text
         if controller.contentWidth != width || controller.typography != typography {
             controller.minimumHeight = continuous ? typography.lineHeight : 48
@@ -252,6 +277,7 @@ struct ScreenplayEditor: NSViewRepresentable {
             context.coordinator.load(html, into: text)
         } else if context.coordinator.lastHTML != html { context.coordinator.load(html, into: text) }
         controller.measure()
+        if let text = text as? ScreenplayTextView { DialoguePresentation.refresh(text) }
     }
 
     @MainActor
@@ -264,10 +290,20 @@ struct ScreenplayEditor: NSViewRepresentable {
         private var completing = false
         private var loading = false
         private var pendingElement: ScreenplayElement?
+        let completionPanel = HeadingSuggestionPanel()
+        var registeredNames = Set<String>()
+        var explicitCharacters = [String]()
+        var offerCompletions = false
         init(html: Binding<String>, controller: ScreenplayEditorController, onError: @escaping (String) -> Void) {
             self.html = html
             self.controller = controller
             self.onError = onError
+        }
+        func showSuggestions(_ text: NSTextView) {
+            let location = min(text.selectedRange().location, max(0, text.attributedString().length - 1))
+            let excluded = (text.string as NSString).paragraphRange(for: NSRange(location: location, length: 0))
+            registeredNames.formUnion(ScriptCueNames.committed(in: text.attributedString(), excluding: excluded))
+            completionPanel.show(in: text, headings: (suggestions[.sceneHeading] ?? []).map { SceneHeading(inline: $0) }, names: registeredNames.union(explicitCharacters).sorted(), choices: suggestions)
         }
 
         func load(_ source: String, into text: NSTextView) {
@@ -282,7 +318,9 @@ struct ScreenplayEditor: NSViewRepresentable {
             }
             do {
                 let attributed = try ScreenplayTextCodec.decode(source, width: controller.contentWidth, settings: controller.typography)
+                if lastHTML == nil { registeredNames.formUnion(suggestions[.character] ?? []) }
                 text.textStorage?.setAttributedString(attributed)
+                if let text = text as? ScreenplayTextView { DialoguePresentation.refresh(text) }
                 text.setSelectedRange(NSRange(location: 0, length: 0))
                 text.typingAttributes = ScreenplayTypography.attributes(
                     ScreenplayTextCodec.element(in: attributed, at: 0), width: controller.contentWidth, settings: controller.typography)
@@ -333,25 +371,27 @@ struct ScreenplayEditor: NSViewRepresentable {
             lastHTML = result
             html.wrappedValue = result
             controller.selectionChanged()
+            if let text = text as? ScreenplayTextView { DialoguePresentation.refresh(text) }
             controller.measure()
             text.scrollRangeToVisible(text.selectedRange())
-            if !completing, !(suggestions[controller.activeElement] ?? []).isEmpty {
-                completing = true; text.complete(nil); completing = false
-            }
+            if offerCompletions, !completing { showSuggestions(text) } else { completionPanel.close() }
+            offerCompletions = false
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
-            if !loading { controller.selectionChanged(); if let text = notification.object as? NSTextView, text.window?.firstResponder === text { text.scrollRangeToVisible(text.selectedRange()) } }
+            if !loading { completionPanel.close(); controller.selectionChanged(); if let text = notification.object as? NSTextView, text.window?.firstResponder === text { text.scrollRangeToVisible(text.selectedRange()) } }
         }
+        func textDidEndEditing(_ notification: Notification) { completionPanel.close() }
 
         func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange,
                       replacementString: String?) -> Bool {
-            if !loading { pendingElement = controller.activeElement }
+            if !loading { pendingElement = controller.activeElement; offerCompletions = replacementString?.isEmpty == false && replacementString?.contains("\n") != true }
             return true
         }
 
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-            controller.handleCommand(commandSelector, in: textView)
+            if !textView.hasMarkedText(), completionPanel.handle(commandSelector) { return true }
+            return controller.handleCommand(commandSelector, in: textView)
         }
     }
 }

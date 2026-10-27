@@ -65,6 +65,7 @@ enum ScreenplayPDF {
     }
 
     static func renderText(_ text: NSAttributedString, title: String, paper: ScreenplayPaper) throws -> RenderedScreenplay {
+        let text = DialoguePresentation.materialized(text)
         guard text.length > 0 else { throw ScreenplayPDFError.cannotLayOut }
         let pages = try layoutPages(text, paper: paper)
         let output = CFDataCreateMutable(nil, 0)!
@@ -84,11 +85,11 @@ enum ScreenplayPDF {
             let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: page.range.location, length: page.range.length), path, nil)
             CTFrameDraw(frame, context)
             if let character = page.continuedCharacter {
-                drawMarker("\(character) (CONT'D)", x: paper.leftMargin + paper.contentWidth * 0.37,
+                drawMarker("\(character) (CONT'D)", x: paper.leftMargin + paper.contentWidth * WorkspaceDesign.characterIndent / 100,
                     y: paper.height - paper.topMargin - 12, in: context, paper: paper)
             }
             if page.continuesCharacter != nil {
-                drawMarker("(MORE)", x: paper.leftMargin + paper.contentWidth * 0.37,
+                drawMarker("(MORE)", x: paper.leftMargin + paper.contentWidth * WorkspaceDesign.characterIndent / 100,
                     y: paper.bottomMargin + 2, in: context, paper: paper)
             }
             if index > 0 {
@@ -167,8 +168,7 @@ enum ScreenplayPDF {
             let previous = source.paragraphRange(for: NSRange(location: location - 1, length: 0))
             let type = ScreenplayTextCodec.element(in: text, at: previous.location)
             if type == .character {
-                return source.substring(with: previous).trimmingCharacters(in: .whitespacesAndNewlines)
-                    .replacingOccurrences(of: " (CONT'D)", with: "").uppercased()
+                return CharacterCue(source.substring(with: previous)).withoutContinuation.uppercased()
             }
             if type != .dialogue && type != .parenthetical { return nil }
             location = previous.location

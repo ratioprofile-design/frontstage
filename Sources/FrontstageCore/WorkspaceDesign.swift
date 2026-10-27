@@ -15,6 +15,10 @@ public enum WorkspaceDesign {
     public static let fontSize: Double = 12
     public static let lineHeight: Double = 14
     public static let paragraphSpacing: Double = 10
+    public static let characterIndent: Double = 33
+    public static let dialogueIndent: Double = 16
+    public static let parentheticalIndent: Double = 25
+    public static let parentheticalRight: Double = 20
     public static let chromeColor = "#303133"
     public static let panelColor = "#3d3e40"
     public static let canvasColor = "#7d7d7d"
