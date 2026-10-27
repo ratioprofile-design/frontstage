@@ -166,6 +166,11 @@ input::-webkit-calendar-picker-indicator{display:none!important;}
 .script-menu-items details>select { display:block; width:100%; }
 
 /* Write workspace panels share the current editor, without remounting it on panel edits. */
+.write-drawer-header{display:none}.write-drawer-backdrop{position:fixed;top:var(--write-drawer-top);left:var(--write-drawer-left);width:var(--write-drawer-width);height:var(--write-drawer-height);z-index:19;border:0;border-radius:0;background:#0006;padding:0;touch-action:manipulation}.write-drawer-backdrop[hidden]{display:none}.write-drawer-announcement{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.write-panel[data-drawer-mode=true]{position:fixed;top:var(--write-drawer-top);bottom:auto;height:var(--write-drawer-height);max-width:min(85vw,calc(var(--write-drawer-width) - 24px));display:flex;flex-direction:column;z-index:20;transform:translateX(var(--drawer-drag,0px));transition:transform .16s ease-out}.write-left[data-drawer-mode=true]{left:var(--write-drawer-left)}.write-right[data-drawer-mode=true]{right:var(--write-drawer-right)}.write-panel[data-swiping=true]{transition:none}
+.write-panel[data-drawer-mode=true]>.write-drawer-header{display:flex;flex:none;align-items:center;gap:10px;min-height:56px;box-sizing:border-box;padding:6px max(8px,env(safe-area-inset-right)) 6px max(8px,env(safe-area-inset-left));border-bottom:1px solid #777;background:#303234;touch-action:pinch-zoom;user-select:none}.write-drawer-grip{color:#aaa;font-size:20px}.write-drawer-header>strong{flex:1}.write-drawer-close{width:44px;height:44px;flex:none;font-size:24px;line-height:1;padding:0;text-align:center}
+.write-panel[data-drawer-mode=true]>.write-panel-body{height:auto;flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding-bottom:max(10px,env(safe-area-inset-bottom))}.write-panel[data-drawer-mode=true]>.write-resizer{display:none}
+@media(prefers-reduced-motion:reduce){.write-panel[data-drawer-mode=true]{transition:none}}
 .writing-workspace.write-center{display:flex;flex-direction:column;min-height:0}
 .writing-workspace.write-center>.continuous-desk{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;box-sizing:border-box}
 .writing-workspace.write-center>.dedicated-script-tools,.writing-workspace.write-center>.screenplay-element-bar{flex-shrink:0}

@@ -8,6 +8,8 @@ Selecting a card places the caret in its screenplay and highlights that beat wit
 
 The Both notes scope displays Scene and Project notes together in independently scrollable sections. Each section has its own Add Note action and captures its owner when editing. Colors show named swatches (Yellow, Blue, Green, Pink and White); choosing a color preserves note content and formatting.
 
+Responsive Write panels have an independent header and Close button. Tap the shaded area outside a drawer, press Escape, or swipe the header toward its screen edge to dismiss it. Swipes in screenplay/note content keep their normal editing and scrolling behavior. Drawer geometry follows the visible viewport when the keyboard opens or the device rotates, without changing paper zoom. Docked desktop panels keep their existing presentation and resizing controls.
+
 ## Navigation
 
 - Scenes shows one card per whiteboard beat, using Frontstage’s existing dark card styling. The header contains the scene number and beat name; there is no nested beat list or slugline header.

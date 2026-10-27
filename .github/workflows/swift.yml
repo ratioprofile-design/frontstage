@@ -32,6 +32,7 @@ jobs:
             node Server/Tests/write-panel-model.mjs
             node Server/Tests/write-panels-browser.mjs
             node Server/Tests/write-interface-browser.mjs
+            node Server/Tests/write-mobile-browser.mjs
             node Server/Tests/workspace-parity.mjs
             node Server/Tests/timeline-layout.mjs
             node Server/Tests/whiteboard-text-layout.mjs
