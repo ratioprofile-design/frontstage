@@ -91,6 +91,25 @@ final class WriteNavigationEditingTests: XCTestCase {
             XCTAssertEqual(workspace.project.scenes.count, project.scenes.count)
         }
     }
+    func testBodyCompositionDoesNotInheritSluglineIdentity() async throws {
+        try await MainActor.run {
+            var project = try Self.fixture()
+            for scene in project.scenes { try project.updateScene(id: scene.id, heading: SceneHeading(inline: scene.heading.inlineText)) }
+            let (workspace, _, window, text) = try Self.editor(project); defer { window.close() }
+            let headings = workspace.project.scenes.map(\.heading)
+            let bodyStart = NSMaxRange((text.string as NSString).paragraphRange(for: NSRange(location: 0, length: 0)))
+            text.setSelectedRange(NSRange(location: bodyStart, length: 0))
+            text.typingAttributes = text.attributedString().attributes(at: 0, effectiveRange: nil)
+            text.setMarkedText("தமிழ்", selectedRange: NSRange(location: "தமிழ்".utf16.count, length: 0), replacementRange: text.selectedRange())
+            XCTAssertTrue(text.hasMarkedText())
+            text.unmarkText()
+            let coordinator = try XCTUnwrap(text.delegate as? ContinuousScriptEditor.Coordinator)
+            coordinator.textDidChange(Notification(name: NSText.didChangeNotification, object: text))
+            XCTAssertEqual(workspace.project.scenes.map(\.heading), headings)
+            XCTAssertNil(text.attributedString().attribute(ScriptHeadingEditing.heading, at: bodyStart, effectiveRange: nil))
+            XCTAssertTrue(workspace.whiteboard.beats.first(where: { $0.id == "beat-1" })?.html.contains("தமிழ்") == true)
+        }
+    }
     func testHeadingDeletePasteAndReturnDoNotConsumeSceneBody() async throws {
         try await MainActor.run {
             let (workspace, _, window, text) = try Self.editor(Self.fixture()); defer { window.close() }

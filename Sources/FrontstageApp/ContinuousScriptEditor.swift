@@ -55,6 +55,17 @@ final class WritingTextView: ScreenplayTextView {
         super.unmarkText()
         DispatchQueue.main.async { [weak self] in if let self, !self.hasMarkedText() { self.compositionFinished?() } }
     }
+    private func prepareBodyTyping(at range: NSRange) {
+        let source = attributedString()
+        guard !hasMarkedText(), source.length > 0, range.location <= source.length,
+              typingAttributes[headingKey] != nil else { return }
+        let index = min(range.location, source.length - 1)
+        if source.attribute(headingKey, at: index, effectiveRange: nil) == nil { typingAttributes = source.attributes(at: index, effectiveRange: nil) }
+    }
+    override func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
+        prepareBodyTyping(at: replacementRange.location == NSNotFound ? self.selectedRange() : replacementRange)
+        super.setMarkedText(string, selectedRange: selectedRange, replacementRange: replacementRange)
+    }
     override func insertText(_ insertString: Any, replacementRange: NSRange) {
         let range = replacementRange.location == NSNotFound ? selectedRange() : replacementRange
         if let replacement = ScriptHeadingEditing.replacement(insertString, in: self, range: range) {
@@ -67,11 +78,7 @@ final class WritingTextView: ScreenplayTextView {
             let destination = min(range.location, max(0, source.length - 1))
             let paragraph = (source.string as NSString).paragraphRange(for: NSRange(location: destination, length: 0))
             let bodyDestination = source.length > 0 && range.location <= source.length && source.attribute(headingKey, at: destination, effectiveRange: nil) == nil
-            if !hasMarkedText(), source.length > 0, range.location <= source.length,
-               source.attribute(headingKey, at: min(range.location, source.length - 1), effectiveRange: nil) == nil,
-               typingAttributes[headingKey] != nil {
-                typingAttributes = source.attributes(at: min(range.location, source.length - 1), effectiveRange: nil)
-            }
+            prepareBodyTyping(at: range)
             if let attributed = insertString as? NSAttributedString, bodyDestination, NSMaxRange(range) <= NSMaxRange(paragraph) {
                 let body = NSMutableAttributedString(attributedString: attributed)
                 body.removeAttribute(headingKey, range: NSRange(location: 0, length: body.length))

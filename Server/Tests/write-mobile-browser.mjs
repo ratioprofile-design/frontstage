@@ -18,7 +18,7 @@ try{
  await page.setViewportSize({width:393,height:851});
  const paper=page.locator('.continuous-editor'),inspector=page.locator('.write-right'),scenes=page.locator('.write-left'),opener=page.getByRole('button',{name:'Notes / Breakdown / History',exact:true}),close=inspector.getByRole('button',{name:'Close inspector',exact:true});
  await paper.evaluate(n=>{window.mobilePaper=n;window.mobileZoom=n.style.zoom;const p=n.querySelector('[data-beat-id]:not([data-heading-scene])'),r=document.createRange();r.selectNodeContents(p);r.collapse(false);getSelection().removeAllRanges();getSelection().addRange(r);});
- assert.equal(await inspector.isVisible(),false);await opener.tap();assert.equal(await inspector.getAttribute('aria-modal'),'true');assert.ok(await close.isVisible());assert.ok(await paper.evaluate(n=>n.inert||n.closest('.write-center').inert));
+ await inspector.waitFor({state:'hidden'});await opener.tap();assert.equal(await inspector.getAttribute('aria-modal'),'true');assert.ok(await close.isVisible());assert.ok(await paper.evaluate(n=>n.inert||n.closest('.write-center').inert));
  await inspector.getByLabel('Note scope',{exact:true}).selectOption('Both');assert.equal(await inspector.locator('[data-note-scope]').count(),2);
  const sceneNotes=inspector.locator('[data-note-scope="Scene"]');await sceneNotes.getByRole('button',{name:'Add Note',exact:true}).tap();const note=sceneNotes.getByRole('textbox',{name:'Note text',exact:true}).last();await note.fill('தமிழ் mobile note '.repeat(50));
  const noteNode=await note.elementHandle();await note.evaluate(n=>n.closest('[data-note-scope]').scrollTop=10000);const before=await close.boundingBox();assert.ok(before.y>=0&&before.y+before.height<=851);
