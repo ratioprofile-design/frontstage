@@ -6,6 +6,7 @@ import FrontstageCore
 enum ScreenplayDualDialogue {
     static func toggle(_ controller: ScreenplayEditorController) {
         guard let text = controller.textView, text.isEditable, !text.hasMarkedText(), let storage = text.textStorage, storage.length > 0 else { return }
+        controller.clearAcceptedCue(); controller.dismissCompletions?()
         let selected = text.selectedRange(), caret = min(selected.location, storage.length - 1)
         var ranges = [NSRange](), lines = [DualDialogueLine](), offset = 0
         while offset < storage.length {

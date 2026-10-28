@@ -1,6 +1,15 @@
 import Foundation
 
 public enum DualDialogueImport {
+    public static func validateSplit(first: String, second: String) throws {
+        func ids(_ html: String) -> Set<String> {
+            guard let expression = try? NSRegularExpression(pattern: #"(?i)\bdata-dual-pair\s*=\s*["']([^"']+)["']"#) else { return [] }
+            let source = html as NSString
+            return Set(expression.matches(in: html, range: NSRange(location: 0, length: source.length)).map { source.substring(with: $0.range(at: 1)) })
+        }
+        guard ids(first).intersection(ids(second)).isEmpty else { throw ProjectError.invalidProject("Unpair the dialogue before splitting inside a speech pair") }
+    }
+
     public static func duplicatedPairIDs(_ html: String) -> String {
         guard let pattern = try? NSRegularExpression(pattern: #"(?i)\bdata-dual-pair\s*=\s*["']([^"']+)["']"#) else { return html }
         let source = html as NSString, output = NSMutableString(string: html)

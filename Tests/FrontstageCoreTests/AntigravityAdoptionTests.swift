@@ -126,6 +126,8 @@ final class AntigravityAdoptionTests: XCTestCase {
         let duplicate = DualDialogueImport.duplicatedPairIDs(result.html)
         XCTAssertNotEqual(duplicate, result.html); XCTAssertTrue(duplicate.contains("data-future='keep'"))
         XCTAssertThrowsError(try DualDialogueImport.normalize("<p class='sc-character sc-dual-left'>A</p>"))
+        XCTAssertThrowsError(try DualDialogueImport.validateSplit(first: "<p data-dual-pair='same'>A</p>", second: "<p data-dual-pair='same'>B</p>"))
+        XCTAssertNoThrow(try DualDialogueImport.validateSplit(first: result.html, second: "<p>After pair</p>"))
         var project = Project(oneBeatPerScene: true); let id = try project.addBoardBeat(title: "Original")
         try project.updateBoardBeat(id) { $0.html = html }
         let original = project, reviewed = try project.reviewingLegacyDualDialogue()
@@ -134,6 +136,18 @@ final class AntigravityAdoptionTests: XCTestCase {
         let second = try copy.duplicateBoardBeat(id)
         XCTAssertNotEqual(try copy.whiteboard().beats.first { $0.id == id }?.html, try copy.whiteboard().beats.first { $0.id == second }?.html)
         try copy.validateSceneModel()
+    }
+
+    func testProductionMarksIncludeNewScenesAndHeadingEdits() throws {
+        var p = Project(oneBeatPerScene: true)
+        p.toggleProductionLock()
+        let id = try p.addBoardBeat(title: "New since baseline"), sceneID = try XCTUnwrap(p.whiteboard().beats.first { $0.id == id }?.sceneID)
+        XCTAssertTrue(p.productionSceneChanged(sceneID))
+        p.setRevisionColor(.blue); XCTAssertTrue(p.productionSceneChanged(sceneID))
+        p.startNextRevision(); XCTAssertFalse(p.productionSceneChanged(sceneID))
+        try p.updateScene(id: sceneID, heading: SceneHeading(prefix: "EXT.", location: "RIVER", time: "NIGHT"))
+        XCTAssertTrue(p.productionSceneChanged(sceneID))
+        XCTAssertEqual(try Project(data: p.encoded()), p)
     }
 
 }

@@ -36,6 +36,7 @@ extension Project {
         self = candidate
     }
     @discardableResult public mutating func insertScriptScene(afterSplitting beatID: String, beforeHTML: String, afterHTML: String, heading: String) throws -> String {
+        try DualDialogueImport.validateSplit(first: beforeHTML, second: afterHTML)
         var candidate = self
         var board = try whiteboard()
         guard let index = board.beats.firstIndex(where: { $0.id == beatID }), !board.isLocked(board.beats[index]), !board.beats[index].omitted, !board.isUnused(board.beats[index]), scenes.first(where: { $0.id == board.beats[index].sceneID })?.isTextLocked == false else { throw ProjectError.invalidProject("Select an unlocked active beat") }

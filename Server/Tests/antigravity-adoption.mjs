@@ -36,3 +36,7 @@ const stroke={points:[{x:0,y:0},{x:100,y:100}],width:2},path=[{x:0,y:100},{x:100
 assert.equal(strokeHit(stroke,path,1),true);assert.equal(strokeHit(stroke,[{x:200,y:0}],1),false);
 const board={strokes:[stroke,{points:[{x:500,y:500}],width:2}]};eraseBoardDrawing(board,path,1);assert.equal(board.strokes.length,1);assert.throws(()=>eraseBoardDrawing(board,[{x:NaN,y:0}]));
 console.log('PASS: dual export structure, scene numbers, Tamil, emphasis and crossed-stroke erasing');
+
+const {validateDualSplit}=await import('../Public/dual-dialogue.js');assert.throws(()=>validateDualSplit("<p data-dual-pair='same'>A</p>","<p data-dual-pair='same'>B</p>"),/Unpair/);
+
+const revisions=await import('../Public/production-revision.js'),baseline={project:{beats:[]}};revisions.toggleBaselineLock(baseline);baseline.project.beats.push({id:1,content:'<p>New</p>',slug:{prefix:'INT.',location:'ROOM',time:'DAY'}});assert.equal(revisions.sceneChanged(baseline,1),true);revisions.setRevisionColor(baseline,'Blue');assert.equal(revisions.sceneChanged(baseline,1),true);revisions.startNextRevision(baseline);assert.equal(revisions.sceneChanged(baseline,1),false);baseline.project.beats[0].slug.time='NIGHT';assert.equal(revisions.sceneChanged(baseline,1),true);

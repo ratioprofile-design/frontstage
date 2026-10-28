@@ -62,3 +62,5 @@ export function groupDualParagraphs(nodes){
  }
  return result;
 }
+
+export function validateDualSplit(first,second){const ids=html=>new Set([...html.matchAll(/\bdata-dual-pair\s*=\s*["']([^"']+)["']/gi)].map(m=>m[1])),left=ids(first);if([...ids(second)].some(id=>left.has(id)))throw Error('Unpair the dialogue before splitting inside a speech pair.');}

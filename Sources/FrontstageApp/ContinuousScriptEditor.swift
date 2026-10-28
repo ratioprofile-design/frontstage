@@ -195,7 +195,7 @@ struct ContinuousScriptEditor: NSViewRepresentable {
         text.typingAttributes[.foregroundColor] = theme.ink
         if let writing = text as? WritingTextView {
             writing.revisedScenes = Set(workspace.project.scenes.filter { workspace.project.productionSceneChanged($0.id) }.map { NSDecimalNumber(decimal: $0.id).stringValue })
-            writing.revisionColor = NSColor(boardHex: workspace.project.currentRevision?.color.hexColor ?? "#4A90E2")
+            writing.revisionColor = [.white, .secondWhite].contains(workspace.project.currentRevision?.color ?? .blue) ? theme.ink : NSColor(boardHex: workspace.project.currentRevision?.color.hexColor ?? "#4A90E2")
             DialoguePresentation.refresh(writing); writing.highlightHeading(for: workspace.selectedBoardBeatID) }
     }
     func updateNSView(_ view: NSScrollView, context: Context) {

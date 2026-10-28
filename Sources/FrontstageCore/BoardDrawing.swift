@@ -13,6 +13,8 @@ public enum BoardDrawing {
     public static func hits(_ stroke: BoardStroke, path: [BoardPoint], radius: Double) -> Bool {
         guard !stroke.points.isEmpty, !path.isEmpty, radius.isFinite, radius >= 0 else { return false }
         let limit = radius + stroke.width / 2
+        let sx = stroke.points.map(\.x), sy = stroke.points.map(\.y), px = path.map(\.x), py = path.map(\.y)
+        guard (sx.min()! - limit) <= px.max()!, (sx.max()! + limit) >= px.min()!, (sy.min()! - limit) <= py.max()!, (sy.max()! + limit) >= py.min()! else { return false }
         let ink = stroke.points.count == 1 ? [(stroke.points[0],stroke.points[0])] : Array(zip(stroke.points,stroke.points.dropFirst()))
         let eraser = path.count == 1 ? [(path[0],path[0])] : Array(zip(path,path.dropFirst()))
         return ink.contains { a,b in eraser.contains { c,d in intersects(a,b,c,d) || min(distance(a,c,d),distance(b,c,d),distance(c,a,b),distance(d,a,b)) <= limit } }

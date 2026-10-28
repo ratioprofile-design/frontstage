@@ -29,3 +29,10 @@ export function applyTypography(node,t={}){
 }
 
 export function popupTypography(settings={}){const t={fontName:'Courier',fontSize:12,lineHeight:14,paragraphSpacing:10,...structuredClone(settings)},scale=Math.max(1,15/t.fontSize);t.fontSize*=scale;t.lineHeight*=scale;t.paragraphSpacing*=scale;for(const entry of Object.values(t.elements||{}))if(entry.fontSize)entry.fontSize=Math.max(15,entry.fontSize*scale);return t;}
+
+export function fontAvailable(name){
+ if(!name||['serif','sans-serif','monospace','system-ui'].includes(name.toLowerCase()))return true;
+ const context=document.createElement('canvas').getContext('2d');if(!context)return true;
+ const sample='DOT mmwwii 012345 தமிழ்';
+ return ['monospace','serif','sans-serif'].some(fallback=>{context.font=`72px ${fallback}`;const baseline=context.measureText(sample).width;context.font=`72px ${JSON.stringify(name)},${fallback}`;return Math.abs(context.measureText(sample).width-baseline)>.01;});
+}

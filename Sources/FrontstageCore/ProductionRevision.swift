@@ -70,19 +70,22 @@ public struct ProductionRevision: Codable, Equatable, Sendable, Identifiable {
     public var label: String
     public var isLocked: Bool
     public var sceneBaselineHTML: [String: String]
+    public var sceneBaselineHeadings: [String: String]?
 
     public init(id: String = UUID().uuidString,
                 color: RevisionColor = .white,
                 date: Date = Date(),
                 label: String = "Production Draft",
                 isLocked: Bool = false,
-                sceneBaselineHTML: [String: String] = [:]) {
+                sceneBaselineHTML: [String: String] = [:],
+                sceneBaselineHeadings: [String: String]? = nil) {
         self.id = id
         self.color = color
         self.date = date
         self.label = label
         self.isLocked = isLocked
         self.sceneBaselineHTML = sceneBaselineHTML
+        self.sceneBaselineHeadings = sceneBaselineHeadings
     }
 
     public var headerString: String {
@@ -108,7 +111,7 @@ extension Project {
             }
             let baselines = (obj["sceneBaselineHTML"]?.object ?? [:]).compactMapValues(\.string)
             return ProductionRevision(id: id, color: color, date: Date(timeIntervalSince1970: timestamp),
-                                      label: label, isLocked: isLocked, sceneBaselineHTML: baselines)
+                                      label: label, isLocked: isLocked, sceneBaselineHTML: baselines, sceneBaselineHeadings: obj["sceneBaselineHeadings"]?.object?.compactMapValues(\.string))
         }
         set {
             if let rev = newValue {
@@ -123,6 +126,7 @@ extension Project {
                     "date": .number(Decimal(rev.date.timeIntervalSince1970 * 1000.0)),
                     "sceneBaselineHTML": .object(baselines)
                 ]) { _, new in new }
+                if let headings = rev.sceneBaselineHeadings { fields["sceneBaselineHeadings"] = .object(headings.mapValues { .string($0) }) }
                 state["productionRevision"] = .object(fields)
             } else {
                 state["productionRevision"] = .null
@@ -139,10 +143,13 @@ extension Project {
     }
 
     public func productionSceneChanged(_ sceneID: Decimal) -> Bool {
-        guard let baseline = currentRevision?.sceneBaselineHTML[String(describing: sceneID)],
-              let scene = scenes.first(where: { $0.id == sceneID }) else { return false }
-        return baseline != scene.html
+        guard let revision = currentRevision, let scene = scenes.first(where: { $0.id == sceneID }) else { return false }
+        let key = String(describing: sceneID)
+        guard let baseline = revision.sceneBaselineHTML[key] else { return true }
+        return baseline != scene.html || revision.sceneBaselineHeadings?[key].map { $0 != scene.heading.inlineText } == true
     }
+
+    private var productionHeadingBaseline: [String: String] { Dictionary(uniqueKeysWithValues: scenes.map { (String(describing: $0.id), $0.heading.inlineText) }) }
 
     public mutating func startNextRevision(label customLabel: String? = nil) {
         archiveCurrentProductionRevision()
@@ -152,7 +159,7 @@ extension Project {
         for scene in scenes {
             baselines[String(describing: scene.id)] = scene.html
         }
-        currentRevision = ProductionRevision(color: nextColor, date: Date(), label: label, isLocked: true, sceneBaselineHTML: baselines)
+        currentRevision = ProductionRevision(color: nextColor, date: Date(), label: label, isLocked: true, sceneBaselineHTML: baselines, sceneBaselineHeadings: productionHeadingBaseline)
     }
 
     public mutating func toggleProductionLock() {
@@ -162,17 +169,17 @@ extension Project {
         } else {
             var baselines: [String: String] = [:]
             for scene in scenes { baselines[String(describing: scene.id)] = scene.html }
-            currentRevision = ProductionRevision(color: .white, date: Date(), label: "Production Draft", isLocked: true, sceneBaselineHTML: baselines)
+            currentRevision = ProductionRevision(color: .white, date: Date(), label: "Production Draft", isLocked: true, sceneBaselineHTML: baselines, sceneBaselineHeadings: productionHeadingBaseline)
         }
     }
 
     public mutating func setRevisionColor(_ color: RevisionColor, label customLabel: String? = nil) {
         var baselines = currentRevision?.sceneBaselineHTML ?? [:]
-        if baselines.isEmpty {
+        if currentRevision == nil {
             for scene in scenes { baselines[String(describing: scene.id)] = scene.html }
         }
         let label = customLabel ?? (currentRevision?.label ?? color.label)
-        currentRevision = ProductionRevision(id: currentRevision?.id ?? UUID().uuidString, color: color, date: currentRevision?.date ?? Date(), label: label, isLocked: currentRevision?.isLocked ?? true, sceneBaselineHTML: baselines)
+        currentRevision = ProductionRevision(id: currentRevision?.id ?? UUID().uuidString, color: color, date: currentRevision?.date ?? Date(), label: label, isLocked: currentRevision?.isLocked ?? true, sceneBaselineHTML: baselines, sceneBaselineHeadings: currentRevision == nil ? productionHeadingBaseline : currentRevision?.sceneBaselineHeadings)
     }
 
     public mutating func updateRevisionLabel(_ newLabel: String) {

@@ -438,6 +438,7 @@ extension Project {
 
     @discardableResult
     public mutating func splitBoardBeat(_ id: String, firstHTML: String, secondHTML: String) throws -> String {
+        try DualDialogueImport.validateSplit(first: firstHTML, second: secondHTML)
         if usesOneBeatPerScene {
             guard let beat = try whiteboard().beats.first(where: { $0.id == id }), let scene = scenes.first(where: { $0.id == beat.sceneID }) else { throw ProjectError.sceneNotFound }
             return try insertScriptScene(afterSplitting: id, beforeHTML: firstHTML, afterHTML: secondHTML, heading: scene.heading.inlineText)

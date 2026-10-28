@@ -29,6 +29,7 @@ export function screenplayToolbar(text, changed, editable=true, characters=()=>[
   const format=kind=>transaction(()=>{if(!text.isContentEditable)return;text.focus({preventScroll:true});let node=paragraph();if(node===text){document.execCommand('formatBlock',false,'p');node=paragraph();}if(node&&node!==text){if(kind!=='parenthetical'&&node.classList.contains('sc-parenthetical')&&emptyParenthetical(node.textContent)){const r=document.createRange();r.selectNodeContents(node);getSelection().removeAllRanges();getSelection().addRange(r);document.execCommand('insertText',false,'');}for(const element of elements)node.classList.remove('sc-'+element);node.classList.add('sc-line','sc-'+kind);if(kind==='parenthetical')wrap(node);capitalizeCue(node);select.value=kind;}});
   select.onchange=()=>format(select.value);select.disabled=!editable;select.value='action';bar.append(select);
   for(const command of ['bold','italic','underline']){const b=document.createElement('button');b.textContent=command==='bold'?'B':command==='italic'?'I':'U';b.setAttribute('aria-label',command);b.disabled=!editable;b.onpointerdown=e=>e.preventDefault();b.onclick=()=>{text.focus();document.execCommand(command);changed();};bar.append(b);}
+  const dualButton=document.createElement('button');dualButton.textContent='⇔';dualButton.setAttribute('aria-label','Pair / Unpair Dual Dialogue');dualButton.title='Pair / Unpair Dual Dialogue · Cmd/Ctrl+Shift+L';dualButton.disabled=!editable;dualButton.onpointerdown=e=>e.preventDefault();dualButton.onclick=()=>{try{text.toggleDualDialogue?.();}catch(error){options.status?.(error.message);}};bar.append(dualButton);
   let savedRange;
   const remember=()=>{const selection=window.getSelection();if(selection?.rangeCount && text.contains(selection.anchorNode))savedRange=selection.getRangeAt(0).cloneRange();};
   for(const event of ['keyup','mouseup','blur'])text.addEventListener(event,remember);
@@ -112,7 +113,7 @@ export function screenplayToolbar(text, changed, editable=true, characters=()=>[
   });};
   for(const event of ['input','keyup','click','compositionend'])text.addEventListener(event,followCaret);
   const refresh=()=>{decorateDialogue(text,options.continuationSeed?.()??null,options.continuationFlags?.()??null);layoutDualDialogue(text);};refresh();text.refreshScreenplayPresentation=refresh;
-  text.toggleDualDialogue=()=>transaction(()=>toggleDualDialogue(text));
+  text.toggleDualDialogue=()=>{clearAccepted();completions.close();transaction(()=>toggleDualDialogue(text));};
   const resize=new ResizeObserver(entries=>{const width=entries[0]?.contentRect.width;if(width!==text.dualLayoutWidth){text.dualLayoutWidth=width;layoutDualDialogue(text);}if(!text.isConnected)resize.disconnect();});resize.observe(text);
   bar.editor={dual:()=>text.toggleDualDialogue(),format:kind=>{text.focus();if(savedRange&&text.contains(savedRange.startContainer)){const selection=window.getSelection();selection.removeAllRanges();selection.addRange(savedRange);}format(kind);},inline:command=>{text.focus();if(savedRange&&text.contains(savedRange.startContainer)){const selection=window.getSelection();selection.removeAllRanges();selection.addRange(savedRange);}document.execCommand(command);changed();},remember,refresh};
   return bar;

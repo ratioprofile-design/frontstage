@@ -97,7 +97,10 @@ struct DOTPreferences: View {
     }
     private func fontField(_ label: String, value: String, changed: @escaping (String) -> Void) -> some View {
         VStack(alignment: .leading) {
-            TextField(label, text: Binding(get: { value }, set: changed))
+            HStack {
+                TextField(label, text: Binding(get: { value }, set: changed))
+                Menu("Installed Fonts") { ForEach(NSFontManager.shared.availableFontFamilies.sorted(), id: \.self) { font in Button(font) { changed(font) } } }
+            }
             if !value.isEmpty && NSFont(name: value, size: 12) == nil {
                 Text("\(value) is unavailable; using system monospace. The stored font name is retained.").font(.caption).foregroundStyle(.orange)
             }

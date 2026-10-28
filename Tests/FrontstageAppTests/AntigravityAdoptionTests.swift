@@ -93,6 +93,8 @@ final class AntigravityNativeAdoptionTests: XCTestCase {
             XCTAssertEqual(content.components(separatedBy: "LEFT_UNIQUE").count - 1, 250)
             XCTAssertEqual(content.components(separatedBy: "RIGHT_UNIQUE").count - 1, 40)
             XCTAssertTrue(content.contains("AFTER_UNIQUE"))
+            XCTAssertTrue(content.contains("(MORE)")); XCTAssertTrue(content.contains("(CONT'D)"))
+            XCTAssertFalse(content.contains("(CONT'D) (CONT'D)"))
             XCTAssertTrue(pdf.page(at: 0)?.string?.contains("ABI") == true)
         }
     }

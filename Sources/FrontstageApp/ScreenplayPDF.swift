@@ -118,6 +118,7 @@ enum ScreenplayPDF {
         let container: NSTextContainer
         let glyphs: NSRange
         let range: NSRange
+        let headerReserve: CGFloat
     }
     private static func dualPages(_ original: NSAttributedString, paper: ScreenplayPaper) throws -> [TextKitPage] {
         var starts = [0]
@@ -133,17 +134,42 @@ enum ScreenplayPDF {
             let manager = NSLayoutManager(); manager.usesFontLeading = true; storage.addLayoutManager(manager)
             var laidOut = 0
             while laidOut < storage.length {
-                let container = NSTextContainer(containerSize: NSSize(width: paper.contentWidth, height: paper.contentHeight))
+                let headerReserve: CGFloat = manager.textContainers.isEmpty ? 0 : 28
+                let container = NSTextContainer(containerSize: NSSize(width: paper.contentWidth, height: paper.contentHeight - headerReserve - 14))
                 container.lineFragmentPadding = 0; manager.addTextContainer(container); manager.ensureLayout(for: container)
                 let glyphs = manager.glyphRange(for: container), range = manager.characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)
                 guard range.length > 0, NSMaxRange(range) > laidOut else { throw ScreenplayPDFError.cannotLayOut }
-                pages.append(TextKitPage(storage: storage, manager: manager, container: container, glyphs: glyphs, range: NSRange(location: chunk.location + range.location, length: range.length)))
+                pages.append(TextKitPage(storage: storage, manager: manager, container: container, glyphs: glyphs, range: NSRange(location: chunk.location + range.location, length: range.length), headerReserve: headerReserve))
                 laidOut = NSMaxRange(range)
                 guard pages.count < 10000 else { throw ScreenplayPDFError.cannotLayOut }
             }
         }
         return pages
     }
+    private static func dualMarkers(_ page: TextKitPage) -> [(side: String, cue: String, head: Bool, foot: Bool)] {
+        struct Speech { var side: String; var cue = ""; var visible = false; var cueVisible = false; var future = false }
+        var speeches = [String: Speech](), offset = 0
+        let storage = page.storage, source = storage.string as NSString
+        let pageIndex = page.manager.textContainers.firstIndex { $0 === page.container } ?? 0
+        while offset < storage.length {
+            let range = source.paragraphRange(for: NSRange(location: offset, length: 0))
+            defer { offset = NSMaxRange(range) }
+            guard let pair = storage.attribute(.screenplayDualPair, at: offset, effectiveRange: nil) as? String,
+                  let side = storage.attribute(.screenplayDualDialogue, at: offset, effectiveRange: nil) as? String else { continue }
+            let owner = storage.attribute(NSAttributedString.Key("FrontstageBeatOwner"), at: offset, effectiveRange: nil) as? String ?? "popup"
+            let key = owner + ":" + pair + ":" + side, element = ScreenplayTextCodec.element(in: storage, at: offset)
+            var speech = speeches[key] ?? Speech(side: side)
+            if element == .character { speech.cue = CharacterCue(source.substring(with: range)).withoutContinuation }
+            let glyphs = page.manager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            page.manager.enumerateLineFragments(forGlyphRange: glyphs) { _, _, container, _, _ in
+                if container === page.container { speech.visible = true; if element == .character { speech.cueVisible = true } }
+                if let i = page.manager.textContainers.firstIndex(where: { $0 === container }), i > pageIndex { speech.future = true }
+            }
+            speeches[key] = speech
+        }
+        return speeches.values.filter { $0.visible && !$0.cue.isEmpty }.map { ($0.side, $0.cue, !$0.cueVisible && page.headerReserve > 0, $0.future) }
+    }
+
     private static func renderDualText(_ text: NSAttributedString, title: String, paper: ScreenplayPaper, revisionHeader: String?) throws -> RenderedScreenplay {
         let laidOut = try dualPages(text, paper: paper)
         let output = CFDataCreateMutable(nil, 0)!
@@ -152,11 +178,17 @@ enum ScreenplayPDF {
         guard let context = CGContext(consumer: consumer, mediaBox: &bounds, [kCGPDFContextTitle as String: title, kCGPDFContextCreator as String: "DOT"] as CFDictionary) else { throw ScreenplayPDFError.cannotCreatePDF }
         for (index, page) in laidOut.enumerated() {
             context.beginPDFPage(nil); context.setFillColor(NSColor.white.cgColor); context.fill(bounds)
-            context.saveGState(); context.translateBy(x: paper.leftMargin, y: paper.height - paper.topMargin); context.scaleBy(x: 1, y: -1)
+            context.saveGState(); context.translateBy(x: paper.leftMargin, y: paper.height - paper.topMargin - page.headerReserve); context.scaleBy(x: 1, y: -1)
             NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
             page.manager.drawBackground(forGlyphRange: page.glyphs, at: .zero)
             page.manager.drawGlyphs(forGlyphRange: page.glyphs, at: .zero)
             NSGraphicsContext.restoreGraphicsState(); context.restoreGState()
+            for marker in dualMarkers(page) {
+                let column = (paper.contentWidth - 24) / 2
+                let x = paper.leftMargin + (marker.side == "right" ? column + 24 : 0) + column * WorkspaceDesign.characterIndent / 100
+                if marker.head { drawMarker(marker.cue + " (CONT'D)", x: x, y: paper.height - paper.topMargin - 12, in: context, paper: paper, maxWidth: column * (1 - WorkspaceDesign.characterIndent / 100)) }
+                if marker.foot { drawMarker("(MORE)", x: x, y: paper.bottomMargin + 2, in: context, paper: paper) }
+            }
             if let revisionHeader { drawMarker(revisionHeader, x: paper.leftMargin, y: paper.height - 42, in: context, paper: paper) }
             if index > 0 { drawMarker("\(index + 1).", x: paper.width - paper.rightMargin - 24, y: paper.height - 42, in: context, paper: paper) }
             context.endPDFPage()
@@ -239,11 +271,11 @@ enum ScreenplayPDF {
         return nil
     }
 
-    private static func drawMarker(_ value: String, x: CGFloat, y: CGFloat, in context: CGContext, paper: ScreenplayPaper) {
+    private static func drawMarker(_ value: String, x: CGFloat, y: CGFloat, in context: CGContext, paper: ScreenplayPaper, maxWidth: CGFloat? = nil) {
         let label = NSAttributedString(string: value, attributes:
             ScreenplayTypography.attributes(.character, width: paper.contentWidth, printing: true))
         let line = CTLineCreateWithAttributedString(label as CFAttributedString)
-        let width = paper.width - paper.rightMargin - x
+        let width = min(maxWidth ?? .greatestFiniteMagnitude, paper.width - paper.rightMargin - x)
         let ellipsis = CTLineCreateWithAttributedString(NSAttributedString(string: "…", attributes:
             ScreenplayTypography.attributes(.character, width: paper.contentWidth, printing: true)) as CFAttributedString)
         let fitted = CTLineCreateTruncatedLine(line, width, .end, ellipsis) ?? line
