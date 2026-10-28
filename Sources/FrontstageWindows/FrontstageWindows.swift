@@ -344,6 +344,14 @@ struct FrontstageWindows {
         }
         guard let hwnd else { return }
         ShowWindow(hwnd, SW_SHOW); UpdateWindow(hwnd)
+        if CommandLine.arguments.count == 2, !CommandLine.arguments[1].hasPrefix("--") {
+            do {
+                let loaded = try Project.load(from: URL(fileURLWithPath: CommandLine.arguments[1])); _ = try loaded.whiteboard()
+                state.project = loaded; state.checkpoint = Project(); state.saveURL = nil
+                state.selected = state.board.orderedBeats.first?.id; state.status = "Imported copy; choose a new save destination"
+                InvalidateRect(hwnd, nil, false)
+            } catch { state.message(error.localizedDescription) }
+        }
         if CommandLine.arguments.count > 2 && CommandLine.arguments[1] == "--ui-smoke" {
             do {
                 state.addBeat(newBlock: true)

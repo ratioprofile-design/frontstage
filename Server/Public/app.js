@@ -487,7 +487,7 @@ function detachTimeline(){
   const target=window.open('about:blank','frontstage-timeline','popup,width=1200,height=720');
   if(!target){status('Allow popups for DOT to open the timeline window.');return;}
   saveTimelinePreferences();Object.assign(timelineState,loadTimelinePreferences(true),{expanded:true,lastSelected:null});
-  timelineWindow=target;target.document.title='Timeline · '+doc.project.name;
+  timelineWindow=target;target.document.title='DOT · Timeline · '+doc.name;
   for(const sheet of document.querySelectorAll('link[rel="stylesheet"]')){const link=target.document.createElement('link');link.rel='stylesheet';link.href=sheet.href;target.document.head.append(link);}
   const style=target.document.createElement('style');style.textContent='html,body{margin:0;height:100%;display:block!important}#detached-timeline{height:100vh!important;width:100vw;display:flex;flex-direction:column}.story-timeline-scroll{flex:1}';target.document.head.append(style);
   timelineWindowRoot=target.document.createElement('div');timelineWindowRoot.id='detached-timeline';target.document.body.append(timelineWindowRoot);

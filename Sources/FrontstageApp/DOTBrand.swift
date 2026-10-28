@@ -3,6 +3,7 @@ import AppKit
 import SwiftUI
 
 /// Product presentation is independent of the stable bundle/storage/project identities.
+@MainActor
 enum DOTTheme {
     static var accent: Color { Color(nsColor: .controlAccentColor) }
     static func iconResource(for appearance: NSAppearance) -> String {
