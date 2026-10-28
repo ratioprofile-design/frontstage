@@ -72,7 +72,7 @@ enum ScreenplayPDF {
         guard let consumer = CGDataConsumer(data: output) else { throw ScreenplayPDFError.cannotCreatePDF }
         var bounds = CGRect(x: 0, y: 0, width: paper.width, height: paper.height)
         guard let context = CGContext(consumer: consumer, mediaBox: &bounds,
-            [kCGPDFContextTitle as String: title, kCGPDFContextCreator as String: "Frontstage"] as CFDictionary) else {
+            [kCGPDFContextTitle as String: title, kCGPDFContextCreator as String: "DOT"] as CFDictionary) else {
             throw ScreenplayPDFError.cannotCreatePDF
         }
         let framesetter = CTFramesetterCreateWithAttributedString(text as CFAttributedString)

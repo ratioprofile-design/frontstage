@@ -77,8 +77,8 @@ struct WhiteboardWorkspace: View {
     private var bottomTools: some View {
         ScrollView(.horizontal, showsIndicators: true) {
         HStack(spacing: 12) {
-            Button { drawing = false } label: { Image(systemName: "cursorarrow") }.tint(drawing ? .gray : .cyan)
-            Button { drawing.toggle() } label: { Image(systemName: "pencil.tip") }.tint(drawing ? .cyan : .gray)
+            Button { drawing = false } label: { Image(systemName: "cursorarrow") }.tint(drawing ? .gray : DOTTheme.accent)
+            Button { drawing.toggle() } label: { Image(systemName: "pencil.tip") }.tint(drawing ? DOTTheme.accent : .gray)
                 .help("Draw board annotations")
             Button { fitRequest += 1 } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }.help("Fit selection or board")
             Toggle("Push", isOn: $pushing).toggleStyle(.button).help("Push space open or closed; also Command-drag on the board")

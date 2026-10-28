@@ -1,3 +1,4 @@
+import {parseProjectFile,projectFilename} from './project-files.js';
 import {insertScriptScene} from './continuous-script.js';
 import {isSceneModel,syncSceneMetadata,validateSceneModel,convertSceneCopy,duplicateBeat} from './scene-model.js';
 import {pullOutBeats,validateInclusion} from './script-inclusion.js';
@@ -75,7 +76,7 @@ function cleanHTML(source) {
 function plain(html) { const node = document.createElement('div'); node.innerHTML = cleanHTML(html); return node.textContent; }
 async function api(path, method = 'GET', body) {
   const response = await fetch(apiOrigin + path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
-  if (!(response.headers.get('Content-Type') || '').includes('application/json') && response.status !== 204) throw Error('Shared service unavailable. Enter your Frontstage server address to sign in.');
+  if (!(response.headers.get('Content-Type') || '').includes('application/json') && response.status !== 204) throw Error('Shared service unavailable. Enter your DOT server address to sign in.');
   const data = response.status === 204 ? null : await response.json();
   if (!response.ok && response.status !== 409) throw Error(data?.reason || `Request failed (${response.status})`);
   return { data, status: response.status };
@@ -484,7 +485,7 @@ function renderProperties() {
 function detachTimeline(){
   if(timelineWindow&&!timelineWindow.closed){timelineWindow.focus();return;}
   const target=window.open('about:blank','frontstage-timeline','popup,width=1200,height=720');
-  if(!target){status('Allow popups for Frontstage to open the timeline window.');return;}
+  if(!target){status('Allow popups for DOT to open the timeline window.');return;}
   saveTimelinePreferences();Object.assign(timelineState,loadTimelinePreferences(true),{expanded:true,lastSelected:null});
   timelineWindow=target;target.document.title='Timeline · '+doc.project.name;
   for(const sheet of document.querySelectorAll('link[rel="stylesheet"]')){const link=target.document.createElement('link');link.rel='stylesheet';link.href=sheet.href;target.document.head.append(link);}
@@ -764,7 +765,7 @@ $('canvas').addEventListener('contextmenu',event=>{
   menu.onkeydown=e=>{const buttons=[...menu.querySelectorAll('button:not(:disabled)')],index=buttons.indexOf(document.activeElement);if(e.key==='Escape'){closeBoardMenu();$('canvas').focus();}if(['ArrowDown','ArrowUp'].includes(e.key)){e.preventDefault();buttons[(index+(e.key==='ArrowDown'?1:buttons.length-1))%buttons.length]?.focus();}};
 });
 document.addEventListener('pointerdown',event=>{if(boardMenu&&!boardMenu.contains(event.target))closeBoardMenu();});window.addEventListener('resize',closeBoardMenu);
-function download() { if (!doc) return; const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' }); const link = element('a'); link.href = URL.createObjectURL(blob); link.download = `${doc.name || 'Story'}.frontstage`; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 1000); }
+function download() { if (!doc) return; const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' }); const link = element('a'); link.href = URL.createObjectURL(blob); link.download = projectFilename(doc.name); link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 1000); }
 async function authenticate(signup = false) {
   const form = new FormData($('login')); $('auth-error').textContent = '';
   try { setServer(); const { data } = await api(`/api/${signup ? 'signup' : 'login'}`, 'POST', Object.fromEntries(form)); token = data.token; $('login').reset(); $('server-address').value = apiOrigin; await loadProjects(); status(`Signed in as ${data.username}`); }
@@ -773,7 +774,7 @@ async function authenticate(signup = false) {
 $('login').onsubmit = e => { e.preventDefault(); authenticate(); }; $('signup').onclick = () => authenticate(true);
 $('local-mode').onclick = () => loadLocalProjects().catch(e => status(e.message));
 $('new-project').onclick = async () => { const name = prompt('Project name', 'Untitled Story'); if (!name) return; try { const document = emptyDocument(name); if (localMode) { await createLocalProject(name, document); return; } const { data } = await api('/api/projects', 'POST', { document }); await openProject(data.id); } catch (error) { status(error.message); } };
-$('import-project').onchange = async e => { try { const file = e.target.files[0]; if (!file) return; const document = initializeBoard(JSON.parse(await file.text())); if (localMode) { await createLocalProject(document.name, document); return; } const { data } = await api('/api/projects', 'POST', { document }); await openProject(data.id); } catch (error) { status(error.message); } };
+$('import-project').onchange = async e => { try { const file = e.target.files[0]; if (!file) return; const document = initializeBoard(parseProjectFile(await file.text(),file.name)); if (localMode) { await createLocalProject(document.name, document); return; } const { data } = await api('/api/projects', 'POST', { document }); await openProject(data.id); } catch (error) { status(error.message); } };
 $('logout').onclick = async () => { await saveLocal(); ++documentEpoch; clearTimeout(timer); if (token) { try { await api('/api/logout', 'POST'); } catch {} } token = ''; current = null; doc = null; dirty = false; localMode = false; pendingConflict = null; $('conflict').hidden = true; $('workspace').hidden = true; $('project-toolbar').hidden = true; $('projects').hidden = true; $('account').hidden = false; closeEditors(); status('Local projects and drafts remain in this browser'); };
 $('back').onclick = async () => { await saveLocal(); closeEditors(); editorID = null; (localMode ? loadLocalProjects() : loadProjects()).catch(e => status(e.message)); };
 $('save').onclick = sync; $('download').onclick = download; $('export-conflict').onclick = download;

@@ -26,7 +26,7 @@ final class SharedProjectClient: ObservableObject {
     @Published private(set) var linked: RemoteProject?
     @Published private(set) var conflict: RemoteProject?
     @Published private(set) var conflicts: [String] = []
-    @Published var status = "Connect to your Frontstage server. Local editing works without a connection."
+    @Published var status = "Connect to your DOT server. Local editing works without a connection."
     private var token = ""
     private var base: JSONValue?
 

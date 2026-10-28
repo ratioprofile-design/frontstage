@@ -52,7 +52,7 @@ export function mountWorkspaces(api) {
     $('workspace').dataset.page=mode;$('workspace').classList.toggle('document-mode',mode!=='board');
     $('board-shell').hidden=mode!=='board';root.hidden=mode==='board';$('project-toolbar').hidden=false;
     renderSidebar();if(writing)return;writePanels?.destroy();writePanels=null;root.replaceChildren();
-    $('scenes-toggle').textContent=mode==='edit'?'Scenes':'Script';const title=design.pages.find(p=>p.id===mode).title;root.setAttribute('aria-label',title);document.title=`${doc().name||'Frontstage'} · ${title}`;
+    $('scenes-toggle').textContent=mode==='edit'?'Scenes':'Script';const title=design.pages.find(p=>p.id===mode).title;root.setAttribute('aria-label',title);document.title=`${doc().name||'DOT'} · ${title}`;
     try { ({edit:writePage,pages:pagesPage,revisions:revisionsPage,people:peoplePage,breakdown:breakdownPage,production:productionPage,writingTools:toolsPage,studio:studioPage,shared:sharedPage}[mode])?.(); }
     catch(e){root.replaceChildren(empty('This page could not be opened',e.message));api.status(e.message);}
   }

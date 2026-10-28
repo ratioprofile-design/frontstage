@@ -1,0 +1,20 @@
+/* Semantic theme tokens: future themes can override these without editing story colors. */
+:root{
+  --dot-accent:Highlight;
+  --dot-on-accent:HighlightText;
+  --dot-selection-tint:color-mix(in srgb,var(--dot-accent) 15%,transparent);
+  --fs-accent:var(--dot-accent);
+  accent-color:var(--dot-accent);
+}
+@supports (color:AccentColor) and (color:AccentColorText){
+  :root{--dot-accent:AccentColor;--dot-on-accent:AccentColorText;}
+}
+.dot-wordmark{display:block;width:86px;height:25px;object-fit:contain;flex:none}
+#scene-sidebar .selected,.workspace-list .selected,
+.screenplay-element-bar button[aria-pressed=true],
+.autofill-list button[aria-selected=true]{
+  background:var(--dot-accent);color:var(--dot-on-accent);
+}
+.scene-summary-card.selected{border-color:var(--dot-accent)}
+.side-script-text.active-script-beat{box-shadow:-4px 0 0 var(--dot-accent)}
+.continuous-editor>[data-active-heading=true]{background-color:var(--dot-selection-tint)}

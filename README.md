@@ -1,4 +1,4 @@
-# Frontstage
+# DOT
 
 A native Swift macOS writing and production app with a whiteboard-first story workspace. All development is in [ratioprofile-design/frontstage](https://github.com/ratioprofile-design/frontstage); the original Backstage repository is unchanged.
 
@@ -6,14 +6,14 @@ The whiteboard and floating beat editor are the primary workflow. This is a work
 
 ## Preview
 
-On [GitHub Actions](https://github.com/ratioprofile-design/frontstage/actions/workflows/swift.yml), choose a successful **Swift** run and download **Frontstage-macOS-development** while signed into GitHub. Unzip the download, then the enclosed `Frontstage-macOS.zip`, and open `Frontstage.app`. Requires macOS 14+. These are ad-hoc signed development builds; Developer ID distribution/notarization is pending.
+On [GitHub Actions](https://github.com/ratioprofile-design/frontstage/actions/workflows/swift.yml), choose a successful **Swift** run and download **DOT-macOS-development** while signed into GitHub. Unzip the download, then the enclosed `DOT-macOS.zip`, and open `DOT.app`. Requires macOS 14+. These are ad-hoc signed development builds; Developer ID distribution/notarization is pending.
 
 To build on a Mac with Swift 6 / Xcode 16+:
 
 ```sh
 swift test
 ./scripts/build-macos-app.sh
-open build/Frontstage.app
+open build/DOT.app
 ```
 
 The bundle contains arm64 and x86_64 executables. Linux runs the portable tests and server; it cannot display the Mac app.
@@ -54,3 +54,11 @@ Mac and Windows clients are Swift executables without an embedded web runtime; t
 Windows development artifacts are on [the Windows workflow](https://github.com/ratioprofile-design/frontstage/actions/workflows/windows.yml). The Windows preview has plain-text snippets and a subset of the Mac workspace; it is not yet a complete Windows release.
 
 [Release gates](docs/RELEASE.md) cover Apple signing, hosting, installation, accessibility and remaining client parity.
+
+## DOT branding and project compatibility
+
+DOT saves new projects as `.dot` and continues to open `.frontstage` projects. Word templates also use `.dot`; DOT checks the file contents and never treats a Word template as a project. Internal bundle, storage, recovery, Keychain and project-format identifiers retain their original names so existing data remains accessible. The repository and website address remain unchanged.
+
+Icons follow system appearance; active controls use the system accent (browser system highlight when the exact OS accent is unavailable). Paper themes and user-assigned story colors are independent. Future themes can use the semantic `--dot-accent`, `--dot-on-accent` and `--dot-selection-tint` tokens; this release does not load community plugins.
+
+The supplied originals and their hashes live in `Resources/Brand`. To regenerate resized platform assets without redrawing the artwork, install Pillow and run `python3 scripts/build-brand-assets.py`. The Dock filenames supplied by the owner are reversed relative to their artwork; `artwork.json` records the explicit mapping.

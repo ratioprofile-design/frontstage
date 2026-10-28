@@ -1,9 +1,9 @@
 name: Windows native client
 on:
   push:
-    paths: ['Sources/FrontstageWindows/**', 'Sources/FrontstageCore/**', 'Tests/FrontstageCoreTests/**', 'Package.swift', '.github/workflows/windows.yml']
+    paths: ['Sources/FrontstageWindows/**', 'Sources/FrontstageCore/**', 'Tests/FrontstageCoreTests/**', 'Package.swift', 'Resources/Brand/**', '.github/workflows/windows.yml']
   pull_request:
-    paths: ['Sources/FrontstageWindows/**', 'Sources/FrontstageCore/**', 'Tests/FrontstageCoreTests/**', 'Package.swift', '.github/workflows/windows.yml']
+    paths: ['Sources/FrontstageWindows/**', 'Sources/FrontstageCore/**', 'Tests/FrontstageCoreTests/**', 'Package.swift', 'Resources/Brand/**', '.github/workflows/windows.yml']
 permissions:
   contents: read
 jobs:
@@ -27,7 +27,41 @@ jobs:
         shell: pwsh
         run: |
           swift --version
-          swift build --product FrontstageWindows -c release -j 2 2>&1 | Tee-Object windows-build.log
+          New-Item -ItemType Directory -Force build | Out-Null
+          $rc = Get-ChildItem 'C:/Program Files (x86)/Windows Kits/10/bin/*/x64/rc.exe' | Sort-Object FullName -Descending | Select-Object -First 1
+          if (!$rc) { throw 'Windows resource compiler is missing' }
+          $light = (Resolve-Path Resources/Brand/dot-light.ico).Path.Replace('\','/')
+          $dark = (Resolve-Path Resources/Brand/dot-dark.ico).Path.Replace('\','/')
+          @"
+          1 ICON "$light"
+          2 ICON "$dark"
+          1 VERSIONINFO
+          FILEVERSION 0,1,0,0
+          PRODUCTVERSION 0,1,0,0
+          FILEOS 0x40004
+          FILETYPE 0x1
+          BEGIN
+            BLOCK "StringFileInfo"
+            BEGIN
+              BLOCK "040904B0"
+              BEGIN
+                VALUE "CompanyName", "Ratioprofile Design"
+                VALUE "FileDescription", "DOT"
+                VALUE "ProductName", "DOT"
+                VALUE "FileVersion", "0.1.0"
+                VALUE "ProductVersion", "0.1.0"
+                VALUE "OriginalFilename", "DOT.exe"
+              END
+            END
+            BLOCK "VarFileInfo"
+            BEGIN
+              VALUE "Translation", 0x409, 1200
+            END
+          END
+          "@ | Set-Content build/DOT.rc
+          & $rc.FullName /nologo /fo build/DOT.res build/DOT.rc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          swift build --product FrontstageWindows -c release -j 2 -Xlinker "$PWD/build/DOT.res" 2>&1 | Tee-Object windows-build.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Test shared model on Windows
         shell: pwsh
@@ -39,19 +73,20 @@ jobs:
       - name: Smoke native popup and project save
         shell: pwsh
         run: |
-          .build/release/FrontstageWindows.exe --ui-smoke build/windows-ui-sample.frontstage 2>&1 | Tee-Object windows-ui.log
+          .build/release/FrontstageWindows.exe --ui-smoke build/windows-ui-sample.dot 2>&1 | Tee-Object windows-ui.log
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Collect development executable and runtime
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force build/Frontstage-Windows | Out-Null
-          Copy-Item .build/release/FrontstageWindows.exe build/Frontstage-Windows/
+          New-Item -ItemType Directory -Force build/DOT-Windows | Out-Null
+          Copy-Item .build/release/FrontstageWindows.exe build/DOT-Windows/DOT.exe
+          if ((Get-Item build/DOT-Windows/DOT.exe).VersionInfo.ProductName -ne 'DOT') { throw 'DOT executable metadata is missing' }
           foreach ($directory in ($env:Path -split ';')) {
             if ($directory -and (Test-Path (Join-Path $directory 'swiftCore.dll'))) {
-              Copy-Item (Join-Path $directory '*.dll') build/Frontstage-Windows/ -Force
+              Copy-Item (Join-Path $directory '*.dll') build/DOT-Windows/ -Force
             }
           }
-          Compress-Archive -Path build/Frontstage-Windows -DestinationPath build/Frontstage-Windows.zip
+          Compress-Archive -Path build/DOT-Windows -DestinationPath build/DOT-Windows.zip
       - name: Report build failures
         if: failure()
         shell: pwsh
@@ -66,14 +101,14 @@ jobs:
           if (Test-Path windows-ui.log) { Get-Content windows-ui.log | Select-Object -Last 15 | ForEach-Object { Write-Output "::error::$_" } }
       - uses: actions/upload-artifact@v4
         with:
-          name: Frontstage-Windows-development
-          path: build/Frontstage-Windows.zip
+          name: DOT-Windows-development
+          path: build/DOT-Windows.zip
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: Frontstage-Windows-validation
+          name: DOT-Windows-validation
           path: |
             windows-build.log
             windows-tests.log
             windows-ui.log
-            build/windows-ui-sample.frontstage
+            build/windows-ui-sample.dot

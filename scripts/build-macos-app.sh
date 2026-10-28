@@ -9,10 +9,12 @@ swift build -c release --product Frontstage --arch arm64 --scratch-path .build/m
 swift build -c release --product Frontstage --arch x86_64 --scratch-path .build/mac-x86_64
 arm_path="$(swift build -c release --arch arm64 --scratch-path .build/mac-arm64 --show-bin-path)"
 intel_path="$(swift build -c release --arch x86_64 --scratch-path .build/mac-x86_64 --show-bin-path)"
-app_path="$PWD/build/Frontstage.app"
+app_path="$PWD/build/DOT.app"
 mkdir -p "$app_path/Contents/MacOS" "$app_path/Contents/Resources"
-xcrun lipo -create "$arm_path/Frontstage" "$intel_path/Frontstage" -output "$app_path/Contents/MacOS/Frontstage"
-xcrun lipo "$app_path/Contents/MacOS/Frontstage" -verify_arch arm64 x86_64
+xcrun lipo -create "$arm_path/Frontstage" "$intel_path/Frontstage" -output "$app_path/Contents/MacOS/DOT"
+xcrun lipo "$app_path/Contents/MacOS/DOT" -verify_arch arm64 x86_64
+cp Resources/Brand/dot-light.icns "$app_path/Contents/Resources/DOT.icns"
+cp Resources/Brand/dot-app-light.png Resources/Brand/dot-app-dark.png Resources/Brand/wordmark-light.png Resources/Brand/wordmark-dark.png "$app_path/Contents/Resources/"
 cp Resources/Info.plist "$app_path/Contents/Info.plist"
 # Release identities enable hardened runtime signing; default artifacts remain development builds.
 if [[ -n "${FRONTSTAGE_SIGNING_IDENTITY:-}" ]]; then
@@ -22,5 +24,8 @@ else
 fi
 plutil -lint "$app_path/Contents/Info.plist"
 codesign --verify --strict "$app_path"
-ditto -c -k --keepParent "$app_path" build/Frontstage-macOS.zip
+test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$app_path/Contents/Info.plist")" = DOT
+test -f "$app_path/Contents/Resources/DOT.icns"
+test -f "$app_path/Contents/MacOS/DOT"
+ditto -c -k --keepParent "$app_path" build/DOT-macOS.zip
 echo "Built $app_path"

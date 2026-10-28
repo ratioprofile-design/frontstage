@@ -27,8 +27,13 @@ try {
   if (staticMode) {
     const types = { 'index.html': 'text/html', 'style.css': 'text/css', 'app.js': 'application/javascript', 'merge.js': 'application/javascript', 'board-operations.js': 'application/javascript', 'story-timeline.js': 'application/javascript', 'config.js': 'application/javascript', 'sw.js': 'application/javascript', 'workspace-design.js': 'application/javascript', 'workspace-design.css': 'text/css', 'workspace-model.js': 'application/javascript', 'workspaces.js': 'application/javascript', 'pagination.js': 'application/javascript', 'workspaces.css': 'text/css', 'screenplay-editor.js': 'application/javascript', 'scene-model.js':'application/javascript','script-inclusion.js':'application/javascript','continuous-script.js':'application/javascript','live-markdown.js':'application/javascript','write-panels.js':'application/javascript', 'write-panel-model.js':'application/javascript', 'script-filter.js': 'application/javascript', 'bamini.js': 'application/javascript' };
     types['dialogue-rules.js'] = 'application/javascript';
+    for(const file of ['branding.js','project-files.js'])types[file]='application/javascript';
+    types['branding.css']='text/css';
+    for(const file of ['manifest-light.json','manifest-dark.json'])types[file]='application/manifest+json';
+    types['favicon.ico']='image/x-icon';
     staticServer = createServer(async (request, response) => {
       const file = request.url === '/' ? 'index.html' : request.url.slice(1);
+      if(file.startsWith('brand/')&&/^[a-z0-9/-]+\.png$/.test(file))types[file]='image/png';
       if (!types[file]) { response.writeHead(404); response.end(); return; }
       try { response.setHeader('Content-Type', types[file]); response.end(await readFile(path.resolve(root, '../build/web', file))); }
       catch { response.writeHead(500); response.end('Static build missing'); }

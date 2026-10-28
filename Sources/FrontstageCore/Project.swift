@@ -9,9 +9,9 @@ public enum ProjectError: Error, LocalizedError, Equatable {
     public var errorDescription: String? {
         switch self {
         case .invalidProject(let reason): return "Invalid project: \(reason)"
-        case .unsupportedVersion(let version): return "Frontstage format \(version) requires a newer app."
+        case .unsupportedVersion(let version): return "DOT project format \(version) requires a newer app."
         case .sceneNotFound: return "The selected scene no longer exists."
-        case .legacyDestination: return "Save a new .frontstage file; legacy .backstage files are import-only."
+        case .legacyDestination: return "Save a new .dot project; legacy .backstage files are import-only."
         }
     }
 }
@@ -175,14 +175,24 @@ public struct Project: Equatable, Sendable {
     }
 
     public static func load(from url: URL) throws -> Project {
-        try Project(data: Data(contentsOf: url), fallbackName: url.deletingPathExtension().lastPathComponent)
+        let data = try Data(contentsOf: url)
+        if url.pathExtension.lowercased() == "dot" {
+            guard let envelope = try? JSONDecoder().decode(JSONValue.self, from: data).object,
+                  envelope["format"] == .string("frontstage"), envelope["project"]?.object != nil else {
+                throw ProjectError.invalidProject("This .dot file is not a DOT project. Word templates are not supported.")
+            }
+        }
+        return try Project(data: data, fallbackName: url.deletingPathExtension().lastPathComponent)
     }
 
     public func save(to url: URL) throws {
-        guard url.pathExtension.lowercased() == "frontstage" else { throw ProjectError.legacyDestination }
+        guard ["dot", "frontstage"].contains(url.pathExtension.lowercased()) else { throw ProjectError.legacyDestination }
         // Resolve symlinks too: a .frontstage alias must not overwrite a .backstage source.
         let resolved = url.resolvingSymlinksInPath()
-        guard resolved.pathExtension.lowercased() == "frontstage" else { throw ProjectError.legacyDestination }
+        guard ["dot", "frontstage"].contains(resolved.pathExtension.lowercased()) else { throw ProjectError.legacyDestination }
+        if resolved.pathExtension.lowercased() == "dot", FileManager.default.fileExists(atPath: resolved.path) {
+            _ = try Self.load(from: resolved) // Never overwrite a Word template sharing this extension.
+        }
         try encoded().write(to: resolved, options: .atomic)
     }
 }

@@ -23,6 +23,9 @@ jobs:
             npm install --prefix Server/Tests --no-save --no-package-lock playwright@1.56.1
             Server/Tests/node_modules/.bin/playwright install chromium
             node scripts/generate-workspace-design.mjs --check
+            node scripts/build-web.mjs
+            node Server/Tests/dot-branding.mjs
+            node Server/Tests/dot-branding-browser.mjs
             node Server/Tests/screenplay-writing-rules.mjs
             node Server/Tests/story-timeline.mjs
             node Server/Tests/workspace-model.mjs
@@ -79,12 +82,12 @@ jobs:
         run: python3 scripts/report-tests.py --build
       - uses: actions/upload-artifact@v4
         with:
-          name: Frontstage-macOS-development
-          path: build/Frontstage-macOS.zip
+          name: DOT-macOS-development
+          path: build/DOT-macOS.zip
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: Frontstage-screenplay-validation
+          name: DOT-screenplay-validation
           path: |
             build/test-results.xml
             build/test.log
@@ -94,5 +97,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: Frontstage-page-parity
+          name: DOT-page-parity
           path: build/parity/

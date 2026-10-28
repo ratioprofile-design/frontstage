@@ -1,4 +1,4 @@
-import { mkdir, cp, writeFile, rm, readFile } from 'node:fs/promises';
+import { mkdir, cp, writeFile, rm, readFile, readdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -18,9 +18,19 @@ await mkdir(output, { recursive: true });
 await cp(path.join(root, 'Server/Public'), output, { recursive: true });
 await writeFile(path.join(output, 'config.js'), `export const apiOrigin = ${JSON.stringify(origin)};\n`);
 const hash = createHash('sha256');
-for (const file of ['index.html', 'app.js', 'merge.js', 'board-operations.js', 'story-timeline.js', 'config.js', 'style.css', 'workspace-design.js', 'workspace-design.css', 'workspace-model.js', 'workspaces.js', 'pagination.js', 'workspaces.css', 'screenplay-editor.js', 'dialogue-rules.js', 'scene-model.js', 'script-inclusion.js', 'continuous-script.js', 'live-markdown.js', 'write-panels.js', 'write-panel-model.js', 'script-filter.js', 'bamini.js']) {
-  hash.update(file); hash.update(await readFile(path.join(output, file)));
+async function files(directory,prefix=''){
+  const result=[];
+  for(const entry of await readdir(directory,{withFileTypes:true})){
+    const name=prefix+entry.name;
+    if(entry.isDirectory())result.push(...await files(path.join(directory,entry.name),name+'/'));
+    else if(name!=='sw.js')result.push(name);
+  }
+  return result.sort();
 }
+for(const file of await files(output)){
+  hash.update(file);hash.update(await readFile(path.join(output,file)));
+}
+
 const worker = await readFile(path.join(output, 'sw.js'), 'utf8');
 await writeFile(path.join(output, 'sw.js'), worker.replace('__FRONTSTAGE_BUILD__', hash.digest('hex').slice(0, 20)));
 console.log('Built browser client in build/web. Shared service configuration is ' + (origin ? 'provided.' : 'entered at sign-in.'));

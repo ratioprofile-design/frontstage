@@ -19,7 +19,7 @@ export function validateSceneModel(document){
  const p=document.project;if(!isSceneModel(document))return;
  const all=[...(p.frontstageWhiteboard?.beats||[]),...(p.frontstagePullouts||[]).map(item=>item.beat)];
  if(!p.frontstageWhiteboard)return;
- for(const scene of p.beats){const owned=all.filter(b=>b.sceneID===scene.id);if(owned.length!==1)throw Error('This project requires one beat per scene. Update Frontstage or review a converted copy.');if(owned[0].title!==scene.title||(owned[0].synopsis||'')!==(scene.summary||''))throw Error('Scene title and summary must agree with their beat.');}
+ for(const scene of p.beats){const owned=all.filter(b=>b.sceneID===scene.id);if(owned.length!==1)throw Error('This project requires one beat per scene. Update DOT or review a converted copy.');if(owned[0].title!==scene.title||(owned[0].synopsis||'')!==(scene.summary||''))throw Error('Scene title and summary must agree with their beat.');}
  if(all.some(b=>!p.beats.some(s=>s.id===b.sceneID)))throw Error('A beat references a missing scene.');
 }
 export function syncSceneMetadata(document){if(!isSceneModel(document))return;const p=document.project;for(const beat of [...p.frontstageWhiteboard.beats,...(p.frontstagePullouts||[]).map(entry=>entry.beat)]){const scene=p.beats.find(s=>s.id===beat.sceneID);if(scene){scene.title=beat.title;scene.summary=beat.synopsis||'';}}}

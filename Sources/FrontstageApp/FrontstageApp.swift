@@ -11,7 +11,7 @@ struct FrontstageApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some SwiftUI.Scene {
-        Window("Frontstage", id: "workspace") {
+        Window("DOT", id: "workspace") {
             WorkspaceView(workspace: workspace)
                 .frame(minWidth: 850, minHeight: 560)
                 .onAppear { delegate.workspace = workspace; workspace.checkRecovery() }
@@ -59,7 +59,16 @@ struct FrontstageApp: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    weak var workspace: Workspace?
+    private let branding = DOTBrandController()
+    private var pendingProject: URL?
+    weak var workspace: Workspace? {
+        didSet { if let url = pendingProject, let workspace { pendingProject = nil; workspace.openProjectURL(url) } }
+    }
+    func applicationDidFinishLaunching(_ notification: Notification) { branding.start() }
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let url = urls.first else { return }
+        if let workspace { workspace.openProjectURL(url) } else { pendingProject = url }
+    }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         workspace?.confirmDiscardOrSave() == false ? .terminateCancel : .terminateNow
     }
@@ -365,14 +374,18 @@ final class Workspace: ObservableObject {
             operation.run()
     }
 
+    func openProjectURL(_ url: URL) {
+        guard confirmDiscardOrSave() else { return }
+        do { loadCopy(try Project.load(from: url)) } catch { errorMessage = error.localizedDescription }
+    }
     func open() {
         guard confirmDiscardOrSave() else { return }
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.json,
             UTType(filenameExtension: "backstage") ?? .data,
-            UTType(filenameExtension: "frontstage") ?? .data]
+            UTType(filenameExtension: "frontstage") ?? .data, UTType(filenameExtension: "dot") ?? .data]
         panel.allowsMultipleSelection = false
-        panel.message = "Legacy projects are imported as copies. Save them as new Frontstage files."
+        panel.message = "Legacy projects are imported as copies. Save them as new DOT .dot files."
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             let imported = try Project.load(from: url)
@@ -399,9 +412,9 @@ final class Workspace: ObservableObject {
     @discardableResult
     func saveAs() -> Bool {
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [UTType(filenameExtension: "frontstage") ?? .json]
-        panel.nameFieldStringValue = "\(project.name.replacingOccurrences(of: "/", with: "-" )).frontstage"
-        panel.message = "Save a native Frontstage copy. Your imported source stays unchanged."
+        panel.allowedContentTypes = [UTType(exportedAs: "design.ratioprofile.frontstage.project", conformingTo: .json)]
+        panel.nameFieldStringValue = "\(project.name.replacingOccurrences(of: "/", with: "-" )).dot"
+        panel.message = "Save a native DOT copy. Your imported source stays unchanged."
         guard panel.runModal() == .OK, let url = panel.url else { return false }
         do {
             try project.save(to: url)
@@ -491,6 +504,7 @@ struct WorkspaceView: View {
         .toolbar(removing: .sidebarToggle)
         .toolbar { workspaceToolbar }
         .preferredColorScheme(.dark)
+        .tint(DOTTheme.accent).accentColor(DOTTheme.accent)
         .font(.system(size: 12))
         .onChange(of: workspace.mode) { _, mode in if mode == .pages { workspace.makePreview() } }
         .onChange(of: workspace.paper) { _, _ in if workspace.mode == .pages { workspace.makePreview() } }
@@ -505,13 +519,14 @@ struct WorkspaceView: View {
                 }
             }.padding(28).frame(width: 440).interactiveDismissDisabled()
         }
-        .alert("Frontstage", isPresented: Binding(
+        .alert("DOT", isPresented: Binding(
             get: { workspace.errorMessage != nil },
             set: { if !$0 { workspace.errorMessage = nil } })) {
                 Button("OK") { workspace.errorMessage = nil }
             } message: { Text(workspace.errorMessage ?? "") }
     }
     @ToolbarContentBuilder private var workspaceToolbar: some ToolbarContent {
+        ToolbarItem(placement: .navigation) { DOTWordmark() }
         ToolbarItem(placement: .navigation) {
             Button("Toggle navigation", systemImage: "sidebar.left") {
                 if workspace.mode == .edit { workspace.writeCardsToggle += 1 }
@@ -684,7 +699,7 @@ import Foundation
 @main
 struct FrontstageUnsupportedPlatform {
     static func main() {
-        FileHandle.standardError.write(Data("Frontstage's native UI requires macOS 14 or later. Run swift test to validate the portable core.\n".utf8))
+        FileHandle.standardError.write(Data("DOT's native UI requires macOS 14 or later. Run swift test to validate the portable core.\n".utf8))
     }
 }
 #endif

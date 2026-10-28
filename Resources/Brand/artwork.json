@@ -1,0 +1,13 @@
+{
+  "sources": {
+    "1-DOT-Dark-Theme-LOGO.png": "1cbb783bee745bfb65e92187353ef2da17f7629fe4c8eff88914e8d257f063dd",
+    "2-Dock-Light-Theme-Logo.png": "0f7197690d10b4f2380259dd01f592c37d84a4f167b5fd8668cf6fd86cf90ff2",
+    "3-Dock-Dark-theme-Logo.png": "19e98c3548f8445177aacb492b6fbdd68180cf91c37db8c7fd346c118d0e6110",
+    "4-DOT-White-Theme-LOGO.png": "90a5f62cd2e6723587427321019d0e80c0bed7c026c4a5d379df2313729a1b8b"
+  },
+  "iconMapping": {
+    "light": "3-Dock-Dark-theme-Logo.png",
+    "dark": "2-Dock-Light-Theme-Logo.png"
+  },
+  "note": "Original artwork preserved; derived assets trim transparent margins and add platform padding."
+}

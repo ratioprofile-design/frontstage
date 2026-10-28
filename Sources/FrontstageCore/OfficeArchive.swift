@@ -44,7 +44,7 @@ public enum OfficeArchive {
         return try zip([
             "[Content_Types].xml": Data(types.utf8),
             "_rels/.rels": Data("<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>".utf8),
-            "xl/workbook.xml": Data("<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"Frontstage\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>".utf8),
+            "xl/workbook.xml": Data("<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"DOT\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>".utf8),
             "xl/_rels/workbook.xml.rels": Data("<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/></Relationships>".utf8),
             "xl/worksheets/sheet1.xml": Data(sheet.utf8)
         ])

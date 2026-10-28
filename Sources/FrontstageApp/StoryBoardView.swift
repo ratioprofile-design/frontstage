@@ -110,9 +110,9 @@ struct StoryBoardView: View {
                     }.frame(width: 115)
                 }
                 Divider().frame(height: 18)
-                Toggle("Ripple", isOn: $ripple).toggleStyle(.button).tint(.cyan)
+                Toggle("Ripple", isOn: $ripple).toggleStyle(.button).tint(DOTTheme.accent)
                     .help("Preserve lane order and push downstream effects and overlapping beats.")
-                Toggle("Snap", isOn: $snap).toggleStyle(.button).tint(.purple)
+                Toggle("Snap", isOn: $snap).toggleStyle(.button).tint(DOTTheme.accent)
                 Button("Resolve Flow", systemImage: "arrow.triangle.branch") {
                     workspace.edit("Resolve Story Flow") { try $0.resolveStory(boardID: boardID) }
                 }

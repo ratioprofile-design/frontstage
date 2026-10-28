@@ -12,6 +12,37 @@ private func color(_ hex: String) -> COLORREF {
     let n = UInt32(hex.hasPrefix("#") ? String(hex.dropFirst()) : hex, radix: 16) ?? 0x777777
     return ((n >> 16) & 255) | (n & 0xff00) | ((n & 255) << 16)
 }
+private enum DOTWindowsTheme {
+    static var dark: Bool {
+        var light: DWORD = 1, count = DWORD(MemoryLayout<DWORD>.size)
+        wide("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize") { path in
+            wide("AppsUseLightTheme") { key in
+                _ = RegGetValueW(HKEY_CURRENT_USER, path, key, DWORD(0x18), nil, &light, &count)
+            }
+        }
+        return light == 0
+    }
+    static var accent: COLORREF {
+        typealias ReadColor = @convention(c) (UnsafeMutablePointer<DWORD>?, UnsafeMutablePointer<BOOL>?) -> HRESULT
+        guard let library = wide("dwmapi.dll", { LoadLibraryW($0) }) else { return GetSysColor(COLOR_HIGHLIGHT) }
+        defer { FreeLibrary(library) }
+        guard let address = GetProcAddress(library, "DwmGetColorizationColor") else { return GetSysColor(COLOR_HIGHLIGHT) }
+        let read = unsafeBitCast(address, to: ReadColor.self)
+        var argb: DWORD = 0, opaque: BOOL = false
+        guard read(&argb, &opaque) >= 0 else { return GetSysColor(COLOR_HIGHLIGHT) }
+        return ((argb >> 16) & 255) | (argb & 0xff00) | ((argb & 255) << 16)
+    }
+    static func icon(_ instance: HINSTANCE?) -> HICON? {
+        LoadIconW(instance, UnsafePointer<WCHAR>(bitPattern: dark ? 2 : 1))
+    }
+    static func apply(to window: HWND?) {
+        if let icon = icon(GetModuleHandleW(nil)) {
+            _ = SendMessageW(window, UINT(WM_SETICON), WPARAM(ICON_BIG), LPARAM(Int(bitPattern: icon)))
+            _ = SendMessageW(window, UINT(WM_SETICON), WPARAM(ICON_SMALL), LPARAM(Int(bitPattern: icon)))
+        }
+        InvalidateRect(window, nil, false)
+    }
+}
 private func text(_ window: HWND?) -> String {
     let count = Int(GetWindowTextLengthW(window))
     var buffer = [WCHAR](repeating: 0, count: count + 1)
@@ -62,7 +93,7 @@ private final class WindowsWorkspace {
         catch { project = old; message(error.localizedDescription) }
         InvalidateRect(window, nil, false)
     }
-    func message(_ value: String) { wide(value) { value in wide("Frontstage") { title in _ = MessageBoxW(window, value, title, UINT(MB_OK | MB_ICONINFORMATION)) } } }
+    func message(_ value: String) { wide(value) { value in wide("DOT") { title in _ = MessageBoxW(window, value, title, UINT(MB_OK | MB_ICONINFORMATION)) } } }
     func world(_ x: Int, _ y: Int) -> BoardPoint { BoardPoint(x: Double(x) / zoom + board.viewport.origin.x, y: Double(y - 44) / zoom + board.viewport.origin.y) }
     func frame(_ rect: BoardRect) -> RECT {
         RECT(left: LONG((rect.x - board.viewport.origin.x) * zoom), top: LONG((rect.y - board.viewport.origin.y) * zoom + 44),
@@ -103,8 +134,8 @@ private final class WindowsWorkspace {
     func chooseFile(save: Bool) -> URL? {
         var result: String?
         var buffer = [WCHAR](repeating: 0, count: 32768)
-        let filter = "Frontstage Projects\0*.frontstage;*.backstage;*.json\0All Files\0*.*\0\0"
-        wide(filter) { filter in wide("frontstage") { ext in buffer.withUnsafeMutableBufferPointer { file in
+        let filter = "DOT Projects\0*.dot;*.frontstage;*.backstage;*.json\0All Files\0*.*\0\0"
+        wide(filter) { filter in wide("dot") { ext in buffer.withUnsafeMutableBufferPointer { file in
             var options = OPENFILENAMEW(); options.lStructSize = DWORD(MemoryLayout<OPENFILENAMEW>.size)
             options.hwndOwner = window; options.lpstrFilter = filter; options.lpstrFile = file.baseAddress; options.nMaxFile = DWORD(file.count)
             options.lpstrDefExt = ext; options.Flags = DWORD(OFN_EXPLORER | OFN_PATHMUSTEXIST | (save ? OFN_OVERWRITEPROMPT : OFN_FILEMUSTEXIST))
@@ -121,7 +152,7 @@ private final class WindowsWorkspace {
     }
     func confirmReplace() -> Bool {
         if project == checkpoint { return true }
-        let answer = wide("Save changes before replacing this project?") { value in wide("Frontstage") { title in MessageBoxW(window, value, title, UINT(MB_YESNOCANCEL | MB_ICONQUESTION)) } }
+        let answer = wide("Save changes before replacing this project?") { value in wide("DOT") { title in MessageBoxW(window, value, title, UINT(MB_YESNOCANCEL | MB_ICONQUESTION)) } }
         if answer == IDYES { return save() }; return answer == IDNO
     }
     func action(_ id: Int) {
@@ -163,7 +194,7 @@ private final class WindowsWorkspace {
     func paint(_ dc: HDC?, client: RECT) {
         var background = client
         let gray = CreateSolidBrush(color("#797a7d")); FillRect(dc, &background, gray); DeleteObject(gray)
-        let white = color("#ffffff"); SetBkMode(dc, TRANSPARENT)
+        let selectionAccent = DOTWindowsTheme.accent; SetBkMode(dc, TRANSPARENT)
         _ = SelectObject(dc, GetStockObject(DEFAULT_GUI_FONT))
         func fill(_ rect: RECT, hex: String) { var r = rect; let brush = CreateSolidBrush(color(hex)); FillRect(dc, &r, brush); DeleteObject(brush) }
         func draw(_ value: String, _ rect: RECT, foreground: COLORREF = color("#ffffff")) { var r = rect; SetTextColor(dc, foreground); wide(value) { _ = DrawTextW(dc, $0, -1, &r, UINT(DT_LEFT | DT_WORDBREAK | DT_NOPREFIX)) } }
@@ -178,7 +209,7 @@ private final class WindowsWorkspace {
         for edge in board.dependencies {
             guard let a = geometry.beatRects[edge.cause], let b = geometry.beatRects[edge.effect] else { continue }
             let start = frame(a), end = frame(b), middle = max(35, abs(end.left - start.right) / 2)
-            let pen = CreatePen(PS_SOLID, 1, color(selected == edge.cause || selected == edge.effect ? "#8ee6ee" : "#d1d1d3"))
+            let pen = CreatePen(PS_SOLID, 1, (selected == edge.cause || selected == edge.effect ? DOTWindowsTheme.accent : color("#d1d1d3")))
             let previous = SelectObject(dc, pen)
             let sy = (start.top + start.bottom) / 2, ey = (end.top + end.bottom) / 2
             let points = [POINT(x: start.right, y: sy), POINT(x: start.right + middle, y: sy), POINT(x: end.left - middle, y: ey), POINT(x: end.left, y: ey)]
@@ -197,7 +228,7 @@ private final class WindowsWorkspace {
             guard let beat = byID[id], var rect = geometry.beatRects[id] else { continue }
             if dragBlock == beat.blockID { rect.x += dragDelta.x; rect.y += dragDelta.y }
             let r = frame(rect); fill(r, hex: beat.color)
-            if selected == id { var edge = r; let brush = CreateSolidBrush(white); FrameRect(dc, &edge, brush); DeleteObject(brush) }
+            if selected == id { var edge = r; let brush = CreateSolidBrush(selectionAccent); FrameRect(dc, &edge, brush); DeleteObject(brush) }
             draw(beat.title, frame(BoardRect(x: rect.x + 6, y: rect.y + 4, width: rect.width - 12, height: rect.height - 6)))
             if issues.contains(id) { fill(frame(BoardRect(x: rect.maxX - 12, y: rect.y - 5, width: 16, height: 16)), hex: "#cb2742"); draw("!", frame(BoardRect(x: rect.maxX - 8, y: rect.y - 4, width: 10, height: 16))) }
         }
@@ -220,7 +251,10 @@ private func procedure(_ hwnd: HWND?, _ message: UINT, _ wParam: WPARAM, _ lPara
     // Creation can synchronously send focus messages to another popup. Only commands select editor bindings.
     if popup && message == UINT(WM_COMMAND) && !state.loadingPopup { state.activatePopup(hwnd) }
     switch message {
+    case UINT(WM_SETTINGCHANGE), UINT(WM_SYSCOLORCHANGE):
+        DOTWindowsTheme.apply(to: hwnd); return 0
     case UINT(WM_CREATE):
+        DOTWindowsTheme.apply(to: hwnd)
         if popup {
             let beat = state.board.beats.first { $0.id == state.popupBeat }
             state.titleField = control(hwnd, className: "EDIT", title: beat?.title ?? "", id: 101, x: 12, y: 12, width: 560, height: 28, style: DWORD(WS_BORDER | ES_AUTOHSCROLL))
@@ -303,9 +337,10 @@ struct FrontstageWindows {
         let hwnd = wide("FrontstageWindow") { name -> HWND? in
             var cls = WNDCLASSEXW(); cls.cbSize = UINT(MemoryLayout<WNDCLASSEXW>.size)
             cls.style = UINT(CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS); cls.lpfnWndProc = procedure; cls.hInstance = instance
+            cls.hIcon = DOTWindowsTheme.icon(instance); cls.hIconSm = cls.hIcon
             cls.hCursor = LoadCursorW(nil, UnsafePointer<WCHAR>(bitPattern: 32512)); cls.lpszClassName = name
             guard RegisterClassExW(&cls) != 0 else { return nil }
-            return wide("Frontstage — Whiteboard") { title in CreateWindowExW(0, name, title, DWORD(WS_OVERLAPPEDWINDOW) | DWORD(WS_VISIBLE), 80, 80, 1280, 850, nil, nil, instance, nil) }
+            return wide("DOT — Whiteboard") { title in CreateWindowExW(0, name, title, DWORD(WS_OVERLAPPEDWINDOW) | DWORD(WS_VISIBLE), 80, 80, 1280, 850, nil, nil, instance, nil) }
         }
         guard let hwnd else { return }
         ShowWindow(hwnd, SW_SHOW); UpdateWindow(hwnd)
@@ -343,6 +378,6 @@ struct FrontstageWindows {
 #else
 import Foundation
 @main struct FrontstageWindows {
-    static func main() { print("FrontstageWindows requires Windows and the Swift Windows SDK.") }
+    static func main() { print("DOT requires Windows and the Swift Windows SDK.") }
 }
 #endif

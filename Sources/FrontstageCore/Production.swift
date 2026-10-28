@@ -96,7 +96,7 @@ extension Project {
         }
         var production = state["frontstageProduction"]?.object ?? [:]
         if let version = production["schemaVersion"], version != .number(1) {
-            throw ProjectError.invalidProject("this production plan requires a newer Frontstage version")
+            throw ProjectError.invalidProject("this production plan requires a newer DOT version")
         }
         if let days = production["days"], days.array == nil { throw ProjectError.invalidProject("production days must be an array") }
         try operation(&production)

@@ -19,7 +19,7 @@ extension Project {
         let archived = try (state["frontstagePullouts"]?.array ?? []).map { try JSONDecoder().decode(BoardBeat.self, from: JSONEncoder().encode($0.object?["beat"] ?? .null)) }
         for scene in scenes {
             let owned = (board.beats + archived).filter { $0.sceneID == scene.id }
-            guard owned.count == 1, owned[0].title == scene.title, owned[0].synopsis == scene.summary else { throw ProjectError.invalidProject("This project requires one beat per scene with matching titles and summaries. Update Frontstage or review a converted copy.") }
+            guard owned.count == 1, owned[0].title == scene.title, owned[0].synopsis == scene.summary else { throw ProjectError.invalidProject("This project requires one beat per scene with matching titles and summaries. Update DOT or review a converted copy.") }
         }
     }
     public func sceneConversionGroups() throws -> [SceneConversionGroup] {
