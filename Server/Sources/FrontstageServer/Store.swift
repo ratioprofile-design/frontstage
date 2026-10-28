@@ -97,7 +97,7 @@ actor ProjectStore {
         let id = UUID(), record = SharedProject(id: id, name: project.name, owner: user, members: [:], revision: 1, document: clean, modifiedBy: user, changes: [])
         var next = state; next.projects[id.uuidString] = record; try commit(next); return try snapshot(record, user: user)
     }
-    func update(_ id: UUID, user: String, expected: Int, changeID: UUID, document: JSONValue) throws -> UpdateResult {
+    func update(_ id: UUID, user: String, expected: Int, changeID: UUID, document: JSONValue, supportedFeatures: Set<String> = []) throws -> UpdateResult {
         guard var current = state.projects[id.uuidString], let role = access(current, user: user) else { throw Abort(.notFound) }
         guard role != .reader else { throw Abort(.forbidden) }
         if current.changes.contains(changeID.uuidString) { return UpdateResult(conflict: false, snapshot: try snapshot(current, user: user)) }
@@ -105,6 +105,8 @@ actor ProjectStore {
         let project = try validated(document)
         let prior = try validated(current.document)
         guard !prior.usesOneBeatPerScene || project.usesOneBeatPerScene else { throw Abort(.badRequest, reason: "Update Frontstage: the scene model cannot be downgraded") }
+        do { try project.validateWriterCompatibility(previous: prior, supported: supportedFeatures) }
+        catch { throw Abort(.badRequest, reason: error.localizedDescription) }
         current.document = try JSONDecoder().decode(JSONValue.self, from: project.encoded())
         current.name = project.name; current.revision += 1; current.modifiedBy = user
         current.changes = Array((current.changes + [changeID.uuidString]).suffix(100))

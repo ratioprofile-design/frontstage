@@ -21,6 +21,7 @@ struct WritingToolsView: View {
                         }.padding(8)
                     }
                 }
+                ProductionBaselineControls(workspace: workspace)
                 GroupBox("Screenplay typography") {
                     VStack(alignment: .leading) {
                         TextField("Font name", text: Binding(get: { layout.fontName }, set: { name in changeLayout { $0.fontName = name } }))

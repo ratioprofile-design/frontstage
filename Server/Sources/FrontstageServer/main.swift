@@ -5,7 +5,7 @@ import Foundation
 struct Login: Content { var username: String; var password: String }
 struct Token: Content { var token: String; var username: String }
 struct Create: Content { var document: JSONValue }
-struct Update: Content { var expectedRevision: Int; var changeID: UUID; var document: JSONValue }
+struct Update: Content { var expectedRevision: Int; var changeID: UUID; var document: JSONValue; var supportedFeatures: Set<String>? }
 struct Share: Content { var username: String; var access: Access? }
 struct Health: Content { var status: String; var protocolVersion: Int }
 
@@ -79,7 +79,7 @@ do {
     app.put("api", "projects", ":id") { req async throws -> Response in
         guard let id = req.parameters.get("id", as: UUID.self) else { throw Abort(.badRequest) }
         let name = try await user(req), input = try req.content.decode(Update.self)
-        let result = try await store.update(id, user: name, expected: input.expectedRevision, changeID: input.changeID, document: input.document)
+        let result = try await store.update(id, user: name, expected: input.expectedRevision, changeID: input.changeID, document: input.document, supportedFeatures: input.supportedFeatures ?? [])
         return try await result.encodeResponse(status: result.conflict ? .conflict : .ok, for: req)
     }
     app.post("api", "projects", ":id", "members") { req async throws -> HTTPStatus in

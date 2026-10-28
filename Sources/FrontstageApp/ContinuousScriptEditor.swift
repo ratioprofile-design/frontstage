@@ -164,7 +164,7 @@ struct ContinuousScriptEditor: NSViewRepresentable {
     }
     private func configure(_ text: NSTextView) {
         controller.contentWidth = width * zoom
-        var typography = workspace.project.scriptLayout; typography.fontSize *= zoom; typography.lineHeight *= zoom; typography.paragraphSpacing *= zoom; controller.typography = typography
+        var typography = workspace.project.scriptLayout; typography.fontSize *= zoom; typography.lineHeight *= zoom; typography.paragraphSpacing *= zoom; for key in Array(typography.elements.keys) { if let size = typography.elements[key]?.fontSize { typography.elements[key]?.fontSize = size * zoom } }; controller.typography = typography
         text.textContainer?.containerSize = NSSize(width: width * zoom, height: .greatestFiniteMagnitude)
         text.textContainerInset = NSSize(width: workspace.paper.leftMargin * zoom, height: workspace.paper.topMargin * zoom)
         text.minSize = NSSize(width: workspace.paper.width * zoom, height: workspace.paper.height * zoom)

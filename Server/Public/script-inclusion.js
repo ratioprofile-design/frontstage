@@ -38,3 +38,21 @@ export function validateInclusion(document) {
  if(!Array.isArray(p.frontstagePullouts))throw Error('Unsupported pulled-out beat archive.');
  for(const entry of p.frontstagePullouts){if(!entry?.id||entry.beat?.id!==entry.id||active.has(entry.id)||archived.has(entry.id))throw Error('A beat cannot be both active and pulled out, or archived twice.');archived.add(entry.id);}
 }
+
+// Return a validated candidate so callers can commit deletion and undo as one transaction.
+export function deletePulledOutBeats(document,ids){
+ const next=copy(document),p=project(next),b=p.frontstageWhiteboard,archive=p.frontstagePullouts||[];
+ const selected=archive.filter(item=>ids.has(item.id));
+ if(!ids.size)return next;
+ if(selected.length!==ids.size)throw Error('Select existing archived beats.');
+ for(const {beat} of selected)writable(p,beat);
+ p.frontstagePullouts=archive.filter(item=>!ids.has(item.id));
+ const owned=new Set([...b.beats,...p.frontstagePullouts.map(item=>item.beat)].map(beat=>beat.sceneID));
+ const removed=new Set(selected.map(item=>item.beat.sceneID).filter(id=>!owned.has(id)));
+ p.beats=p.beats.filter(scene=>!removed.has(scene.id));
+ if(p.connections)p.connections=p.connections.filter(link=>!removed.has(link.from)&&!removed.has(link.to));
+ p.frontstageArchivedDependencies=(p.frontstageArchivedDependencies||[]).filter(link=>!ids.has(link.cause)&&!ids.has(link.effect));
+ if(p.frontstageProduction){for(const day of p.frontstageProduction.days||[])day.sceneIDs=(day.sceneIDs||[]).filter(id=>!removed.has(id));for(const id of removed)if(p.frontstageProduction.sceneEstimates)delete p.frontstageProduction.sceneEstimates[id];}
+ for(const record of p.frontstageStudio?.records||[]){if(removed.has(record.sceneID))delete record.sceneID;if(ids.has(record.beatID))delete record.beatID;}
+ validateBoard(b,new Set(p.beats.map(scene=>scene.id)));validateInclusion(next);return next;
+}

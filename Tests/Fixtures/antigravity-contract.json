@@ -1,0 +1,22 @@
+{
+  "typography": {
+    "fontName": "Courier",
+    "fontSize": 12,
+    "lineHeight": 14,
+    "paragraphSpacing": 10,
+    "futureSetting": {"preserve": true},
+    "elements": {
+      "character": {"fontName": "Missing DOT Test Font", "fontSize": 18, "isBold": false, "isItalic": true, "isUnderline": false, "isUppercase": true, "isTamil": true, "futureTrait": "retained"},
+      "futureElement": {"fontSize": 20, "futureFlag": true}
+    }
+  },
+  "revision": {
+    "id": "antigravity-baseline",
+    "color": "Blue",
+    "label": "Tamil draft",
+    "date": 1750000000000,
+    "isLocked": true,
+    "sceneBaselineHTML": {"1": "<p>தமிழ்</p>"},
+    "futureRevisionField": {"preserve": true}
+  }
+}

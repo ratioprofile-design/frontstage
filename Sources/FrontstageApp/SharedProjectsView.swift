@@ -101,7 +101,7 @@ final class SharedProjectClient: ObservableObject {
         do {
             let sent = workspace.project, value = try JSONDecoder().decode(JSONValue.self, from: sent.encoded())
             let (result, code) = try await request("api/projects/\(link.id.uuidString)", method: "PUT", body: .object([
-                "expectedRevision": .number(Decimal(link.revision)), "changeID": .string(UUID().uuidString), "document": value
+                "expectedRevision": .number(Decimal(link.revision)), "changeID": .string(UUID().uuidString), "document": value, "supportedFeatures": .array(Project.supportedWriteFeatures.sorted().map { .string($0) })
             ]), as: RemoteUpdate.self)
             guard workspace.documentSessionID == session, linked?.id == link.id else { status = "The previous project's upload finished. Your current project remains separate."; return }
             if code == 409, let remote = result.snapshot.document, let base {

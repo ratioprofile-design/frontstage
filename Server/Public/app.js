@@ -65,7 +65,8 @@ function cleanHTML(source) {
     const fragment = document.createDocumentFragment();
     if (node.nodeType !== Node.ELEMENT_NODE || ['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT'].includes(node.tagName)) return fragment;
     const target = allowed.has(node.tagName) ? document.createElement(node.tagName.toLowerCase()) : fragment;
-    if (target instanceof HTMLElement) target.className = [...node.classList].filter(c => /^sc-(line|action|character|dialogue|parenthetical|transition|shot|lyrics|slugline)$/.test(c)).join(' ');
+    if (target instanceof HTMLElement) target.className = [...node.classList].filter(c => /^sc-(line|action|character|dialogue|parenthetical|transition|shot|lyrics|slugline|dual-left|dual-right|rev)$/.test(c)).join(' ');
+    if (target instanceof HTMLElement && /^[A-Za-z0-9_-]{1,120}$/.test(node.getAttribute('data-dual-pair')||'')) target.setAttribute('data-dual-pair',node.getAttribute('data-dual-pair'));
     for (const child of node.childNodes) target.append(clean(child));
     return target;
   }
@@ -206,7 +207,7 @@ async function sync() {
   try {
     await saveLocal();
     if (epoch !== documentEpoch) return;
-    const { data, status: code } = await api(`/api/projects/${projectID}`, 'PUT', { expectedRevision: revision, changeID: uuid(), document: sent });
+    const { data, status: code } = await api(`/api/projects/${projectID}`, 'PUT', { expectedRevision: revision, changeID: uuid(), document: sent, supportedFeatures: ['elementTypography','productionBaselines','dualDialogue'] });
     if (epoch !== documentEpoch || current?.id !== projectID) return;
     if (code === 409) {
       const result = mergeDocuments(base, doc, data.snapshot.document);

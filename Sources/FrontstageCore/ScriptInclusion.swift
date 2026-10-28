@@ -59,6 +59,55 @@ extension Project {
         }
         self = candidate
     }
+    /// Permanent deletion is one project transaction; shared assets and historical snapshots stay intact.
+    public mutating func deletePulledOutBeats(_ ids: Set<String>) throws {
+        guard !ids.isEmpty else { return }
+        var candidate = self
+        let archive = state["frontstagePullouts"]?.array ?? []
+        let selected = archive.filter { ids.contains($0.object?["id"]?.string ?? "") }
+        guard selected.count == ids.count else { throw ProjectError.sceneNotFound }
+        let board = try whiteboard()
+        let beats = try selected.map { try JSONDecoder().decode(BoardBeat.self, from: JSONEncoder().encode($0.object?["beat"] ?? .null)) }
+        guard beats.allSatisfy({ !$0.locked && !board.isBlockLocked($0.blockID) }),
+              !scenes.contains(where: { scene in beats.contains(where: { $0.sceneID == scene.id }) && scene.isTextLocked }) else {
+            throw ProjectError.invalidProject("Unlock the archived beats, containers and scenes before deleting")
+        }
+        let remaining = archive.filter { !ids.contains($0.object?["id"]?.string ?? "") }
+        let owned = Set(board.beats.map(\.sceneID) + remaining.compactMap { $0.object?["beat"]?.object?["sceneID"]?.decimal })
+        let removed = Set(beats.map(\.sceneID)).subtracting(owned)
+        candidate.state["frontstagePullouts"] = .array(remaining)
+        candidate.state["frontstageArchivedDependencies"] = .array((state["frontstageArchivedDependencies"]?.array ?? []).filter {
+            !ids.contains($0.object?["cause"]?.string ?? "") && !ids.contains($0.object?["effect"]?.string ?? "")
+        })
+        if !removed.isEmpty { try candidate.removeStoryBeats(removed) }
+        if var production = candidate.state["frontstageProduction"]?.object {
+            if let days = production["days"]?.array {
+                production["days"] = .array(days.map { value in
+                    guard var fields = value.object else { return value }
+                    fields["sceneIDs"] = .array((fields["sceneIDs"]?.array ?? []).filter { $0.decimal.map(removed.contains) != true })
+                    return .object(fields)
+                })
+            }
+            if var estimates = production["sceneEstimates"]?.object {
+                for id in removed { estimates.removeValue(forKey: String(describing: id)) }
+                production["sceneEstimates"] = .object(estimates)
+            }
+            candidate.state["frontstageProduction"] = .object(production)
+        }
+        // Research records remain useful independently of the deleted scene/beat.
+        if var studio = candidate.state["frontstageStudio"]?.object, let records = studio["records"]?.array {
+            studio["records"] = .array(records.map { value in
+                guard var fields = value.object else { return value }
+                if fields["sceneID"]?.decimal.map(removed.contains) == true { fields.removeValue(forKey: "sceneID") }
+                if fields["beatID"]?.string.map(ids.contains) == true { fields.removeValue(forKey: "beatID") }
+                return .object(fields)
+            })
+            candidate.state["frontstageStudio"] = .object(studio)
+        }
+        try candidate.validateSceneModel()
+        self = candidate
+    }
+
     public mutating func restorePulledOutBeats(_ ids: Set<String>, into blockID: String? = nil) throws {
         var candidate = self, board = try whiteboard()
         var archive = state["frontstagePullouts"]?.array ?? []

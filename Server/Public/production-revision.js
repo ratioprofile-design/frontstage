@@ -1,0 +1,11 @@
+export const revisionColors=['White','Blue','Pink','Yellow','Green','Goldenrod','Buff','Salmon','Cherry','2nd White'];
+export const revisionColorHex=['#FFFFFF','#4A90E2','#E25A98','#F5A623','#7ED321','#D08B2A','#E8D8A6','#FA8072','#DE3163','#F0F0F0'];
+export const revisionLabel=color=>color==='White'?'Production Draft (White)':`${color} Revision`;
+export function currentRevision(document){return document.project.productionRevision||null;}
+function capture(document){return Object.fromEntries(document.project.beats.map(scene=>[scene.id,scene.content||'']));}
+function archive(document){const p=document.project,revision=p.productionRevision;if(!revision)return;const history=p.productionRevisionHistory||=[];if(JSON.stringify(history.at(-1))!==JSON.stringify(revision))history.push(structuredClone(revision));}
+export function startNextRevision(document,{id=crypto.randomUUID(),date=Date.now(),label}={}){const p=document.project,prior=currentRevision(document),color=prior?(revisionColors[revisionColors.indexOf(prior.color)+1]||'Blue'):'Blue';archive(document);p.productionRevision={...prior,id,color,date,label:label??revisionLabel(color),isLocked:true,sceneBaselineHTML:capture(document)};}
+export function setRevisionColor(document,color,{id=crypto.randomUUID(),date=Date.now()}={}){if(!revisionColors.includes(color))throw Error('Choose a supported revision color.');const p=document.project,r=p.productionRevision;p.productionRevision={...r,id:r?.id??id,color,date:r?.date??date,label:r?.label??revisionLabel(color),isLocked:r?.isLocked??true,sceneBaselineHTML:Object.keys(r?.sceneBaselineHTML||{}).length?r.sceneBaselineHTML:capture(document)};}
+export function toggleBaselineLock(document){const p=document.project;if(p.productionRevision)p.productionRevision.isLocked=!p.productionRevision.isLocked;else p.productionRevision={id:crypto.randomUUID(),color:'White',date:Date.now(),label:'Production Draft',isLocked:true,sceneBaselineHTML:capture(document)};}
+export function clearProductionRevision(document){archive(document);document.project.productionRevision=null;}
+export function sceneChanged(document,id){const r=currentRevision(document),scene=document.project.beats.find(s=>s.id===id);return !!scene&&r?.sceneBaselineHTML?.[id]!=null&&r.sceneBaselineHTML[id]!==scene.content;}

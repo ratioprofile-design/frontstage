@@ -16,7 +16,15 @@ struct FrontstageApp: App {
                 .frame(minWidth: 850, minHeight: 560)
                 .onAppear { delegate.workspace = workspace; workspace.checkRecovery() }
         }
+        Settings { DOTPreferences(workspace: workspace) }
         .commands {
+            CommandGroup(after: .newItem) {
+                Menu("Open Recent") {
+                    ForEach(workspace.recentProjectPaths, id: \.self) { path in
+                        Button(URL(fileURLWithPath: path).lastPathComponent) { workspace.openProjectURL(URL(fileURLWithPath: path)) }
+                    }
+                }
+            }
             CommandGroup(replacing: .undoRedo) {
                 Button("Undo", action: workspace.undoProject).keyboardShortcut("z").disabled(!workspace.history.canUndo)
                 Button("Redo", action: workspace.redoProject).keyboardShortcut("z", modifiers: [.command, .shift]).disabled(!workspace.history.canRedo)
@@ -160,7 +168,14 @@ final class Workspace: ObservableObject {
     func checkRecovery() {
         guard !checkedRecovery else { return }
         checkedRecovery = true
-        do { recoveryCandidate = try recoveryStore?.load() }
+        do {
+            recoveryCandidate = try recoveryStore?.load()
+            if recoveryCandidate == nil, saveURL == nil, !hasChanges,
+               UserDefaults.standard.bool(forKey: "frontstage_restore_last_project"),
+               let path = UserDefaults.standard.string(forKey: "frontstage_last_project_path") {
+                openProjectURL(URL(fileURLWithPath: path))
+            }
+        }
         catch {
             recoveryBlocked = true
             recoveryStatus = "Recovery disabled: unreadable copy preserved"
@@ -278,6 +293,8 @@ final class Workspace: ObservableObject {
         }
         editor.textView?.undoManager?.removeAllActions()
         project = Project(oneBeatPerScene: true)
+        if let data = UserDefaults.standard.data(forKey: "default_script_layout"), let layout = try? JSONDecoder().decode(ScriptLayoutSettings.self, from: data) { try? project.setScriptLayout(layout) }
+        paper = UserDefaults.standard.string(forKey: "default_paper_size") == "US Letter" ? .letter : .a4
         whiteboardCache = nil
         savedProject = project
         history = ProjectHistory()
@@ -374,12 +391,25 @@ final class Workspace: ObservableObject {
             operation.run()
     }
 
+    @Published private(set) var recentProjectPaths = UserDefaults.standard.stringArray(forKey: "frontstage_recent_projects") ?? []
+    private func recordRecent(_ url: URL) {
+        let path = url.standardizedFileURL.path
+        recentProjectPaths = [path] + recentProjectPaths.filter { $0 != path }.prefix(19)
+        UserDefaults.standard.set(recentProjectPaths, forKey: "frontstage_recent_projects")
+        UserDefaults.standard.set(path, forKey: "frontstage_last_project_path")
+    }
     func openProjectURL(_ url: URL) {
         guard confirmDiscardOrSave() else { return }
-        do { loadCopy(try Project.load(from: url)) } catch { errorMessage = error.localizedDescription }
+        do {
+            let loaded = try Project.load(from: url)
+            loadCopy(loaded)
+            // Native files support ordinary Save. Legacy imports always remain copy-only.
+            if ["dot", "frontstage"].contains(url.pathExtension.lowercased()) {
+                saveURL = url; savedProject = loaded; recordRecent(url)
+            }
+        } catch { errorMessage = "The project could not be opened. Its recent-project entry is retained so you can locate or restore the file. \(error.localizedDescription)" }
     }
     func open() {
-        guard confirmDiscardOrSave() else { return }
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.json,
             UTType(filenameExtension: "backstage") ?? .data,
@@ -387,11 +417,7 @@ final class Workspace: ObservableObject {
         panel.allowsMultipleSelection = false
         panel.message = "Legacy projects are imported as copies. Save them as new DOT .dot files."
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            let imported = try Project.load(from: url)
-            // Every open starts a copy. No source project is ever a default save destination.
-            loadCopy(imported)
-        } catch { errorMessage = error.localizedDescription }
+        openProjectURL(url)
     }
 
     func save() { _ = saveCurrent() }
@@ -419,6 +445,7 @@ final class Workspace: ObservableObject {
         do {
             try project.save(to: url)
             saveURL = url
+            recordRecent(url)
             didSave()
             return true
         } catch {

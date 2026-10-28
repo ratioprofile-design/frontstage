@@ -3,6 +3,7 @@ import SwiftUI
 import FrontstageCore
 struct PulledOutShelf: View {
     @ObservedObject var workspace: Workspace
+    @State private var deleting: String?
     @State private var search = ""
     @State private var destinations: [String: String] = [:]
     var body: some View {
@@ -24,6 +25,7 @@ struct PulledOutShelf: View {
                                         ForEach(workspace.whiteboard.blocks.filter { !workspace.whiteboard.isBlockLocked($0.id) }) { Text($0.name).tag($0.id) }
                                     }
                                     Button("Restore Beat") { workspace.edit("Restore Beat") { try $0.restorePulledOutBeats([beat.id], into: destinations[beat.id].flatMap { $0.isEmpty ? nil : $0 }) } }
+                                    Button("Delete Permanently", role: .destructive) { deleting = beat.id }
                                 }.padding(8)
                             }
                         }.frame(maxWidth: .infinity, alignment: .leading)
@@ -31,6 +33,12 @@ struct PulledOutShelf: View {
                 }
             }
         }.padding(16).frame(minWidth: 450, minHeight: 400)
+        .confirmationDialog("Delete this archived beat and its scene data?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
+            Button("Delete Permanently", role: .destructive) {
+                if let id = deleting { workspace.edit("Delete Archived Beat") { try $0.deletePulledOutBeats([id]) } }
+                deleting = nil
+            }
+        } message: { Text("Shared research assets remain available. Undo is available in this project session.") }
     }
 }
 #endif
