@@ -65,7 +65,7 @@ with tempfile.TemporaryDirectory(prefix="frontstage-sync-test-") as directory:
         preflight.add_header("Origin", "https://unrelated.invalid")
         with urllib.request.urlopen(preflight, timeout=20) as response:
             assert response.headers["Access-Control-Allow-Origin"] != "https://unrelated.invalid"
-        assert set(request("/health")["supportedFeatures"]) == {"elementTypography", "productionBaselines", "dualDialogue"}
+        assert set(request("/health")["supportedFeatures"]) == {"elementTypography", "productionBaselines", "dualDialogue", "scriptAnnotations"}
         accounts = {}
         for name in ("owner", "editor", "reader"):
             credentials = {"username": name, "password": secrets.token_urlsafe(20)}

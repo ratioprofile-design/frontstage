@@ -57,6 +57,6 @@ extension Project {
         }
         board.beats.append(fragment)
         try board.validate(sceneIDs: Set(candidate.scenes.map(\.id))); try candidate.storeWhiteboard(board)
-        self = candidate; return fragment.id
+        candidate.reconcileScriptAnnotations(); self = candidate; return fragment.id
     }
 }

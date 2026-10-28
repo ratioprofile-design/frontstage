@@ -404,6 +404,7 @@ struct WriteBreakdownPanel: View {
                     TextField("Description", text: Binding(get: { item.notes }, set: { value in workspace.edit("Requirement Description", key: item.id) { try $0.updateBreakdownItem(sceneID: sceneID, itemID: item.id, notes: value) } }))
                     Stepper("Quantity: \(item.count)", value: Binding(get: { item.count }, set: { value in workspace.edit("Requirement Quantity") { try $0.updateBreakdownItem(sceneID: sceneID, itemID: item.id, count: value) } }), in: 1...100_000)
                     if let quote = item.sourceQuote { Text(quote).font(.caption).textSelection(.enabled) }
+                    if item.isSourceLinked, let id = item.recordID, !workspace.project.hasBreakdownSource(id, sceneID: sceneID) { Text("Source text is no longer present. The breakdown item is retained.").font(.caption).foregroundStyle(.secondary) }
                     Menu("Move to category") { ForEach(BreakdownCategory.allCases, id: \.self) { target in Button(target.label) { workspace.edit("Move Requirement") { try $0.moveBreakdownItem(sceneID: sceneID, itemID: item.id, category: target) } } } }
                     Button("Delete Requirement") { workspace.edit("Delete Requirement") { try $0.removeBreakdownItem(sceneID: sceneID, itemID: item.id) } }
                 }.padding(6)

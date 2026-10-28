@@ -16,12 +16,15 @@ extension Project {
         copy.html = DualDialogueImport.duplicatedPairIDs(original.html)
         fields["summary"] = .string(original.synopsis); fields["content"] = .string(copy.html)
         for key in ["sceneNumber", "versions", "frontstageLegacySceneID"] { fields.removeValue(forKey: key) }
+        var annotationIDs = [String: String]()
         func newIDs(_ value: JSONValue) -> JSONValue {
             guard let list = value.array else { return value }
-            return .array(list.map { item in guard var record = item.object else { return item }; if record["id"] != nil { record["id"] = .string(UUID().uuidString) }; return .object(record) })
+            return .array(list.map { item in guard var record = item.object else { return item }; if let old = record["id"]?.string { let new = UUID().uuidString; annotationIDs[old] = new; record["id"] = .string(new) }; return .object(record) })
         }
         if let notes = fields["notes"] { fields["notes"] = newIDs(notes) }
         for key in ["breakdown", "breakdownData"] { if let categories = fields[key]?.object { fields[key] = .object(categories.mapValues(newIDs)) } }
+        copy.html = ScriptAnnotations.remap(copy.html, ids: annotationIDs); fields["content"] = .string(copy.html)
+        if let html = fields["frontstageHeadingMarkup"]?.string { fields["frontstageHeadingMarkup"] = .string(ScriptAnnotations.remap(html, ids: annotationIDs)) }
         var scenes = candidate.state["beats"]!.array!
         scenes[scenes.firstIndex(where: { $0.object?["id"]?.decimal == sceneID })!] = .object(fields)
         candidate.state["beats"] = .array(scenes)

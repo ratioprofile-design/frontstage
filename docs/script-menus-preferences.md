@@ -1,0 +1,13 @@
+# Screenplay menus and Preferences
+
+Web Write uses grouped Edit, Element, Style, Highlight, Beat, Production Breakdown, Dialogue and Settings menus. Element numbers and shortcuts remain unchanged. Open a group by pointer, click/touch or arrow keys; Escape dismisses without changing the selection.
+
+Preferences opens from the web Settings menu or script Settings group. Mac uses DOT Settings (Cmd+,) and Screenplay → Typography Preferences. Script Typography includes font search, independent font/size inheritance, element traits and language, reset controls and a full screenplay preview. Current-project settings remain separate from defaults for new projects. General Settings includes supported startup/paper controls and highlight export preferences. Native input-source selection is device-only and opt-in; browser language settings cannot change the OS keyboard. Installed browser font discovery is optional and requested explicitly; custom names remain usable without it.
+
+Inline highlights use `data-dot-highlight` with a named palette. Production anchors use `data-dot-breakdown` with the existing requirement's raw ID and `data-dot-category` for presentation. Requirements retain `sourceQuote` and `frontstageSourceLinked`; unknown requirement fields survive. Editing text does not rewrite its original quote. Removing source text retains the requirement with a missing-source notice. Removing a tag leaves the item intact; deleting the item removes its marks. Split operations move or copy source-linked requirements as needed; duplication allocates independent IDs. Heading annotations live in `frontstageHeadingMarkup` and are displayed only while their text matches the current heading.
+
+Mac's HTML codec preserves these marks across editing. Shared writes require the `scriptAnnotations` capability to prevent older clients from discarding them. The project envelope stays unchanged. Existing records are not migrated on open.
+
+Production colors are editing aids and never enter exports. Ordinary highlights are excluded by default; General Settings enables them for PDF/DOCX on Mac and printed PDF in the browser. FDX/Fountain remain clean semantic exports and do not represent highlights. Annotations are independent of production revision stars and generated CONT'D.
+
+Acceptance covers real DOM selections, grouped actions, source links, inline styling, Preferences, whiteboard navigation, Swift/JavaScript split/duplicate contracts, native HTML round trips and export defaults, followed by existing Writer/offline/sync regressions.

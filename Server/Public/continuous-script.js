@@ -1,3 +1,5 @@
+import {showScriptContextMenu} from './script-context-menu.js';
+import {highlightColors,categoryColors,applyInlineAnnotation,removeInlineAnnotation,refreshAnnotationPresentation,reconcileScriptAnnotations,clearInlineFormatting} from './script-annotations.js';
 import {sceneChanged} from './production-revision.js';
 import {layoutDualDialogue,validateDualSplit} from './dual-dialogue.js';
 import {pullOutBeats,replaceDocument} from './script-inclusion.js';
@@ -9,7 +11,7 @@ export function parseHeading(text){const source=text.trim().toUpperCase(),prefix
 export function applyScriptDocument(document,html,headings){const b=model.board(document);for(const[id,value]of Object.entries(html)){const beat=b.beats.find(b=>b.id===id);if(!beat)throw Error('A screenplay beat no longer exists.');if(beat.html!==value&&(beat.locked||beat.omitted||blockLocked(b,beat.blockID)||model.scene(document,beat.sceneID).frontstageTextLocked))throw Error('This selection contains locked or inactive text.');}for(const[id,text]of Object.entries(headings)){const s=document.project.beats.find(s=>String(s.id)===id);if(!s)throw Error('Scene no longer exists.');const heading=parseHeading(text);if(s.frontstageTextLocked&&JSON.stringify(heading)!==JSON.stringify({prefix:s.slug?.prefix||'',location:s.slug?.location||'',time:s.slug?.time||''}))throw Error('Unlock the scene heading first.');s.slug={...s.slug,...heading};}for(const[id,value]of Object.entries(html))b.beats.find(b=>b.id===id).html=value;}
 export function insertScriptScene(document,id,beforeHTML,afterHTML,heading){validateDualSplit(beforeHTML,afterHTML);const b=model.board(document),beat=b.beats.find(b=>b.id===id);if(!beat||beat.locked||beat.omitted||b.layers.find(l=>l.id===b.blocks.find(block=>block.id===beat.blockID)?.layerID)?.unused||blockLocked(b,beat.blockID)||model.scene(document,beat.sceneID).frontstageTextLocked)throw Error('Select an unlocked active beat.');const ordered=[...b.beats].sort((a,b)=>a.order-b.order),index=ordered.indexOf(beat),sceneID=Math.max(document.project.nextId||1,...document.project.beats.map(s=>s.id+1));const s={id:sceneID,title:'Untitled Scene',summary:'',content:'',slug:parseHeading(heading)};document.project.beats.push(s);document.project.nextId=sceneID+1;
  const fragment={...structuredClone(beat),id:crypto.randomUUID(),sceneID,title:'Untitled Beat',synopsis:'',html:afterHTML,order:(beat.order+(ordered[index+1]?.order??beat.order+2))/2,duration:Math.max(.05,beat.duration/2),start:beat.start+beat.duration/2};beat.html=beforeHTML;beat.duration=Math.max(.05,beat.duration/2);
- for(const next of ordered.slice(index+1)){if(next.sceneID!==beat.sceneID)break;if(next.locked||blockLocked(b,next.blockID))throw Error('A locked beat prevents inserting this scene.');next.sceneID=sceneID;}const owner=b.blocks.find(block=>block.id===beat.blockID);if(owner?.standalone){const container=structuredClone(owner);container.id=crypto.randomUUID();container.position.y+=60;b.blocks.push(container);fragment.blockID=container.id;}b.beats.push(fragment);return fragment.id;}
+ for(const next of ordered.slice(index+1)){if(next.sceneID!==beat.sceneID)break;if(next.locked||blockLocked(b,next.blockID))throw Error('A locked beat prevents inserting this scene.');next.sceneID=sceneID;}const owner=b.blocks.find(block=>block.id===beat.blockID);if(owner?.standalone){const container=structuredClone(owner);container.id=crypto.randomUUID();container.position.y+=60;b.blocks.push(container);fragment.blockID=container.id;}b.beats.push(fragment);reconcileScriptAnnotations(document);return fragment.id;}
 export function centerScriptTarget(node) {
   const desk=node?.closest('.continuous-desk');if(!desk)return;
   const viewport=desk.getBoundingClientRect(),target=node.getBoundingClientRect();
@@ -23,7 +25,8 @@ export function mountContinuousScript(sheet, api) {
   sheet.setAttribute('aria-label', 'Screenplay');
   const visible = new Set(), headingIDs = new Set();
   const dialogueCache=new Map();
-  const refreshDialogue=()=>{decorateDialogue(sheet,null,projectDialogue(api.document(),dialogueCache).flags);layoutDualDialogue(sheet);};
+  sheet.addEventListener('click',event=>{const tag=event.target.closest('[data-dot-breakdown]');if(tag){const line=tag.closest('[data-beat-id]'),beat=board().beats.find(b=>b.id===line?.dataset.beatId);if(beat)api.breakdown?.(beat.sceneID,beat.id,tag.dataset.dotBreakdown);}});
+  const refreshDialogue=()=>{refreshAnnotationPresentation(sheet,api.document());decorateDialogue(sheet,null,projectDialogue(api.document(),dialogueCache).flags);layoutDualDialogue(sheet);};
   let composing = false, committing = false, lastOwner = null, pendingPullouts = new Set(), pendingHeading = null, beforeEditSelection=null;
   const board = () => model.board(api.document());
   const beatFor = id => board().beats.find(beat => beat.id === id);
@@ -38,6 +41,7 @@ export function mountContinuousScript(sheet, api) {
     heading.dataset.headingScene = segment.scene.id;
     heading.dataset.beatId = beats[0].id;
     heading.textContent = inlineHeading(segment.scene);
+    if(segment.scene.frontstageHeadingMarkup){const preview=document.createElement('div');preview.innerHTML=api.cleanHTML(segment.scene.frontstageHeadingMarkup);if(preview.textContent===heading.textContent)heading.innerHTML=preview.innerHTML;}
     if (locked(beats[0])) heading.contentEditable = 'false';
     sheet.append(heading); headingIDs.add(String(segment.scene.id));
     for (const beat of beats) {
@@ -115,23 +119,33 @@ export function mountContinuousScript(sheet, api) {
     if(result!==false){const beat=beatFor(created);api.select(beat.sceneID,created);focusHeading(created);}
   }
   let contextCaret;
-  sheet.addEventListener('pointerdown',event=>{if(event.button===2){const selection=getSelection();contextCaret=selection?.rangeCount&&sheet.contains(selection.anchorNode)&&sheet.contains(selection.focusNode)?selection.getRangeAt(0).cloneRange():null;}},true);
+  sheet.addEventListener('pointerdown',event=>{if(event.button===2){const selection=getSelection();contextCaret=selection?.rangeCount&&!selection.isCollapsed&&sheet.contains(selection.anchorNode)&&sheet.contains(selection.focusNode)?selection.getRangeAt(0).cloneRange():null;}},true);
   sheet.addEventListener('contextmenu',event=>{
-    if(api.readonly()||composing||sheet.isComposing)return;event.preventDefault();document.querySelector('.write-script-menu')?.remove();
+    if(composing||sheet.isComposing)return;event.preventDefault();document.querySelector('.write-script-menu')?.remove();
     if(contextCaret&&sheet.contains(contextCaret.startContainer)){getSelection().removeAllRanges();getSelection().addRange(contextCaret);}
-    const menu=document.createElement('div');menu.className='write-script-menu';menu.setAttribute('role','menu');menu.style.left=event.clientX+'px';menu.style.top=event.clientY+'px';
-    const target=event.target.closest('[data-beat-id]'),id=target?.dataset.beatId||paragraph()?.dataset.beatId;
-    const item=(label,action)=>{const button=document.createElement('button');button.textContent=label;button.setAttribute('role','menuitem');button.onmousedown=e=>e.preventDefault();button.onclick=()=>{menu.remove();try{action();}catch(e){api.status(e.message);}};menu.append(button);};
-    item('Undo',()=>api.undo?.());item('Redo',()=>api.redo?.());
-    for(const command of ['cut','copy'])item(command[0].toUpperCase()+command.slice(1),()=>{if(!document.execCommand(command))api.status('Use Command/Ctrl+'+(command==='cut'?'X':'C')+'.');});
-    item('Paste',async()=>{try{const value=await navigator.clipboard.readText();sheet.focus({preventScroll:true});if(contextCaret?.startContainer.isConnected){getSelection().removeAllRanges();getSelection().addRange(contextCaret);}document.execCommand('insertText',false,value);}catch{api.status('Use Command/Ctrl+V to paste into the screenplay.');}});
-    item('Select All',()=>{sheet.focus({preventScroll:true});const range=document.createRange();range.selectNodeContents(sheet);getSelection().removeAllRanges();getSelection().addRange(range);});
-    for(const kind of elements)item(kind==='slugline'?'Scene Heading':kind[0].toUpperCase()+kind.slice(1),()=>behavior.format(kind));
-    item('Pair / Unpair Dual Dialogue',()=>sheet.toggleDualDialogue?.());item('Split scene at cursor',splitScene);item('Duplicate Beat',()=>{if(id)api.duplicate?.(id);});item('Open Beat Editor',()=>{if(id)api.open?.(id);});
-    document.body.append(menu);const bounds=menu.getBoundingClientRect();menu.style.top=Math.max(4,Math.min(event.clientY,innerHeight-bounds.height-4))+'px';menu.style.left=Math.max(4,Math.min(event.clientX,innerWidth-bounds.width-4))+'px';
-    const dismiss=()=>{menu.remove();document.removeEventListener('pointerdown',outside,true);document.removeEventListener('keydown',keys,true);};
-    const outside=e=>{if(!menu.contains(e.target))dismiss();},keys=e=>{if(e.key==='Escape'){e.preventDefault();dismiss();}};
-    menu.addEventListener('click',dismiss);document.addEventListener('pointerdown',outside,true);document.addEventListener('keydown',keys,true);
+    const selection=getSelection(),saved=selection?.rangeCount?selection.getRangeAt(0).cloneRange():null;
+    const target=event.target.closest('[data-beat-id]'),id=paragraph()?.dataset.beatId||target?.dataset.beatId,beat=beatFor(id);
+    const restore=()=>{if(!saved?.startContainer.isConnected)return;sheet.focus({preventScroll:true});getSelection().removeAllRanges();getSelection().addRange(saved);};
+    const selectedNodes=saved?[...sheet.children].filter(n=>saved.intersectsNode(n)):[],canEdit=!api.readonly()&&!!beat&&!locked(beat)&&selectedNodes.every(n=>!locked(beatFor(n.dataset.beatId))),hasText=!!saved&&!saved.collapsed,oneScene=new Set(selectedNodes.map(ownerScene)).size===1;
+    const tag=saved?.startContainer?.parentElement?.closest('[data-dot-breakdown]'),recordID=tag?.dataset.dotBreakdown;
+    const act=(label,action,extra={})=>({label,action:()=>{restore();return action();},...extra});
+    const inline=(attrs,remove)=>{if(!canEdit||!hasText)throw Error('Select unlocked screenplay text first.');restore();const bookmark=screenplaySelection(sheet);if(remove)removeInlineAnnotation(sheet,saved,remove);else applyInlineAnnotation(sheet,saved,attrs);restoreScreenplaySelection(sheet,bookmark);commit({command:true});};
+    const format=command=>{if(!canEdit)return;restore();document.execCommand(command);commit({command:true});};
+    const groups=[
+      {label:'Edit',items:[act('Undo',()=>api.undo?.(),{disabled:api.readonly()}),act('Redo',()=>api.redo?.(),{disabled:api.readonly()}),...['cut','copy'].map(c=>act(c[0].toUpperCase()+c.slice(1),()=>{if(!document.execCommand(c))api.status('Use Command/Ctrl+'+(c==='cut'?'X':'C')+'.');},{disabled:!hasText||(c==='cut'&&!canEdit)})),act('Paste',async()=>{try{const value=await navigator.clipboard.readText();restore();document.execCommand('insertText',false,value);}catch{api.status('Use Command/Ctrl+V to paste into the screenplay.');}},{disabled:!canEdit}),act('Select All',()=>{const range=document.createRange();range.selectNodeContents(sheet);getSelection().removeAllRanges();getSelection().addRange(range);})]},
+      {label:'Element',items:elements.map((kind,index)=>act((index+1)+' '+(kind==='slugline'?'Scene Heading':model.label(kind)),()=>behavior.format(kind),{disabled:!canEdit,checked:paragraph()?.classList.contains('sc-'+kind),shortcut:'⌘/Ctrl+'+(index+1)}))},
+      {label:'Style',items:[...['bold','italic','underline','strikeThrough'].map(c=>act(c==='strikeThrough'?'Strikethrough':model.label(c),()=>format(c),{disabled:!canEdit,checked:document.queryCommandState(c)})),act('Clear Inline Formatting',()=>{const bookmark=screenplaySelection(sheet);clearInlineFormatting(sheet,saved);restoreScreenplaySelection(sheet,bookmark);commit({command:true});},{disabled:!canEdit||!hasText})]},
+      {label:'Highlight',items:[...Object.entries(highlightColors).map(([name,color])=>act(name,()=>inline({'data-dot-highlight':name}),{color,disabled:!canEdit||!hasText})),act('Remove Highlight',()=>inline(null,'data-dot-highlight'),{disabled:!canEdit||!hasText})]},
+      {label:'Beat',items:[act('Split at Cursor',splitScene,{disabled:!canEdit||hasText,reason:'Place the cursor inside unlocked text.'}),act('Duplicate Beat',()=>api.duplicate?.(id),{disabled:!canEdit}),act('Open Beat Editor',()=>api.open?.(id),{disabled:!beat}),act('Show in Whiteboard',()=>api.showBoard?.(id),{disabled:!beat})]},
+      {label:'Production Breakdown',items:[...model.categories.map(category=>act(model.label(category.toLowerCase()),()=>{
+        if(!hasText||!canEdit||!oneScene)throw Error('Select unlocked text within one scene.');const quote=saved.toString(),newID=crypto.randomUUID();restore();const bookmark=screenplaySelection(sheet);applyInlineAnnotation(sheet,saved,{'data-dot-breakdown':newID,'data-dot-category':category});restoreScreenplaySelection(sheet,bookmark);
+        const result=commit({command:true,annotation:{id:newID,sceneID:beat.sceneID,category,quote}});if(result!==false)api.breakdown?.(beat.sceneID,id,newID);
+      },{color:categoryColors[category],disabled:!hasText||!canEdit||!oneScene,reason:'Select text within one unlocked scene.'})),act('Show Linked Item',()=>api.breakdown?.(beat.sceneID,id,recordID),{disabled:!recordID}),act('Remove Tag',()=>inline(null,'data-dot-breakdown'),{disabled:!canEdit||!hasText})]},
+      {label:'Dialogue',items:[act('Pair / Unpair Dual Dialogue',()=>sheet.toggleDualDialogue?.(),{disabled:!canEdit})]},
+      {label:'Settings',items:[act('Typography Preferences…',()=>api.preferences?.())]}
+    ];for(const group of groups)group.error=api.status;
+    showScriptContextMenu(event.clientX,event.clientY,groups,()=>{if(document.activeElement?.closest('.write-script-menu'))restore();});
+
   });
   function restoreHeadingAnchors(headings) {
     for (const sceneID of headingIDs) {
@@ -159,6 +173,7 @@ export function mountContinuousScript(sheet, api) {
       const headings = {};
       restoreHeadingAnchors(headings);
       const success = (meta?.command&&api.structureChange||api.change)(document => {
+        if(meta?.annotation){const a=meta.annotation;model.addRequirement(document,a.sceneID,a.category,a.quote,1,'');const entry=model.breakdownEntries(model.scene(document,a.sceneID)).at(-1);const matches=model.breakdownEntries(model.scene(document,a.sceneID)).filter(e=>e.bucket===a.category);const latest=matches.at(-1);Object.assign(model.scene(document,a.sceneID)[latest.storage][latest.bucket][latest.index],{id:a.id,sourceQuote:a.quote,frontstageSourceLinked:true});}
         const html = Object.fromEntries([...visible].filter(id => !pendingPullouts.has(id)).map(id => [id, '']));
         const redirects = new Map(); let owner = null;
         for (const node of [...sheet.children]) {
@@ -167,6 +182,7 @@ export function mountContinuousScript(sheet, api) {
           if (!owner || pendingPullouts.has(owner)) continue;
           if (node.dataset.headingScene) {
             const id=node.dataset.headingScene,scene=document.project.beats.find(scene=>String(scene.id)===id);
+            const markup=api.cleanHTML(node.innerHTML);if(markup.includes('data-dot-'))scene.frontstageHeadingMarkup=markup;else delete scene.frontstageHeadingMarkup;
             // The edited occurrence wins over unchanged legacy repetitions.
             if (node.textContent!==headingBaseline.get(node)&&(!(id in headings)||node===paragraph())) headings[id]=node.textContent;
             continue;

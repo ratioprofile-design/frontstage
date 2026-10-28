@@ -34,6 +34,7 @@ jobs:
             node Server/Tests/scene-cards-browser.mjs
             node Server/Tests/script-inclusion.mjs
             node Server/Tests/antigravity-adoption.mjs
+            node Server/Tests/script-annotations.mjs
             node Server/Tests/antigravity-browser.mjs
             node Server/Tests/continuous-inclusion-browser.mjs
             node Server/Tests/write-panel-model.mjs
@@ -43,6 +44,7 @@ jobs:
             node Server/Tests/writer-typing-browser.mjs
             node Server/Tests/writer-keyboard-browser.mjs
             node Server/Tests/writer-actions-browser.mjs
+            node Server/Tests/writer-menus-browser.mjs
             node Server/Tests/writer-scroll-browser.mjs
             node Server/Tests/write-mobile-browser.mjs
             node Server/Tests/workspace-parity.mjs

@@ -55,6 +55,12 @@ enum ScreenplayPDF {
             let headingStart = text.length
             text.append(NSAttributedString(string: "\(number)  \(scene.heading.text)\(segment.isContinuation ? " (CONTINUED)" : "")\(project.productionSceneChanged(scene.id) ? " *" : "")\n",
                 attributes: ScreenplayTypography.attributes(.sceneHeading, width: paper.contentWidth, printing: true, settings: project.scriptLayout)))
+            if UserDefaults.standard.bool(forKey: "dot_export_highlights"), let markup = project.headingMarkup(scene.id), let decoded = try? ScreenplayTextCodec.decode(markup, printing: true, settings: project.scriptLayout) {
+                let heading = decoded.string.trimmingCharacters(in: .newlines), match = (text.string as NSString).range(of: heading, options: [], range: NSRange(location: headingStart, length: text.length - headingStart))
+                if !heading.isEmpty, match.location != NSNotFound {
+                    decoded.enumerateAttribute(.backgroundColor, in: NSRange(location: 0, length: min((heading as NSString).length, decoded.length))) { color, range, _ in if let color { text.addAttribute(.backgroundColor, value: color, range: NSRange(location: match.location + range.location, length: range.length)) } }
+                }
+            }
             if scene.startsNewPage { text.addAttribute(explicitPageStart, value: true, range: NSRange(location: headingStart, length: 1)) }
             let body = try ScreenplayTextCodec.decode(scene.html, width: paper.contentWidth, printing: true, settings: project.scriptLayout)
             if body.length > 0 { body.addAttribute(NSAttributedString.Key("FrontstageBeatOwner"), value: "pdf-scene-\(text.length)", range: NSRange(location: 0, length: body.length)) }
@@ -89,6 +95,7 @@ enum ScreenplayPDF {
             context.textMatrix = .identity
             let path = CGPath(rect: page.rect, transform: nil)
             let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: page.range.location, length: page.range.length), path, nil)
+            drawFrameHighlights(frame, context: context)
             CTFrameDraw(frame, context)
             if let character = page.continuedCharacter {
                 drawMarker("\(character) (CONT'D)", x: paper.leftMargin + paper.contentWidth * WorkspaceDesign.characterIndent / 100,
@@ -111,6 +118,25 @@ enum ScreenplayPDF {
         }
         context.closePDF()
         return RenderedScreenplay(data: output as Data, text: text, pageRanges: pages.map(\.range), paper: paper, pages: pages)
+    }
+
+    private static func drawFrameHighlights(_ frame: CTFrame, context: CGContext) {
+        let lines = CTFrameGetLines(frame) as! [CTLine]
+        var origins = Array(repeating: CGPoint.zero, count: lines.count)
+        CTFrameGetLineOrigins(frame, CFRange(location: 0, length: 0), &origins)
+        let rect = CTFrameGetPath(frame).boundingBox
+        for (index, line) in lines.enumerated() {
+            for run in CTLineGetGlyphRuns(line) as! [CTRun] {
+                let attributes = CTRunGetAttributes(run) as NSDictionary
+                guard let color = attributes[NSAttributedString.Key.backgroundColor] as? NSColor else { continue }
+                let range = CTRunGetStringRange(run)
+                var ascent: CGFloat = 0, descent: CGFloat = 0
+                _ = CTRunGetTypographicBounds(run, CFRange(location: 0, length: 0), &ascent, &descent, nil)
+                let start = CTLineGetOffsetForStringIndex(line, range.location, nil), end = CTLineGetOffsetForStringIndex(line, range.location + range.length, nil)
+                context.setFillColor(color.cgColor)
+                context.fill(CGRect(x: rect.minX + origins[index].x + min(start, end), y: rect.minY + origins[index].y - descent, width: max(1, abs(end - start)), height: ascent + descent))
+            }
+        }
     }
 
     private struct FlowFragment { let range: NSRange; let rect: CGRect }
@@ -271,7 +297,7 @@ enum ScreenplayPDF {
         let framesetter = CTFramesetterCreateWithAttributedString(flow.text as CFAttributedString)
         for (index, page) in flow.pages.enumerated() {
             context.beginPDFPage(nil); context.setFillColor(NSColor.white.cgColor); context.fill(bounds); context.textMatrix = .identity
-            for fragment in page.fragments { CTFrameDraw(CTFramesetterCreateFrame(framesetter, CFRange(location: fragment.range.location, length: fragment.range.length), CGPath(rect: fragment.rect, transform: nil), nil), context) }
+            for fragment in page.fragments { let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: fragment.range.location, length: fragment.range.length), CGPath(rect: fragment.rect, transform: nil), nil); drawFrameHighlights(frame, context: context); CTFrameDraw(frame, context) }
             for marker in page.markers { drawMarker(marker.value, x: marker.x, y: marker.header ? paper.height - paper.topMargin - 12 : paper.bottomMargin + 2, in: context, paper: paper, maxWidth: marker.width) }
             if let revisionHeader { drawMarker(revisionHeader, x: paper.leftMargin, y: paper.height - 42, in: context, paper: paper, maxWidth: paper.contentWidth - 36) }
             if index > 0 { drawMarker("\(index + 1).", x: paper.width - paper.rightMargin - 24, y: paper.height - 42, in: context, paper: paper) }

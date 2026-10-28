@@ -27,7 +27,7 @@ enum TamilInputManager {
         guard text.window?.firstResponder === text else { return }
         guard !text.hasMarkedText(), trackedText?.hasMarkedText() != true else { return }
         trackedText = text
-        if text.isEditable && enabled && UserDefaults.standard.bool(forKey: "dot_switch_tamil_input") { activateTamilInput() } else { restoreStandardInput() }
+        if text.isEditable && UserDefaults.standard.bool(forKey: "dot_switch_tamil_input") { if enabled { activateTamilInput() } else { activateEnglishInput() } } else { restoreStandardInput() }
     }
     static func compositionEnded(in text: NSTextView) {
         guard trackedText === text, !text.hasMarkedText() else { return }
@@ -37,17 +37,36 @@ enum TamilInputManager {
         guard let current = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
               !isTamilSource(current), let tamil = findTamilInputSource() else { return }
         // Preserve the previous source only after a successful switch.
-        if TISSelectInputSource(tamil) == noErr { previousInputSource = current; isTamilActive = true }
+        if TISSelectInputSource(tamil) == noErr { if previousInputSource == nil { previousInputSource = current }; isTamilActive = true }
     }
     static func restoreStandardInput() {
         guard trackedText?.hasMarkedText() != true else { return }
         guard let previous = previousInputSource else { return }
         defer { previousInputSource = nil; isTamilActive = false; trackedText = nil }
-        guard let current = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(), isTamilSource(current) else { return }
+        guard let current = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(), isTamilSource(current) || inputSourceID(current) == UserDefaults.standard.string(forKey: "dot_english_input_source") else { return }
         TISSelectInputSource(previous)
     }
 
+    struct InputChoice: Identifiable { let id: String; let name: String }
+    static func availableSources(tamil: Bool) -> [InputChoice] {
+        enabledSources().filter { isTamilSource($0) == tamil }.map { InputChoice(id: inputSourceID($0), name: inputSourceName($0)) }
+    }
+    private static func enabledSources() -> [TISInputSource] {
+        guard let list = TISCreateInputSourceList(nil, false)?.takeRetainedValue() as? [TISInputSource] else { return [] }
+        return list.filter { source in
+            guard let pointer = TISGetInputSourceProperty(source, kTISPropertyInputSourceIsSelectCapable) else { return false }
+            return Unmanaged<CFBoolean>.fromOpaque(pointer).takeUnretainedValue() == kCFBooleanTrue
+        }
+    }
+    private static func activateEnglishInput() {
+        guard let id = UserDefaults.standard.string(forKey: "dot_english_input_source"), !id.isEmpty else { restoreStandardInput(); return }
+        guard let source = enabledSources().first(where: { inputSourceID($0) == id && !isTamilSource($0) }),
+              let current = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(), inputSourceID(current) != id else { return }
+        if TISSelectInputSource(source) == noErr, previousInputSource == nil { previousInputSource = current }
+    }
     private static func findTamilInputSource() -> TISInputSource? {
+        if let id = UserDefaults.standard.string(forKey: "dot_tamil_input_source"), let source = enabledSources().first(where: { inputSourceID($0) == id && isTamilSource($0) }) { return source }
+
         guard let list = TISCreateInputSourceList(nil, false)?.takeRetainedValue() as? [TISInputSource] else {
             return nil
         }

@@ -1,0 +1,35 @@
+import {createServer} from 'node:http';
+import {createRequire} from 'node:module';
+import {readFile,mkdir} from 'node:fs/promises';
+import {existsSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+const require=createRequire(import.meta.url),{chromium}=require(process.env.FRONTSTAGE_PLAYWRIGHT_MODULE||'playwright');
+const root=fileURLToPath(new URL('../../',import.meta.url));
+const server=createServer(async(req,res)=>{try{const file=req.url==='/'?'index.html':decodeURIComponent(req.url.slice(1));if((file.includes('/')&&!file.startsWith('brand/'))||file.includes('..'))throw Error();res.setHeader('Content-Type',file.endsWith('.js')?'application/javascript':file.endsWith('.css')?'text/css':file.endsWith('.png')?'image/png':file.endsWith('.ico')?'image/x-icon':file.endsWith('.json')?'application/json':'text/html');res.end(await readFile(path.join(root,'Server/Public',file)));}catch{res.writeHead(404);res.end();}});
+await new Promise(resolve=>server.listen(17845,'127.0.0.1',resolve));let browser;
+try{
+ browser=await chromium.launch({executablePath:process.env.FRONTSTAGE_CHROMIUM||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':chromium.executablePath()),headless:true,args:['--no-sandbox']});
+ const page=await browser.newPage({viewport:{width:1440,height:950}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ const fixture=JSON.parse(await readFile(path.join(root,'Tests/Fixtures/write-panels.frontstage'),'utf8'));
+ fixture.project.frontstageWhiteboard.beats[0].html='<p class="sc-action">A red car waits beside the gate.</p><p class="sc-action">She walks away.</p>';
+ fixture.project.beats[0].content=fixture.project.frontstageWhiteboard.beats[0].html;
+ await page.goto('http://127.0.0.1:17845');await page.locator('#local-mode').click();await page.locator('#back').click();await page.locator('#import-project').setInputFiles({name:'Menus.dot',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(fixture))});await page.waitForSelector('#workspace:not([hidden])');
+ await page.locator('#view-mode').selectOption('edit');
+ const sheet=page.locator('.continuous-editor');
+ const selectText=async(text)=>{await sheet.evaluate((root,text)=>{root.focus({preventScroll:true});const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);while(walker.nextNode()){const node=walker.currentNode,index=node.data.indexOf(text);if(index>=0){const range=document.createRange();range.setStart(node,index);range.setEnd(node,index+text.length);getSelection().removeAllRanges();getSelection().addRange(range);return;}}throw Error('Text missing: '+text);},text);};
+ const menu=async(group)=>{await sheet.evaluate(root=>root.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:650,clientY:300}))); await page.getByRole('menuitem',{name:group+' ›',exact:true}).click({timeout:5000});};
+ const download=async()=>{const event=page.waitForEvent('download');await page.locator('#download').click();const file=await event;return JSON.parse(await readFile(await file.path(),'utf8'));};
+ await selectText('red car');await menu('Highlight');await page.getByRole('menuitem',{name:'Yellow',exact:true}).click();assert.equal(await sheet.locator('[data-dot-highlight="Yellow"]').textContent(),'red car');assert.equal(await page.evaluate(()=>getSelection().toString()),'red car');
+ await selectText('red car');await menu('Production Breakdown');assert.equal(await page.getByRole('menu',{name:'Production Breakdown',exact:true}).getByRole('menuitem').count(),17);await page.getByRole('menuitem',{name:'Vehicles',exact:true}).click();await page.locator('[data-requirement-id]').first().waitFor();
+ let saved=await download(),entry=Object.values(saved.project.beats[0].breakdownData||saved.project.beats[0].breakdown).flat().find(r=>r.sourceQuote==='red car');assert.equal(entry.category,'VEHICLES');assert.ok(saved.project.frontstageWhiteboard.beats[0].html.includes(entry.id));
+ await selectText('red car');await menu('Style');await page.getByRole('menuitemcheckbox',{name:'Bold',exact:true}).click();saved=await download();assert.match(saved.project.frontstageWhiteboard.beats[0].html,/<(b|strong)\b/);
+ await selectText('red car');await menu('Element');assert.equal(await page.getByRole('menu',{name:'Element',exact:true}).getByRole('menuitemcheckbox').count(),8);await page.keyboard.press('Escape');assert.equal(await page.evaluate(()=>getSelection().toString()),'red car');
+ await page.locator('#dot-settings-menu summary').click();await page.locator('#open-preferences').click();const dialog=page.getByRole('dialog',{name:'Preferences'});await dialog.waitFor();
+ await dialog.getByRole('button',{name:'3 Character',exact:true}).click();await dialog.getByLabel('Custom Font',{exact:true}).check();await dialog.getByLabel('Element Font',{exact:true}).fill('Courier New');await dialog.getByLabel('Element Font',{exact:true}).press('Tab');await dialog.getByLabel('Custom Size',{exact:true}).check();await dialog.getByLabel('Element Size',{exact:true}).fill('18');await dialog.getByLabel('Element Size',{exact:true}).press('Tab');await dialog.getByLabel('Element Language',{exact:true}).selectOption('Tamil');assert.equal(await dialog.locator('[data-typography-preview] .sc-character').evaluate(n=>getComputedStyle(n).fontSize),'18px');
+ await dialog.getByRole('button',{name:'General Settings',exact:true}).click();await dialog.getByLabel('Include Highlights in PDF',{exact:true}).check();await dialog.getByRole('button',{name:'Done',exact:true}).click();saved=await download();assert.equal(saved.project.frontstageScriptLayout.elements.character.isTamil,true);assert.equal(saved.project.frontstageScriptLayout.elements.character.fontSize,18);
+ await page.locator('#view-mode').selectOption('pages');assert.equal(await page.locator('.pages-desk [data-dot-highlight]').count(),1);assert.ok(await page.locator('body').evaluate(n=>n.classList.contains('dot-export-highlights')));
+ await page.locator('#view-mode').selectOption('edit');await selectText('red car');await menu('Beat');await page.getByRole('menuitem',{name:'Show in Whiteboard',exact:true}).click();assert.equal(await page.locator('#view-mode').inputValue(),'board');
+ assert.deepEqual(errors,[]);console.log('PASS: grouped menu selection, highlights, production source links, element controls, Preferences and whiteboard reveal');
+}finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}

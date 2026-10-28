@@ -1,3 +1,4 @@
+import {reconcileScriptAnnotations,highlightColors} from './script-annotations.js';
 import {requiredWriteFeatures,validateServerFeatures} from './feature-compatibility.js';
 import {validateTypography,applyTypography,popupTypography} from './script-typography.js';
 import {eraseBoardDrawing} from './board-drawing.js';
@@ -62,7 +63,7 @@ function stripLegacyCredentials(value) {
 }
 function cleanHTML(source) {
   const parsed = new DOMParser().parseFromString(source, 'text/html');
-  const allowed = new Set(['DIV', 'P', 'BR', 'B', 'STRONG', 'I', 'EM', 'U', 'SPAN']);
+  const allowed = new Set(['DIV', 'P', 'BR', 'B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'SPAN']);
   function clean(node) {
     if (node.nodeType === Node.TEXT_NODE) return document.createTextNode(node.textContent);
     const fragment = document.createDocumentFragment();
@@ -70,6 +71,7 @@ function cleanHTML(source) {
     const target = allowed.has(node.tagName) ? document.createElement(node.tagName.toLowerCase()) : fragment;
     if (target instanceof HTMLElement) target.className = [...node.classList].filter(c => /^sc-(line|action|character|dialogue|parenthetical|transition|shot|lyrics|slugline|dual-left|dual-right|rev)$/.test(c)).join(' ');
     if (target instanceof HTMLElement && /^[A-Za-z0-9_-]{1,120}$/.test(node.getAttribute('data-dual-pair')||'')) target.setAttribute('data-dual-pair',node.getAttribute('data-dual-pair'));
+    if(target instanceof HTMLElement){for(const key of ['data-dot-breakdown','data-dot-category','data-dot-highlight']){const value=node.getAttribute(key);if(value&&(/^[A-Za-z0-9_-]{1,120}$/.test(value))&&(key!=='data-dot-highlight'||Object.hasOwn(highlightColors,value)))target.setAttribute(key,value);}}
     for (const child of node.childNodes) target.append(clean(child));
     return target;
   }
@@ -191,7 +193,7 @@ function edit(action,historyKey=null) {
   if (!doc || current.access === 'reader') return false;
   const previous = clone(doc);
   historyFocus.set(previous,beforeInputFocus||captureWriterFocus());beforeInputFocus=null;
-  try { action(); syncSceneMetadata(doc);validateSceneModel(doc);validateInclusion(doc); validateBoard(board(), new Set(doc.project.beats.map(s => s.id))); compileSnippets(); if (equal(previous, doc)) return true; const now=Date.now(),key=historyKey||(document.activeElement?.matches('.note-content')?'note:'+document.activeElement.closest('[data-note-id]')?.dataset.noteId:null);if(!key||key!==lastHistoryKey||now-lastHistoryTime>=1000||future.length)history.push(previous);lastHistoryKey=key;lastHistoryTime=now;future.length = 0; if (history.length > 40) history.shift(); dirty = true; saveLocal().catch(e => status(`Local save failed: ${e.message}`)); render(); clearTimeout(timer); timer = setTimeout(sync, 800); return true; }
+  try { action(); reconcileScriptAnnotations(doc); syncSceneMetadata(doc);validateSceneModel(doc);validateInclusion(doc); validateBoard(board(), new Set(doc.project.beats.map(s => s.id))); compileSnippets(); if (equal(previous, doc)) return true; const now=Date.now(),key=historyKey||(document.activeElement?.matches('.note-content')?'note:'+document.activeElement.closest('[data-note-id]')?.dataset.noteId:null);if(!key||key!==lastHistoryKey||now-lastHistoryTime>=1000||future.length)history.push(previous);lastHistoryKey=key;lastHistoryTime=now;future.length = 0; if (history.length > 40) history.shift(); dirty = true; saveLocal().catch(e => status(`Local save failed: ${e.message}`)); render(); clearTimeout(timer); timer = setTimeout(sync, 800); return true; }
   catch (error) { doc = previous; render(); status(error.message); return false; }
 }
 function restoreHistory(from, to) {

@@ -6,6 +6,11 @@ import FrontstageCore
 @MainActor
 struct DOTPreferences: View {
     @ObservedObject var workspace: Workspace
+    @AppStorage("dot_preferences_tab") private var tab = 0
+    @State private var fontSearch = ""
+    @AppStorage("dot_tamil_input_source") private var tamilSource = ""
+    @AppStorage("dot_english_input_source") private var englishSource = ""
+    @AppStorage("dot_export_highlights") private var exportHighlights = false
     @State private var element: ScreenplayElement = .action
     @State private var deviceDefaults = false
     @State private var defaults = ScriptLayoutSettings()
@@ -17,51 +22,86 @@ struct DOTPreferences: View {
     private var layout: ScriptLayoutSettings { deviceDefaults ? defaults : workspace.project.scriptLayout }
     private var override: ElementTypography? { layout.elements[element.rawValue] }
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("DOT Preferences").font(.title2)
-                Picker("Apply typography to", selection: $deviceDefaults) {
-                    Text("Current project").tag(false); Text("Defaults for new projects").tag(true)
-                }.pickerStyle(.segmented)
-                Text("Device defaults apply only to new projects. Imported projects retain their own typography.").font(.caption).foregroundStyle(.secondary)
-                GroupBox("Base typography") {
-                    VStack(alignment: .leading) {
-                        fontField("Font name", value: layout.fontName) { name in update { $0.fontName = name } }
-                        HStack {
-                            Text("Size"); TextField("Size", value: Binding(get: { layout.fontSize }, set: { size in update { $0.fontSize = size; $0.lineHeight = max(size, $0.lineHeight) } }), format: .number)
-                            Text("Line height"); TextField("Height", value: Binding(get: { layout.lineHeight }, set: { value in update { $0.lineHeight = value } }), format: .number)
-                            Text("Spacing"); TextField("Spacing", value: Binding(get: { layout.paragraphSpacing }, set: { value in update { $0.paragraphSpacing = value } }), format: .number)
-                        }
-                    }.padding(8)
-                }
-                GroupBox("Element typography") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Picker("Element", selection: $element) { ForEach(ScreenplayElement.editable, id: \.self) { Text($0.label).tag($0) } }
-                        Toggle("Customize this element", isOn: Binding(get: { override != nil }, set: { enabled in update { value in
-                            value.elements[element.rawValue] = enabled ? ElementTypography(isBold: value.isBold(for: element), isUppercase: value.isUppercase(for: element)) : nil
-                        } }))
-                        if override != nil {
-                            fontField("Font (blank inherits)", value: override?.fontName ?? "") { name in update { $0.elements[element.rawValue]?.fontName = name } }
-                            TextField("Size", value: Binding(get: { override?.fontSize ?? layout.fontSize }, set: { size in update { $0.elements[element.rawValue]?.fontSize = size } }), format: .number)
-                            HStack { flag("Bold", \.isBold); flag("Italic", \.isItalic); flag("Underline", \.isUnderline); flag("Uppercase", \.isUppercase); flag("Tamil", \.isTamil) }
-                        }
-                        if layout.isTamil(for: element) { Text("Tamil font and line spacing apply here. Optional keyboard switching is enabled under Device workflow.").font(.caption).foregroundStyle(.secondary) }
-                        Text(layout.isUppercase(for: element) ? "Sample text · தமிழ்".uppercased() : "Sample text · தமிழ்")
-                            .font(Font(NSFont(name: layout.effectiveFontName(for: element), size: layout.effectiveFontSize(for: element)) ?? .monospacedSystemFont(ofSize: layout.effectiveFontSize(for: element), weight: .regular)))
-                            .fontWeight(layout.isBold(for: element) ? .bold : .regular)
-                            .italic(layout.isItalic(for: element))
-                            .underline(layout.isUnderline(for: element))
-                            .padding(12).frame(maxWidth: .infinity, alignment: .leading)
-                    }.padding(8)
-                }
-                GroupBox("Device workflow") {
-                    VStack(alignment: .leading) {
-                        Toggle("Switch keyboard source for Tamil elements", isOn: $switchTamilInput)
-                        Toggle("Restore the last native project at startup", isOn: $restoreLast)
-                        Picker("Default paper for new projects", selection: $defaultPaper) { Text("A4").tag("A4"); Text("US Letter").tag("US Letter") }
-                        Text("Recovery copies take priority over session restoration.").font(.caption).foregroundStyle(.secondary)
-                    }.padding(8)
-                }
+        VStack(alignment: .leading, spacing: 12) {
+            Text("DOT Preferences").font(.title2)
+            Picker("Preferences", selection: $tab) { Text("Script Typography").tag(0); Text("General Settings").tag(1) }.pickerStyle(.segmented)
+            ScrollView { if tab == 0 { typographyContent } else { generalContent } }
+        }.padding(20).frame(width: 820, height: 700).textFieldStyle(.roundedBorder)
+        .onAppear {
+            if let data = UserDefaults.standard.data(forKey: "default_script_layout"), let saved = try? JSONDecoder().decode(ScriptLayoutSettings.self, from: data) { defaults = saved }
+        }
+    }
+    private var typographyContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Picker("Apply typography to", selection: $deviceDefaults) { Text("Current project").tag(false); Text("Defaults for new projects").tag(true) }.pickerStyle(.segmented)
+            Text("Device defaults apply only to new projects. Imported projects retain their typography.").font(.caption).foregroundStyle(.secondary)
+            GroupBox("Global Script Typography") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Button("Reset to Industry Standard") { update { $0 = ScriptLayoutSettings() } }
+                    TextField("Filter installed fonts…", text: $fontSearch)
+                    fontField("Base Font", value: layout.fontName) { name in update { $0.fontName = name } }
+                    HStack {
+                        Text("Size"); TextField("Base Size", value: Binding(get: { layout.fontSize }, set: { size in update { $0.fontSize = size; $0.lineHeight = max(size, $0.lineHeight) } }), format: .number).frame(width: 60)
+                        Stepper("Size", value: Binding(get: { layout.fontSize }, set: { size in update { $0.fontSize = size; $0.lineHeight = max(size, $0.lineHeight) } }), in: 8...36).labelsHidden()
+                        Text("Line height"); TextField("Line Height", value: Binding(get: { layout.lineHeight }, set: { value in update { $0.lineHeight = value } }), format: .number).frame(width: 60)
+                        Text("Spacing"); TextField("Paragraph Spacing", value: Binding(get: { layout.paragraphSpacing }, set: { value in update { $0.paragraphSpacing = value } }), format: .number).frame(width: 60)
+                    }
+                }.padding(8)
+            }
+            GroupBox("Element-Specific Formatting") {
+                VStack(alignment: .leading, spacing: 12) {
+                    ScrollView(.horizontal) {
+                        HStack { ForEach(Array(ScreenplayElement.editable.enumerated()), id: \.element) { index, item in
+                            Button("\(index + 1) \(item.label)\(layout.isTamil(for: item) ? " · த" : "")") { element = item }.tint(element == item ? .accentColor : .secondary)
+                        } }
+                    }
+                    Toggle("Custom Font", isOn: Binding(get: { override?.fontName?.isEmpty == false }, set: { enabled in updateElement { $0.fontName = enabled ? layout.fontName : nil } }))
+                    if override?.fontName?.isEmpty == false { fontField("Element Font", value: override?.fontName ?? layout.fontName) { name in updateElement { $0.fontName = name } } }
+                    else { Text("Inheriting base font: \(layout.fontName)").font(.caption).foregroundStyle(.secondary) }
+                    Toggle("Custom Size", isOn: Binding(get: { override?.fontSize != nil }, set: { enabled in updateElement { $0.fontSize = enabled ? layout.fontSize : nil } }))
+                    if override?.fontSize != nil {
+                        HStack { TextField("Element Size", value: Binding(get: { override?.fontSize ?? layout.fontSize }, set: { size in updateElement { $0.fontSize = size } }), format: .number).frame(width: 80); Stepper("Size", value: Binding(get: { override?.fontSize ?? layout.fontSize }, set: { size in updateElement { $0.fontSize = size } }), in: 8...36).labelsHidden() }
+                    } else { Text("Inheriting base size: \(Int(layout.fontSize)) pt").font(.caption).foregroundStyle(.secondary) }
+                    HStack { flag("Bold", \.isBold); flag("Italic", \.isItalic); flag("Underline", \.isUnderline); flag("Uppercase", \.isUppercase) }
+                    Picker("Element Language", selection: Binding(get: { layout.isTamil(for: element) }, set: { tamil in updateElement { value in value.isTamil = tamil; if tamil && (value.fontName?.isEmpty != false) { value.fontName = "Tamil Sangam MN" } } })) { Text("English").tag(false); Text("Tamil · தமிழ்").tag(true) }.pickerStyle(.segmented)
+                    Text("Fonts and spacing follow the element. Optional keyboard switching is configured under General Settings.").font(.caption).foregroundStyle(.secondary)
+                    Button("Clear Element Overrides") { update { $0.elements.removeValue(forKey: element.rawValue) } }.disabled(override == nil)
+                }.padding(8)
+            }
+            GroupBox("Live Screenplay Preview") {
+                VStack(alignment: .leading, spacing: layout.paragraphSpacing) {
+                    previewLine(.sceneHeading, english: "INT. ROOM - DAY", tamil: "INT. வீடு - பகல்")
+                    previewLine(.action, english: "She opens the door.", tamil: "அவள் கதவைத் திறக்கிறாள்.")
+                    previewLine(.character, english: "ABI", tamil: "அபி")
+                    previewLine(.parenthetical, english: "(quietly)", tamil: "(மெதுவாக)")
+                    previewLine(.dialogue, english: "We can begin again.", tamil: "நாம் மீண்டும் தொடங்கலாம்.")
+                    previewLine(.transition, english: "CUT TO:", tamil: "CUT TO:")
+                }.padding(24).frame(maxWidth: .infinity, alignment: .leading).foregroundStyle(.black).background(.white)
+            }
+        }.padding(.vertical, 8)
+    }
+    private var generalContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            GroupBox("Startup & Recent Projects") {
+                VStack(alignment: .leading) { Toggle("Restore the last native project at startup", isOn: $restoreLast); Text("Recovery copies take priority over session restoration.").font(.caption).foregroundStyle(.secondary) }.padding(8)
+            }
+            GroupBox("Page & Export") {
+                VStack(alignment: .leading) {
+                    Picker("Default paper for new projects", selection: $defaultPaper) { Text("A4").tag("A4"); Text("US Letter").tag("US Letter") }
+                    Toggle("Include Highlights in PDF and DOCX", isOn: $exportHighlights)
+                    Text("Production breakdown marks never enter exports. FDX and Fountain do not include highlights.").font(.caption).foregroundStyle(.secondary)
+                }.padding(8)
+            }
+            GroupBox("Element Keyboard Switching") {
+                VStack(alignment: .leading) {
+                    Toggle("Switch keyboard source for Tamil / English elements", isOn: $switchTamilInput)
+                    Picker("Tamil source", selection: $tamilSource) { Text("Automatic Tamil source").tag(""); ForEach(TamilInputManager.availableSources(tamil: true)) { source in Text(source.name).tag(source.id) } }
+                    Picker("English source", selection: $englishSource) { Text("Previous input source").tag(""); ForEach(TamilInputManager.availableSources(tamil: false)) { source in Text(source.name).tag(source.id) } }
+                    Text("Only enabled macOS sources are listed. Switching pauses during composition and restores the source DOT changed when editing ends.").font(.caption).foregroundStyle(.secondary)
+                }.padding(8)
+            }
+            GroupBox("Project File Format") { Text("DOT saves native .dot files. Existing .frontstage projects remain supported; legacy imports stay copy-only.").font(.caption).padding(8) }
+            GroupBox("Beat Popup Editor") { Text("Popup text scales to at least 15pt while preserving project typography ratios. Saved typography is unchanged.").font(.caption).padding(8) }
                 GroupBox("Antigravity settings import") {
                     VStack(alignment: .leading, spacing: 8) {
                         if let migration {
@@ -76,10 +116,20 @@ struct DOTPreferences: View {
                         Text("Imports device preferences only. Projects, credentials and system text-rendering overrides are excluded.").font(.caption).foregroundStyle(.secondary)
                     }.padding(8)
                 }
-            }.padding(20)
-        }.frame(width: 700, height: 640).textFieldStyle(.roundedBorder)
-        .onAppear {
-            if let data = UserDefaults.standard.data(forKey: "default_script_layout"), let saved = try? JSONDecoder().decode(ScriptLayoutSettings.self, from: data) { defaults = saved }
+        }.padding(.vertical, 8)
+    }
+    private func previewLine(_ kind: ScreenplayElement, english: String, tamil: String) -> some View {
+        let value = layout.isTamil(for: kind) ? tamil : english
+        let indent: CGFloat = kind == .character ? 180 : kind == .dialogue ? 85 : kind == .parenthetical ? 135 : 0
+        return Text(layout.isUppercase(for: kind) ? value.uppercased() : value)
+            .font(Font(NSFont(name: layout.effectiveFontName(for: kind), size: layout.effectiveFontSize(for: kind)) ?? .monospacedSystemFont(ofSize: layout.effectiveFontSize(for: kind), weight: .regular)))
+            .fontWeight(layout.isBold(for: kind) ? .bold : .regular).italic(layout.isItalic(for: kind)).underline(layout.isUnderline(for: kind))
+            .padding(.leading, indent).frame(maxWidth: .infinity, alignment: kind == .transition ? .trailing : .leading)
+    }
+    private func updateElement(_ action: (inout ElementTypography) -> Void) {
+        update { value in
+            var entry = value.elements[element.rawValue] ?? ElementTypography(isBold: value.isBold(for: element), isUppercase: value.isUppercase(for: element))
+            action(&entry); value.elements[element.rawValue] = entry
         }
     }
     private func preferenceName(_ key: String) -> String {
@@ -101,7 +151,7 @@ struct DOTPreferences: View {
         VStack(alignment: .leading) {
             HStack {
                 TextField(label, text: Binding(get: { value }, set: changed))
-                Menu("Installed Fonts") { ForEach(NSFontManager.shared.availableFontFamilies.sorted(), id: \.self) { font in Button(font) { changed(font) } } }
+                Menu("Installed Fonts") { ForEach(NSFontManager.shared.availableFontFamilies.filter { fontSearch.isEmpty || $0.localizedCaseInsensitiveContains(fontSearch) }.sorted(), id: \.self) { font in Button(font) { changed(font) } } }
             }
             if !value.isEmpty && NSFont(name: value, size: 12) == nil {
                 Text("\(value) is unavailable; using system monospace. The stored font name is retained.").font(.caption).foregroundStyle(.orange)
@@ -109,7 +159,7 @@ struct DOTPreferences: View {
         }
     }
     private func flag(_ title: String, _ key: WritableKeyPath<ElementTypography, Bool>) -> some View {
-        Toggle(title, isOn: Binding(get: { override?[keyPath: key] ?? false }, set: { enabled in update { $0.elements[element.rawValue]?[keyPath: key] = enabled } }))
+        Toggle(title, isOn: Binding(get: { key == \.isBold ? layout.isBold(for: element) : key == \.isItalic ? layout.isItalic(for: element) : key == \.isUnderline ? layout.isUnderline(for: element) : layout.isUppercase(for: element) }, set: { enabled in updateElement { $0[keyPath: key] = enabled } }))
     }
     private func update(_ action: (inout ScriptLayoutSettings) -> Void) {
         var value = layout; action(&value)
@@ -154,5 +204,12 @@ struct DOTPreferences: View {
 }
 private extension View {
     @ViewBuilder func italic(_ enabled: Bool) -> some View { if enabled { self.italic() } else { self } }
+}
+#endif
+
+#if os(macOS)
+struct TypographyPreferencesMenuItem: View {
+    @Environment(\.openSettings) private var openSettings
+    var body: some View { Button("Typography Preferences…") { UserDefaults.standard.set(0, forKey: "dot_preferences_tab"); openSettings() } }
 }
 #endif

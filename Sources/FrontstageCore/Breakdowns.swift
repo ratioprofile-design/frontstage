@@ -10,6 +10,8 @@ public enum BreakdownCategory: String, CaseIterable, Sendable {
 
 public struct BreakdownEntry: Identifiable, Equatable, Sendable {
     public let id: String
+    public let recordID: String?
+    public let isSourceLinked: Bool
     public let category: String
     public let name: String
     public let notes: String
@@ -42,6 +44,7 @@ extension Project {
                 guard let name = value.string ?? object?["name"]?.string else { continue }
                 let count = max(1, min(100_000, NSDecimalNumber(decimal: object?["count"]?.decimal ?? 1).intValue))
                 result.append(BreakdownEntry(id: "\(key):\(bucket):\(object?["id"]?.string ?? String(index))",
+                    recordID: object?["id"]?.string, isSourceLinked: object?["frontstageSourceLinked"] == .bool(true),
                     category: object?["category"]?.string ?? aliases[bucket] ?? bucket,
                     name: name, notes: object?["description"]?.string ?? "", count: count, sourceQuote: object?["sourceQuote"]?.string,
                     storageKey: key, bucket: bucket, index: index))

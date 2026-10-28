@@ -51,6 +51,8 @@ struct FrontstageApp: App {
                     .disabled(!workspace.hasActiveScenes)
             }
             CommandMenu("Screenplay") {
+                TypographyPreferencesMenuItem()
+                Divider()
                 Button("Pair / Unpair Dual Dialogue") { if let controller = workspace.focusedScreenplayController { ScreenplayDualDialogue.toggle(controller) } }
                     .keyboardShortcut("l", modifiers: [.command, .shift]).disabled(workspace.focusedScreenplayController == nil)
                 ForEach(Array(ScreenplayElement.editable.enumerated()), id: \.element.rawValue) { index, element in
@@ -245,6 +247,7 @@ final class Workspace: ObservableObject {
         let previous = project
         do {
             try operation(&project)
+            project.reconcileScriptAnnotations()
             try project.validateSceneModel()
             guard project != previous else { return }
             history.record(previous, label: label, key: key)

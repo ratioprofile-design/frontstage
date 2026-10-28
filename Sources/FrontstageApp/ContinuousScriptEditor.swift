@@ -318,7 +318,7 @@ struct ContinuousScriptEditor: NSViewRepresentable {
             if let created { focus(created) }
         }
         func signature() -> String {
-            String(describing: controller.typography) + String(describing: controller.contentWidth) + workspace.whiteboard.orderedBeats.filter { !$0.omitted && !workspace.whiteboard.isUnused($0) && workspace.reader.filters.matches($0, board: workspace.whiteboard, scenes: workspace.project.scenes) }.map { beat in beat.id + beat.html + (workspace.project.scenes.first { $0.id == beat.sceneID }?.heading.inlineText ?? "") }.joined(separator: "\u{1f}")
+            String(describing: controller.typography) + String(describing: controller.contentWidth) + workspace.whiteboard.orderedBeats.filter { !$0.omitted && !workspace.whiteboard.isUnused($0) && workspace.reader.filters.matches($0, board: workspace.whiteboard, scenes: workspace.project.scenes) }.map { beat in beat.id + beat.html + (workspace.project.headingMarkup(beat.sceneID) ?? "") + (workspace.project.scenes.first { $0.id == beat.sceneID }?.heading.inlineText ?? "") }.joined(separator: "\u{1f}")
         }
         func load(_ text: NSTextView) {
             loading = true; defer { loading = false }; visible.removeAll(); headingScenes.removeAll()
@@ -332,10 +332,12 @@ struct ContinuousScriptEditor: NSViewRepresentable {
                 headingScenes.insert(segment.scene.id)
                 var attributes = ScreenplayTypography.attributes(.sceneHeading, width: controller.contentWidth, settings: controller.typography)
                 attributes[ownerKey] = first.id; attributes[headingKey] = NSDecimalNumber(decimal: segment.scene.id).stringValue; attributes[.foregroundColor] = NSColor.black
-                result.append(NSAttributedString(string: segment.scene.heading.inlineText + "\n", attributes: attributes))
+                if let html = workspace.project.headingMarkup(segment.scene.id), let heading = try? ScreenplayTextCodec.decode(html, width: controller.contentWidth, printing: true, settings: controller.typography, showAnnotations: true), heading.string.trimmingCharacters(in: .newlines) == segment.scene.heading.inlineText {
+                    heading.addAttributes(attributes, range: NSRange(location: 0, length: heading.length)); result.append(heading)
+                } else { result.append(NSAttributedString(string: segment.scene.heading.inlineText + "\n", attributes: attributes)) }
                 for beat in beats {
                     visible.insert(beat.id)
-                    let body = (try? ScreenplayTextCodec.decode(beat.html.isEmpty ? "<p class='sc-action'><br></p>" : beat.html, width: controller.contentWidth, printing: true, settings: controller.typography)) ?? NSMutableAttributedString(string: "\n")
+                    let body = (try? ScreenplayTextCodec.decode(beat.html.isEmpty ? "<p class='sc-action'><br></p>" : beat.html, width: controller.contentWidth, printing: true, settings: controller.typography, showAnnotations: true)) ?? NSMutableAttributedString(string: "\n")
                     if !body.string.hasSuffix("\n") { body.append(NSAttributedString(string: "\n", attributes: ScreenplayTypography.attributes(.action, width: controller.contentWidth, settings: controller.typography))) }
                     body.addAttribute(ownerKey, value: beat.id, range: NSRange(location: 0, length: body.length)); result.append(body)
                 }
@@ -378,6 +380,8 @@ struct ContinuousScriptEditor: NSViewRepresentable {
                     let line = string.substring(with: range).trimmingCharacters(in: .newlines)
                     let kind = ScreenplayElement(rawValue: attributes[.screenplayElement] as? String ?? "action") ?? .action
                     if let scene = attributes[headingKey] as? String, let sceneID = Decimal(string: scene) {
+                        let markup = ScreenplayTextCodec.encode(source.attributedSubstring(from: range)).replacingOccurrences(of: #"^<div[^>]*>|</div>$"#, with: "", options: .regularExpression)
+                        project.setHeadingMarkup(sceneID, html: markup.contains("data-dot-") ? markup : nil)
                         if let existing = headings.firstIndex(where: { $0.sceneID == sceneID }) {
                             if range.location == changedHeading || (changedHeading == nil && range == editing) { headings[existing] = ScriptHeadingEdit(sceneID: sceneID, text: line) }
                         } else { headings.append(ScriptHeadingEdit(sceneID: sceneID, text: line)) }

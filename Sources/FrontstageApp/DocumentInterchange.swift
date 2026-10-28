@@ -12,7 +12,7 @@ enum ScreenplayDOCX {
         var paragraphs = project.currentRevision.map { paragraph($0.headerString, element: .action) } ?? ""
         for segment in try project.orderedScript() {
             let scene = segment.scene
-            paragraphs += paragraph("\(segment.number)  \(scene.heading.text)\(segment.isContinuation ? " (CONTINUED)" : "")\(project.productionSceneChanged(scene.id) ? " *" : "")", element: .sceneHeading, newPage: scene.startsNewPage)
+            paragraphs += paragraph("\(segment.number)  \(scene.heading.text)\(segment.isContinuation ? " (CONTINUED)" : "")\(project.productionSceneChanged(scene.id) ? " *" : "")", element: .sceneHeading, newPage: scene.startsNewPage, markup: project.headingMarkup(scene.id), settings: project.scriptLayout)
             let text = DialoguePresentation.materialized(try ScreenplayTextCodec.decode(scene.html, settings: project.scriptLayout)), source = text.string as NSString
             var offset = 0
             var bodyParagraphs = [(xml: String, pair: String?, side: String?)]()
@@ -23,7 +23,8 @@ enum ScreenplayDOCX {
                 text.enumerateAttributes(in: range) { attributes, range, _ in
                     let value = source.substring(with: range).trimmingCharacters(in: .newlines)
                     let traits = (attributes[.font] as? NSFont).map { NSFontManager.shared.traits(of: $0) } ?? []
-                    let properties = (traits.contains(.boldFontMask) ? "<w:b/>" : "") + (traits.contains(.italicFontMask) ? "<w:i/>" : "") + ((attributes[.underlineStyle] as? Int ?? 0) > 0 ? "<w:u w:val=\"single\"/>" : "")
+                    var properties = (traits.contains(.boldFontMask) ? "<w:b/>" : "") + (traits.contains(.italicFontMask) ? "<w:i/>" : "") + ((attributes[.underlineStyle] as? Int ?? 0) > 0 ? "<w:u w:val=\"single\"/>" : "")
+                    if UserDefaults.standard.bool(forKey: "dot_export_highlights"), let name = attributes[.screenplayHighlight] as? String, let color = ScriptAnnotations.highlights[name] { properties += "<w:shd w:val=\"clear\" w:fill=\"\(color.dropFirst())\"/>" }
                     let font = project.scriptLayout.effectiveFontName(for: element), size = project.scriptLayout.effectiveFontSize(for: element)
                     runs += "<w:r><w:rPr><w:rFonts w:ascii=\"\(xml(font))\" w:hAnsi=\"\(xml(font))\" w:cs=\"\(xml(font))\"/><w:sz w:val=\"\(Int(size * 2))\"/>\(properties)</w:rPr><w:t xml:space=\"preserve\">\(xml(value))</w:t></w:r>"
                 }
@@ -68,8 +69,24 @@ enum ScreenplayDOCX {
             "word/document.xml": Data(document.utf8), "word/styles.xml": Data(styles.utf8)
         ])
     }
-    private static func paragraph(_ text: String, element: ScreenplayElement, newPage: Bool = false) -> String {
-        "<w:p><w:pPr><w:pStyle w:val=\"\(element.rawValue)\"/>\(newPage ? "<w:pageBreakBefore/>" : "")</w:pPr><w:r><w:t xml:space=\"preserve\">\(OfficeArchive.xml(text))</w:t></w:r></w:p>"
+    private static func paragraph(_ text: String, element: ScreenplayElement, newPage: Bool = false, markup: String? = nil, settings: ScriptLayoutSettings = .init()) -> String {
+        var runs = "<w:r><w:t xml:space=\"preserve\">\(OfficeArchive.xml(text))</w:t></w:r>"
+        if UserDefaults.standard.bool(forKey: "dot_export_highlights"), let markup, let decoded = try? ScreenplayTextCodec.decode(markup, settings: settings) {
+            let heading = decoded.string.trimmingCharacters(in: .newlines), match = (text as NSString).range(of: heading)
+            if !heading.isEmpty, match.location != NSNotFound {
+                let value = NSMutableAttributedString(string: text)
+                decoded.enumerateAttribute(.screenplayHighlight, in: NSRange(location: 0, length: min((heading as NSString).length, decoded.length))) { name, range, _ in
+                    if let name { value.addAttribute(.screenplayHighlight, value: name, range: NSRange(location: match.location + range.location, length: range.length)) }
+                }
+                runs = ""
+                value.enumerateAttributes(in: NSRange(location: 0, length: value.length)) { attributes, range, _ in
+                    let color = (attributes[.screenplayHighlight] as? String).flatMap { ScriptAnnotations.highlights[$0] }
+                    let properties = color.map { "<w:rPr><w:shd w:val=\"clear\" w:fill=\"\($0.dropFirst())\"/></w:rPr>" } ?? ""
+                    runs += "<w:r>\(properties)<w:t xml:space=\"preserve\">\(OfficeArchive.xml((text as NSString).substring(with: range)))</w:t></w:r>"
+                }
+            }
+        }
+        return "<w:p><w:pPr><w:pStyle w:val=\"\(element.rawValue)\"/>\(newPage ? "<w:pageBreakBefore/>" : "")</w:pPr>\(runs)</w:p>"
     }
 }
 

@@ -37,6 +37,7 @@ try{
  await page.locator('#redo').click();assert.equal(await page.locator('.simple-beat-card').count(),3);
  // The same operation is reachable from the script paper and whiteboard.
  await body().first().click({button:'right'});
+ await page.getByRole('menuitem',{name:'Beat ›',exact:true}).click();
  await page.getByRole('menuitem',{name:'Duplicate Beat',exact:true}).click();
  assert.equal(await page.locator('.simple-beat-card').count(),4);
  await page.locator('#undo').click();assert.equal(await page.locator('.simple-beat-card').count(),3);

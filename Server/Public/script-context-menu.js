@@ -1,0 +1,19 @@
+// Nested menus keep editor selection untouched and have one keyboard owner.
+export function showScriptContextMenu(x,y,groups,onClose=()=>{}){
+ x=Number.isFinite(x)?x:Math.round(innerWidth/2);y=Number.isFinite(y)?y:Math.round(innerHeight/3);
+ document.querySelector('.write-script-menu')?.dispatchEvent(new Event('dismiss-menu'));
+ const menu=document.createElement('div');menu.className='write-script-menu';menu.setAttribute('role','menu');menu.setAttribute('aria-label','Screenplay actions');
+ let active=menu,opener=null;
+ const focusFirst=root=>root.querySelector('button:not(:disabled)')?.focus({preventScroll:true});
+ const close=()=>{menu.remove();document.removeEventListener('pointerdown',outside,true);document.removeEventListener('keydown',keys,true);onClose();};
+ const outside=e=>{if(!menu.contains(e.target))close();};
+ const closeSub=()=>{for(const sub of menu.querySelectorAll('[role=menu]'))sub.hidden=true;for(const b of menu.querySelectorAll('[aria-expanded]'))b.setAttribute('aria-expanded','false');active=menu;};
+ for(const group of groups){const row=document.createElement('div'),button=document.createElement('button'),sub=document.createElement('div');row.className='script-menu-group';button.textContent=group.label+' ›';button.setAttribute('role','menuitem');button.setAttribute('aria-haspopup','menu');button.setAttribute('aria-expanded','false');sub.setAttribute('role','menu');sub.setAttribute('aria-label',group.label);sub.hidden=true;
+  const open=()=>{closeSub();sub.hidden=false;button.setAttribute('aria-expanded','true');active=sub;opener=button;const r=sub.getBoundingClientRect();if(r.right>innerWidth-4)sub.style.left='auto',sub.style.right='100%';sub.style.top=Math.min(0,innerHeight-r.bottom-4)+'px';};
+  button.onmousedown=e=>e.preventDefault();button.onclick=()=>{open();focusFirst(sub);};row.onpointerenter=e=>{if(e.pointerType==='mouse')open();};
+  for(const entry of group.items){const b=document.createElement('button');b.setAttribute('role',entry.checked!=null?'menuitemcheckbox':'menuitem');if(entry.checked!=null)b.setAttribute('aria-checked',String(entry.checked));b.textContent=(entry.checked?'✓ ':'')+entry.label+(entry.shortcut?'   '+entry.shortcut:'');b.disabled=!!entry.disabled;b.title=entry.reason||'';if(entry.color){const swatch=document.createElement('span');swatch.className='menu-color-swatch';swatch.style.backgroundColor=entry.color;b.prepend(swatch);}b.onmousedown=e=>e.preventDefault();b.onclick=async()=>{close();try{await entry.action();}catch(error){group.error?.(error.message);}};sub.append(b);}
+  row.append(button,sub);menu.append(row);
+ }
+ const keys=e=>{if(!['ArrowDown','ArrowUp','ArrowRight','ArrowLeft','Enter',' ','Escape','Tab'].includes(e.key))return;e.preventDefault();e.stopImmediatePropagation();if(e.key==='Escape'||e.key==='Tab'){close();return;}if(e.key==='ArrowLeft'){closeSub();opener?.focus({preventScroll:true});return;}if(e.key==='ArrowRight'){const b=document.activeElement;if(b?.getAttribute('aria-haspopup')==='menu')b.click();return;}if(e.key==='Enter'||e.key===' '){document.activeElement?.click();return;}const buttons=[...active.children].map(n=>n.tagName==='BUTTON'?n:n.querySelector(':scope > button')).filter(n=>n&&!n.disabled),index=buttons.indexOf(document.activeElement);buttons[(index+(e.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length]?.focus({preventScroll:true});};
+ menu.addEventListener('dismiss-menu',close,{once:true});document.body.append(menu);const r=menu.getBoundingClientRect();menu.style.left=Math.max(4,Math.min(x,innerWidth-r.width-4))+'px';menu.style.top=Math.max(4,Math.min(y,innerHeight-r.height-4))+'px';document.addEventListener('pointerdown',outside,true);document.addEventListener('keydown',keys,true);return menu;
+}

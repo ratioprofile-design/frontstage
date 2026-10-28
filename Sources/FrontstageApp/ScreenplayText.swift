@@ -6,6 +6,9 @@ extension NSAttributedString.Key {
     static let screenplayDualDialogue = NSAttributedString.Key("design.ratioprofile.frontstage.dualDialogue")
     static let screenplayDualPair = NSAttributedString.Key("design.ratioprofile.frontstage.dualPair")
     static let screenplayLegacyRevisionMark = NSAttributedString.Key("design.ratioprofile.frontstage.legacyRevisionMark")
+    static let screenplayHighlight = NSAttributedString.Key("design.ratioprofile.frontstage.highlight")
+    static let screenplayBreakdown = NSAttributedString.Key("design.ratioprofile.frontstage.breakdown")
+    static let screenplayBreakdownCategory = NSAttributedString.Key("design.ratioprofile.frontstage.breakdownCategory")
     static let screenplayElement = NSAttributedString.Key("design.ratioprofile.frontstage.element")
 }
 
@@ -82,13 +85,15 @@ enum ScreenplayTextCodec {
     }
 
     static func decode(_ html: String, width: CGFloat = 432,
-                       printing: Bool = false, settings: ScriptLayoutSettings = .init()) throws -> NSMutableAttributedString {
+                       printing: Bool = false, settings: ScriptLayoutSettings = .init(), showAnnotations: Bool? = nil) throws -> NSMutableAttributedString {
         let token = "FS\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))_"
-        let marked = markLeafBlocks(html, token: token)
+        let annotated = markInlineAnnotations(html, token: token + "INLINE")
+        let marked = markLeafBlocks(annotated.html, token: token)
         let text = try NSMutableAttributedString(data: Data(marked.html.utf8), options: [
             .documentType: NSAttributedString.DocumentType.html,
             .characterEncoding: String.Encoding.utf8.rawValue
         ], documentAttributes: nil)
+        restoreInlineAnnotations(text, token: token + "INLINE", metadata: annotated.metadata, printing: showAnnotations.map { !$0 } ?? printing)
         let regex = try NSRegularExpression(pattern: "\(token)([0-9]+)END")
         let matches = regex.matches(in: text.string, range: NSRange(location: 0, length: text.length))
         var events: [(Int, BlockMeta)] = []
@@ -148,6 +153,9 @@ enum ScreenplayTextCodec {
                     if traits.contains(.italicFontMask) { value = "<i>\(value)</i>" }
                 }
                 if let underline = attributes[.underlineStyle] as? Int, underline != 0 { value = "<u>\(value)</u>" }
+                if let strike = attributes[.strikethroughStyle] as? Int, strike != 0 { value = "<s>\(value)</s>" }
+                if let highlight = attributes[.screenplayHighlight] as? String, ScriptAnnotations.highlights[highlight] != nil { value = "<span data-dot-highlight=\"\(highlight)\">\(value)</span>" }
+                if let id = attributes[.screenplayBreakdown] as? String { let category = attributes[.screenplayBreakdownCategory] as? String ?? "PROPS"; value = "<span data-dot-breakdown=\"\(escape(id))\" data-dot-category=\"\(escape(category))\">\(value)</span>" }
                 inner += value
             }
             let type = element(in: text, at: paragraph.location)
@@ -160,6 +168,46 @@ enum ScreenplayTextCodec {
             location = NSMaxRange(paragraph)
         }
         return blocks.joined()
+    }
+
+    private static func markInlineAnnotations(_ html: String, token: String) -> (html: String, metadata: [[String: String]]) {
+        guard let regex = try? NSRegularExpression(pattern: #"</?span\b[^>]*>"#, options: .caseInsensitive) else { return (html, []) }
+        let source = html as NSString
+        var output = "", offset = 0, stack = [Int?](), metadata = [[String: String]]()
+        for match in regex.matches(in: html, range: NSRange(location: 0, length: source.length)) {
+            output += source.substring(with: NSRange(location: offset, length: match.range.location - offset))
+            let tag = source.substring(with: match.range)
+            if tag.hasPrefix("</") { if let value = stack.popLast(), let id = value { output += token + String(id) + "END" }; output += tag }
+            else {
+                var values = [String: String]()
+                for name in ["data-dot-highlight", "data-dot-breakdown", "data-dot-category"] { if let value = ScriptAnnotations.attribute(name, in: tag) { values[name] = value } }
+                output += tag
+                if !values.isEmpty { let id = metadata.count; metadata.append(values); stack.append(id); output += token + String(id) + "START" } else { stack.append(nil) }
+            }
+            offset = NSMaxRange(match.range)
+        }
+        output += source.substring(from: offset)
+        for value in stack.reversed() { if let id = value { output += token + String(id) + "END" } }
+        return (output, metadata)
+    }
+    private static func restoreInlineAnnotations(_ text: NSMutableAttributedString, token: String, metadata: [[String: String]], printing: Bool) {
+        guard let regex = try? NSRegularExpression(pattern: token + #"([0-9]+)(START|END)"#) else { return }
+        let source = text.string as NSString, matches = regex.matches(in: text.string, range: NSRange(location: 0, length: text.length))
+        var starts = [Int: Int](), ranges = [(Int, NSRange)](), removed = 0
+        for match in matches { guard let id = Int(source.substring(with: match.range(at: 1))) else { continue }; let position = match.range.location - removed; if source.substring(with: match.range(at: 2)) == "START" { starts[id] = position } else if let start = starts[id] { ranges.append((id, NSRange(location: start, length: position - start))) }; removed += match.range.length }
+        for match in matches.reversed() { text.deleteCharacters(in: match.range) }
+        for (id, range) in ranges where metadata.indices.contains(id) && range.length > 0 && NSMaxRange(range) <= text.length {
+            let fields = metadata[id]
+            if let value = fields["data-dot-highlight"], let hex = ScriptAnnotations.highlights[value] {
+                text.addAttribute(.screenplayHighlight, value: value, range: range)
+                if !printing || UserDefaults.standard.bool(forKey: "dot_export_highlights") { text.addAttribute(.backgroundColor, value: NSColor(dotHex: hex), range: range) }
+            }
+            if let value = fields["data-dot-breakdown"] {
+                let category = fields["data-dot-category"] ?? "PROPS"
+                text.addAttributes([.screenplayBreakdown: value, .screenplayBreakdownCategory: category], range: range)
+                if !printing { text.addAttribute(.backgroundColor, value: NSColor(dotHex: ScriptAnnotations.categoryColors[category] ?? "#dddddd").withAlphaComponent(0.45), range: range) }
+            }
+        }
     }
 
     private static func escape(_ value: String) -> String {
@@ -221,5 +269,11 @@ enum ScreenplayTextCodec {
         }
         return (output as String, leaves.map(\.meta))
     }
+}
+#endif
+
+#if os(macOS)
+private extension NSColor {
+    convenience init(dotHex: String) { let value = UInt32(dotHex.dropFirst(), radix: 16) ?? 0xdddddd; self.init(srgbRed: CGFloat((value >> 16) & 255) / 255, green: CGFloat((value >> 8) & 255) / 255, blue: CGFloat(value & 255) / 255, alpha: 1) }
 }
 #endif
