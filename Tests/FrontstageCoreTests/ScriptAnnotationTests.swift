@@ -24,6 +24,12 @@ final class ScriptAnnotationTests: XCTestCase {
         XCTAssertTrue(moved.html.contains("data-dot-category=\"VEHICLES\""))
         XCTAssertEqual(try Project(data: p.encoded()), p)
     }
+    func testProductionComparisonIgnoresAnnotationsButPreservesAuthoredChanges() {
+        let plain = "<p>A red car waits.</p>", tagged = "<p>A <span data-dot-breakdown='req-1'><span data-dot-highlight='Blue'>red car</span></span> waits.</p>"
+        XCTAssertEqual(ScriptAnnotations.comparisonHTML(plain), ScriptAnnotations.comparisonHTML(tagged))
+        XCTAssertNotEqual(ScriptAnnotations.comparisonHTML(plain), ScriptAnnotations.comparisonHTML(tagged.replacingOccurrences(of: "waits", with: "leaves")))
+        XCTAssertNotEqual(ScriptAnnotations.comparisonHTML(plain), ScriptAnnotations.comparisonHTML(tagged.replacingOccurrences(of: "red car", with: "<b>red car</b>")))
+    }
     func testCategoryChangesAndDeletionUpdateMarkupWithoutDeletingText() throws {
         var p = try project(); let beat = try XCTUnwrap(p.whiteboard().beats.first), item = try XCTUnwrap(p.breakdownItems(for: beat.sceneID).first)
         try p.moveBreakdownItem(sceneID: beat.sceneID, itemID: item.id, category: .props); p.reconcileScriptAnnotations()

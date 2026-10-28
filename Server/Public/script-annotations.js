@@ -38,3 +38,5 @@ function rewriteSelectedRuns(root,range,removeAttribute,clearStyle=false){
 }
 export function removeInlineAnnotation(root,range,attribute){rewriteSelectedRuns(root,range,attribute);}
 export function clearInlineFormatting(root,range){rewriteSelectedRuns(root,range,null,true);}
+// Annotation-only wrappers must not make an unchanged production script look revised.
+export function annotationFreeComparisonHTML(html){const stack=[];return html.replace(/<\/?span\b[^>]*>/gi,tag=>{if(/^<\//.test(tag))return stack.pop()===false?'':tag;const clean=tag.replace(/\sdata-dot-[a-z-]+\s*=\s*["'][^"']*["']/gi,'').replace(/\sclass\s*=\s*(?:"\s*"|'\s*')/gi,'');const keep=!/^<span\s*>$/i.test(clean);stack.push(keep);return keep?clean:'';});}

@@ -19,6 +19,23 @@ public enum ScriptAnnotations {
         }
         return result
     }
+    public static func comparisonHTML(_ html: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: #"</?span\b[^>]*>"#, options: .caseInsensitive) else { return html }
+        let source = html as NSString
+        var result = "", offset = 0, stack = [Bool]()
+        for match in regex.matches(in: html, range: NSRange(location: 0, length: source.length)) {
+            result += source.substring(with: NSRange(location: offset, length: match.range.location - offset))
+            let tag = source.substring(with: match.range)
+            if tag.hasPrefix("</") { if stack.popLast() != false { result += tag } }
+            else {
+                let clean = tag.replacingOccurrences(of: #"\sdata-dot-[a-z-]+\s*=\s*["'][^"']*["']"#, with: "", options: .regularExpression).replacingOccurrences(of: #"\sclass\s*=\s*(?:"\s*"|'\s*')"#, with: "", options: .regularExpression)
+                let keep = clean.range(of: #"^<span\s*>$"#, options: [.regularExpression, .caseInsensitive]) == nil
+                stack.append(keep); if keep { result += clean }
+            }
+            offset = NSMaxRange(match.range)
+        }
+        result += source.substring(from: offset); return result
+    }
     public static func normalize(_ html: String, categories: [String: String]) -> String {
         guard let regex = try? NSRegularExpression(pattern: #"<span\b[^>]*>"#, options: .caseInsensitive) else { return html }
         let result = NSMutableString(string: html)

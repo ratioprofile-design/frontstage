@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {webcrypto} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
-import {reconcileScriptAnnotations,annotationIDs} from '../Public/script-annotations.js';
+import {reconcileScriptAnnotations,annotationIDs,annotationFreeComparisonHTML} from '../Public/script-annotations.js';
 import {duplicateBeat} from '../Public/scene-model.js';
 import {insertScriptScene} from '../Public/continuous-script.js';
 import {requiredWriteFeatures,validateServerFeatures} from '../Public/feature-compatibility.js';
@@ -14,3 +14,5 @@ const nextID=insertScriptScene(d,beat.id,'<p>Before.</p>','<p><span data-dot-bre
 nextScene.breakdownData.VEHICLES[0].category='PROPS';reconcileScriptAnnotations(d);assert.match(next.html,/data-dot-category="PROPS"/);nextScene.breakdownData.VEHICLES=[];reconcileScriptAnnotations(d);assert.deepEqual(annotationIDs(next.html),[]);assert.match(next.html,/red car/);
 assert.ok(requiredWriteFeatures(d).includes('scriptAnnotations'));assert.throws(()=>validateServerFeatures(d,['elementTypography','dualDialogue','productionBaselines']),/Update/);
 console.log('PASS: annotation ownership, split, duplicate IDs, unknown metadata, category changes, deletion and compatibility');
+
+assert.equal(annotationFreeComparisonHTML('<p>A <span data-dot-highlight="Blue"><span data-dot-breakdown="r-1">red car</span></span>.</p>'),'<p>A red car.</p>');
