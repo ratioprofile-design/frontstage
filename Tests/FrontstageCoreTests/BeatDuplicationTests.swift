@@ -3,7 +3,7 @@ import XCTest
 
 final class BeatDuplicationTests: XCTestCase {
     func testIndependentSceneCopyPreservesSourceAndUnknownData() throws {
-        var project = Project()
+        var project = Project(oneBeatPerScene: true)
         let source = try project.addBoardBeat(title: "கமல் enters")
         try project.updateBoardBeat(source) { $0.html = "<p>Original screenplay.</p>"; $0.synopsis = "Summary" }
         var raw = project.state["frontstageWhiteboard"]!.object!
