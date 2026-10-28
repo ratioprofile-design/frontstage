@@ -24,10 +24,10 @@ enum ScriptCueNames {
         }
         return Array(Set(names)).sorted()
     }
-    static func capitalize(in text: NSTextView) {
+    static func capitalize(in text: NSTextView, settings: ScriptLayoutSettings = .init()) {
         guard let storage = text.textStorage, storage.length > 0, !text.hasMarkedText() else { return }
         let selected = text.selectedRange(), location = min(selected.location, storage.length - 1)
-        guard ["character", "slugline", "transition"].contains(storage.attribute(.screenplayElement, at: location, effectiveRange: nil) as? String ?? "") else { return }
+        guard let raw = storage.attribute(.screenplayElement, at: location, effectiveRange: nil) as? String, let element = ScreenplayElement(rawValue: raw), settings.isUppercase(for: element) else { return }
         let range = (storage.string as NSString).paragraphRange(for: NSRange(location: location, length: 0))
         let original = (storage.string as NSString).substring(with: range), upper = original.uppercased()
         guard original != upper else { return }

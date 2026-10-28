@@ -1,0 +1,9 @@
+[
+ {"element":"slugline","runs":[{"text":"EXT. RIVER - NIGHT","bold":false,"italic":false,"underline":false}],"number":"12"},
+ {"element":"action","runs":[{"text":"தமிழ் & <light>","bold":true,"italic":false,"underline":true}]},
+ {"element":"character","runs":[{"text":"KAMAL (V.O.)","bold":false,"italic":false,"underline":false}],"dualPair":"pair-1","dualSide":"left"},
+ {"element":"dialogue","runs":[{"text":"Come here.","bold":false,"italic":true,"underline":false}],"dualPair":"pair-1","dualSide":"left"},
+ {"element":"character","runs":[{"text":"ABI","bold":false,"italic":false,"underline":false}],"dualPair":"pair-1","dualSide":"right"},
+ {"element":"parenthetical","runs":[{"text":"(quietly)","bold":false,"italic":false,"underline":false}],"dualPair":"pair-1","dualSide":"right"},
+ {"element":"dialogue","runs":[{"text":"Yes.","bold":false,"italic":false,"underline":false}],"dualPair":"pair-1","dualSide":"right"}
+]

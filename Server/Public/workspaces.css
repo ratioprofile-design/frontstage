@@ -210,3 +210,5 @@ input::-webkit-calendar-picker-indicator{display:none!important;}
 .script-text .sc-shot{font-family:var(--script-shot-font, var(--script-font,Courier),monospace);font-size:var(--script-shot-size, var(--script-size,12px));line-height:var(--script-shot-line, var(--script-line,14px));font-weight:var(--script-shot-weight, bold);font-style:var(--script-shot-style, normal);text-decoration:var(--script-shot-decoration, none);text-transform:var(--script-shot-case, uppercase);}
 
 .script-text .sc-lyrics{font-family:var(--script-lyrics-font, var(--script-font,Courier),monospace);font-size:var(--script-lyrics-size, var(--script-size,12px));line-height:var(--script-lyrics-line, var(--script-line,14px));font-weight:var(--script-lyrics-weight, normal);font-style:var(--script-lyrics-style, normal);text-decoration:var(--script-lyrics-decoration, none);text-transform:var(--script-lyrics-case, none);}
+
+.note-content{max-height:320px;overflow-y:auto;overscroll-behavior:contain}

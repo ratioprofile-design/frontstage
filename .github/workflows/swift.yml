@@ -78,13 +78,16 @@ jobs:
         run: |
           set -o pipefail
           ./scripts/build-macos-app.sh 2>&1 | tee build/build.log
+          ./scripts/build-dmg.sh --skip-build 2>&1 | tee -a build/build.log
       - name: Report build diagnostics
         if: failure()
         run: python3 scripts/report-tests.py --build
       - uses: actions/upload-artifact@v4
         with:
           name: DOT-macOS-development
-          path: build/DOT-macOS.zip
+          path: |
+            build/DOT-macOS.zip
+            build/DOT.dmg
       - uses: actions/upload-artifact@v4
         if: always()
         with:

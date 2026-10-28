@@ -1,3 +1,4 @@
+import {eraseBoardDrawing} from './board-drawing.js';
 import {parseProjectFile,projectFilename} from './project-files.js';
 import {insertScriptScene} from './continuous-script.js';
 import {isSceneModel,syncSceneMetadata,validateSceneModel,convertSceneCopy,duplicateBeat} from './scene-model.js';
@@ -388,6 +389,7 @@ function render() {
     path.setAttribute('d', `M${a.x + a.width},${a.y + a.height / 2} C${a.x + a.width + bend},${a.y + a.height / 2} ${b.x - bend},${b.y + b.height / 2} ${b.x},${b.y + b.height / 2}`);
     path.setAttribute('stroke', edge.cause === selected || edge.effect === selected ? '#8be8f2' : '#d1d1d3'); path.setAttribute('fill', 'none'); if (edge.reference) path.setAttribute('stroke-dasharray', '4 4'); $('links').append(path);
   }
+  for(const stroke of board().strokes||[])$('links').append(drawingPath(stroke.points,stroke.color,stroke.width));
   for (const marker of storyMarkers()) {
     const line = document.createElementNS('http://www.w3.org/2000/svg', 'path'), x = 110 + marker.unit * 120;
     line.setAttribute('d', `M${x},0 V${g.height}`); line.setAttribute('stroke', '#4d8ed6'); line.setAttribute('stroke-dasharray', '3 5'); $('links').append(line);
@@ -710,6 +712,24 @@ function beginInlineBeat(layerID,position,parentID=null){
   input.onblur=()=>finish(false);
   input.ondblclick=e=>e.stopPropagation();
 }
+let drawingTool='select';
+function drawingPath(points,color='#ffd54a',width=2){const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',points.map((p,i)=>`${i?'L':'M'}${p.x},${p.y}`).join(' '));path.setAttribute('stroke',color);path.setAttribute('stroke-width',width);path.setAttribute('stroke-linecap','round');path.setAttribute('stroke-linejoin','round');path.setAttribute('fill','none');return path;}
+const drawingButtons=[];
+for(const [tool,label]of [['select','Select'],['draw','Draw'],['erase','Eraser']]){const button=element('button',label);button.dataset.boardTool=tool;button.setAttribute('aria-pressed',String(tool==='select'));button.onclick=()=>{drawingTool=tool;for(const item of drawingButtons)item.setAttribute('aria-pressed',String(item.dataset.boardTool===tool));};drawingButtons.push(button);}
+$('fit').after(...drawingButtons);
+$('canvas').addEventListener('pointerdown',event=>{
+ const pan=event.button===1;
+ if(!pan&&(event.button!==0||drawingTool==='select'||event.target.closest('input,button,textarea')))return;
+ if(!pan&&current.access==='reader')return;
+ event.preventDefault();event.stopImmediatePropagation();
+ const canvas=$('canvas'),start={x:event.clientX,y:event.clientY,left:canvas.scrollLeft,top:canvas.scrollTop},points=[boardPoint(event)],preview=pan?null:drawingPath(points,drawingTool==='erase'?'#ffffff88':'#ffd54a',drawingTool==='erase'?16/boardZoom:2);
+ if(preview)$('links').append(preview);
+ canvas.setPointerCapture(event.pointerId);canvas.style.cursor=pan?'grabbing':drawingTool==='erase'?'cell':'crosshair';
+ const move=e=>{if(pan){canvas.scrollLeft=start.left+start.x-e.clientX;canvas.scrollTop=start.top+start.y-e.clientY;}else{points.push(boardPoint(e));preview.setAttribute('d',points.map((p,i)=>`${i?'L':'M'}${p.x},${p.y}`).join(' '));}};
+ const cleanup=()=>{canvas.removeEventListener('pointermove',move);canvas.removeEventListener('pointerup',finish);canvas.removeEventListener('pointercancel',cancel);preview?.remove();canvas.style.cursor='';};
+ const finish=e=>{move(e);cleanup();if(pan)return;const tool=drawingTool;edit(()=>{if(tool==='erase')eraseBoardDrawing(board(),points,8/boardZoom);else if(points.length>1)(board().strokes||=[]).push({id:uuid(),points,color:'#ffd54a',width:2});});};
+ const cancel=()=>cleanup();canvas.addEventListener('pointermove',move);canvas.addEventListener('pointerup',finish);canvas.addEventListener('pointercancel',cancel);
+},true);
 $('canvas').addEventListener('dblclick',event=>{
   if(event.target.closest('[data-beat-id],.block-title,button,input'))return;
   const frame=$('canvas').getBoundingClientRect(),g=geometry(),x=boardPoint(event).x,y=boardPoint(event).y;

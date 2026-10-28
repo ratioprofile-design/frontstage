@@ -44,6 +44,8 @@ struct FrontstageApp: App {
                 Button("Export Screenplay PDF…", action: workspace.exportPDF)
                     .disabled(!workspace.hasActiveScenes)
                 Button("Export Screenplay DOCX…", action: workspace.exportDOCX).disabled(!workspace.hasActiveScenes)
+                Button("Export Final Draft FDX…", action: workspace.exportFDX).disabled(!workspace.hasActiveScenes)
+                Button("Export Fountain…", action: workspace.exportFountain).disabled(!workspace.hasActiveScenes)
                 Button("Export Schedule XLSX…", action: workspace.exportScheduleXLSX)
                 Button("Print Screenplay…", action: workspace.printScreenplay).keyboardShortcut("p")
                     .disabled(!workspace.hasActiveScenes)
@@ -73,6 +75,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         didSet { if let url = pendingProject, let workspace { pendingProject = nil; workspace.openProjectURL(url) } }
     }
     func applicationDidFinishLaunching(_ notification: Notification) { branding.start() }
+    func applicationDidResignActive(_ notification: Notification) {
+        guard workspace?.focusedScreenplayController?.textView?.hasMarkedText() != true else { return }
+        TamilInputManager.restoreStandardInput()
+    }
     func application(_ application: NSApplication, open urls: [URL]) {
         guard let url = urls.first else { return }
         if let workspace { workspace.openProjectURL(url) } else { pendingProject = url }
@@ -404,7 +410,8 @@ final class Workspace: ObservableObject {
             let loaded = try Project.load(from: url)
             loadCopy(loaded)
             // Native files support ordinary Save. Legacy imports always remain copy-only.
-            if ["dot", "frontstage"].contains(url.pathExtension.lowercased()) {
+            let source = try JSONDecoder().decode(JSONValue.self, from: Data(contentsOf: url))
+            if ["dot", "frontstage"].contains(url.pathExtension.lowercased()), source.object?["format"]?.string == "frontstage" {
                 saveURL = url; savedProject = loaded; recordRecent(url)
             }
         } catch { errorMessage = "The project could not be opened. Its recent-project entry is retained so you can locate or restore the file. \(error.localizedDescription)" }

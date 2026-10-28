@@ -344,7 +344,7 @@ struct ContinuousScriptEditor: NSViewRepresentable {
                     ScreenplayTypography.apply(.sceneHeading, to: storage, range: range, width: controller.contentWidth, settings: controller.typography)
                 }
             }
-            ScriptCueNames.capitalize(in: text); loading = false
+            ScriptCueNames.capitalize(in: text, settings: controller.typography); loading = false
             let source = text.attributedString(), string = source.string as NSString
             var assignments = [(NSRange, String)](), created = [(NSRange, String, Decimal)](), succeeded = false, missingHeading = false
             let selection = text.selectedRange()

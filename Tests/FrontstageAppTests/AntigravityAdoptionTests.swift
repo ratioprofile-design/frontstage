@@ -21,7 +21,7 @@ final class AntigravityNativeAdoptionTests: XCTestCase {
             XCTAssertEqual(decoded.string, text)
             let encoded = ScreenplayTextCodec.encode(decoded)
             XCTAssertTrue(encoded.contains("data-dual-pair=\"stable-pair\"")); XCTAssertTrue(encoded.contains("sc-dual-left")); XCTAssertTrue(encoded.contains("sc-dual-right")); XCTAssertTrue(encoded.contains("sc-rev")); XCTAssertTrue(encoded.contains("தமிழ்"))
-            XCTAssertFalse(encoded.contains("table"))
+            XCTAssertFalse(encoded.contains("<table"))
             let firstStyle = decoded.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle
             let dialogue = (decoded.string as NSString).range(of: "தமிழ்")
             let dialogueStyle = decoded.attribute(.paragraphStyle, at: dialogue.location, effectiveRange: nil) as? NSParagraphStyle

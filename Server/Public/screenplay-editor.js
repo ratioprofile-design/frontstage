@@ -25,7 +25,7 @@ export function screenplayToolbar(text, changed, editable=true, characters=()=>[
   const offset=()=>{const range=getSelection().getRangeAt(0).cloneRange(),node=paragraph();range.selectNodeContents(node);range.setEnd(getSelection().focusNode,getSelection().focusOffset);return range.toString().length;};
   const selectOffsets=(node,start,end=start)=>{const point=value=>{const walker=document.createTreeWalker(node,NodeFilter.SHOW_TEXT);let child;while((child=walker.nextNode())){if(value<=child.length)return[child,value];value-=child.length;}return[node,node.childNodes.length];};const range=document.createRange();range.setStart(...point(start));range.setEnd(...point(end));getSelection().removeAllRanges();getSelection().addRange(range);};
   const wrap=node=>{const value=node.textContent,next=wrappedParenthetical(value);if(value===next)return;const selection=getSelection(),range=selection.getRangeAt(0),prefix=document.createRange();prefix.selectNodeContents(node);prefix.setEnd(range.startContainer,range.startOffset);const caret=prefix.toString().length,selected=range.toString().length,empty=!value.trim(),open=next.startsWith('(')&&!value.startsWith('(');if(empty){const r=document.createRange();r.selectNodeContents(node);selection.removeAllRanges();selection.addRange(r);document.execCommand('insertText',false,'()');selectOffsets(node,1);return;}if(!value.endsWith(')')){selectOffsets(node,value.length);document.execCommand('insertText',false,')');}if(open){selectOffsets(node,0);document.execCommand('insertText',false,'(');}selectOffsets(node,caret+(open?1:0),caret+(open?1:0)+selected);};
-  const format=kind=>transaction(()=>{if(!text.isContentEditable)return;text.focus({preventScroll:true});let node=paragraph();if(node===text){document.execCommand('formatBlock',false,'p');node=paragraph();}if(node&&node!==text){if(kind!=='parenthetical'&&node.classList.contains('sc-parenthetical')&&emptyParenthetical(node.textContent)){const r=document.createRange();r.selectNodeContents(node);getSelection().removeAllRanges();getSelection().addRange(r);document.execCommand('insertText',false,'');}node.className=`sc-line sc-${kind}`;if(kind==='parenthetical')wrap(node);capitalizeCue(node);select.value=kind;}});
+  const format=kind=>transaction(()=>{if(!text.isContentEditable)return;text.focus({preventScroll:true});let node=paragraph();if(node===text){document.execCommand('formatBlock',false,'p');node=paragraph();}if(node&&node!==text){if(kind!=='parenthetical'&&node.classList.contains('sc-parenthetical')&&emptyParenthetical(node.textContent)){const r=document.createRange();r.selectNodeContents(node);getSelection().removeAllRanges();getSelection().addRange(r);document.execCommand('insertText',false,'');}for(const element of elements)node.classList.remove('sc-'+element);node.classList.add('sc-line','sc-'+kind);if(kind==='parenthetical')wrap(node);capitalizeCue(node);select.value=kind;}});
   select.onchange=()=>format(select.value);select.disabled=!editable;select.value='action';bar.append(select);
   for(const command of ['bold','italic','underline']){const b=document.createElement('button');b.textContent=command==='bold'?'B':command==='italic'?'I':'U';b.setAttribute('aria-label',command);b.disabled=!editable;b.onpointerdown=e=>e.preventDefault();b.onclick=()=>{text.focus();document.execCommand(command);changed();};bar.append(b);}
   let savedRange;
@@ -92,7 +92,7 @@ export function screenplayToolbar(text, changed, editable=true, characters=()=>[
   text.addEventListener('input',clearAccepted,true);
   text.addEventListener('input',event=>{if(!event.isComposing)capitalizeCue(paragraph());},true);
   text.addEventListener('compositionend',()=>{if(capitalizeCue(paragraph()))changed();});
-  text.addEventListener('blur',()=>queueMicrotask(()=>{if(!text.isConnected)return;let updated=false;for(const line of text.querySelectorAll('.sc-character,.sc-slugline,.sc-transition'))updated=capitalizeCue(line)||updated;if(updated)changed();}));
+  text.addEventListener('blur',()=>queueMicrotask(()=>{if(!text.isConnected)return;let updated=false;for(const line of text.querySelectorAll('.sc-line,.sc-character,.sc-slugline,.sc-transition,.sc-shot'))updated=capitalizeCue(line)||updated;if(updated)changed();}));
   let caretFrame;
   const followCaret=event=>{if(event?.isComposing||text.isComposing)return;cancelAnimationFrame(caretFrame);caretFrame=requestAnimationFrame(()=>{
     const selection=window.getSelection();if(text.isComposing||!text.isConnected||!selection?.rangeCount||!text.contains(selection.focusNode)||!selection.isCollapsed)return;
@@ -217,7 +217,7 @@ function attachCompletions(text,paragraph,characters,changed,headings=()=>[],adv
 
 // Keep text and caret positions intact while normalizing screenplay cues.
 export function capitalizeCue(line) {
-  if(!line?.matches('.sc-character,.sc-slugline,.sc-transition'))return false;
+  if(!line||getComputedStyle(line).textTransform!=='uppercase')return false;
   const selection=window.getSelection(),anchor=selection?.anchorNode,focus=selection?.focusNode;
   let a=selection?.anchorOffset||0,f=selection?.focusOffset||0,changed=false;
   const walker=document.createTreeWalker(line,NodeFilter.SHOW_TEXT);let node;

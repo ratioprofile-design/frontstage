@@ -8,6 +8,7 @@ struct WhiteboardCanvas: NSViewRepresentable {
     @Binding var selection: Set<String>
     @Binding var blockSelection: Set<String>
     var pushing: Bool = false
+    var erasing: Bool = false
     var drawing: Bool
     var fitRequest: Int
 
@@ -19,7 +20,7 @@ struct WhiteboardCanvas: NSViewRepresentable {
     }
     func updateNSView(_ view: NativeWhiteboard, context: Context) {
         view.workspace = workspace; view.board = workspace.whiteboard
-        view.selection = selection; view.blockSelection = blockSelection; view.drawingMode = drawing; view.pushingMode = pushing
+        view.selection = selection; view.blockSelection = blockSelection; view.drawingMode = drawing; view.erasingMode = erasing; view.pushingMode = pushing
         view.selected = { ids, blocks in selection = ids; blockSelection = blocks }
         if view.fitRequest != fitRequest { view.fitRequest = fitRequest; view.fitSelection() }
         view.needsDisplay = true
@@ -34,6 +35,7 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
     var selection = Set<String>()
     var blockSelection = Set<String>()
     var selected: ((Set<String>, Set<String>) -> Void)?
+    var erasingMode = false
     var drawingMode = false
     var pushingMode = false
     private var pushOrigin: BoardPoint?
@@ -257,7 +259,7 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
         if event.modifierFlags.contains(.option), let beat = geometry.hitBeat(worldPoint) { dependencyOrigin = beat; return }
         if pushingMode || event.modifierFlags.contains(.command) { pushOrigin = worldPoint; return }
         if spaceHeld || event.modifierFlags.contains(.option) { panStart = board.viewport.origin; return }
-        if drawingMode { stroke = [worldPoint]; return }
+        if drawingMode || erasingMode { stroke = [worldPoint]; return }
         if event.clickCount == 2, geometry.hitBeat(worldPoint) == nil {
             let layer = layerAt(worldPoint)
             let parent = hitBlock(worldPoint).flatMap { id in board.blocks.first { $0.id == id && $0.standalone != true }?.id }
@@ -313,13 +315,25 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
         needsDisplay = true
     }
 
+    override func otherMouseDown(with event: NSEvent) {
+        guard event.buttonNumber == 2 else { super.otherMouseDown(with: event); return }
+        window?.makeFirstResponder(self); viewStart = convert(event.locationInWindow, from: nil)
+        dragStart = world(viewStart); panStart = board.viewport.origin; NSCursor.closedHand.set()
+    }
+    override func otherMouseDragged(with event: NSEvent) {
+        if event.buttonNumber == 2 { mouseDragged(with: event) } else { super.otherMouseDragged(with: event) }
+    }
+    override func otherMouseUp(with event: NSEvent) {
+        if event.buttonNumber == 2 { mouseUp(with: event); NSCursor.arrow.set() } else { super.otherMouseUp(with: event) }
+    }
+
     override func mouseDragged(with event: NSEvent) {
         if dependencyOrigin != nil { return }
         if pushOrigin != nil { NSCursor.resizeLeftRight.set(); return }
         let point = convert(event.locationInWindow, from: nil), current = world(point)
         if let panStart {
             board.viewport.origin = BoardPoint(x: panStart.x - (point.x - viewStart.x) / zoom, y: panStart.y - (point.y - viewStart.y) / zoom)
-        } else if drawingMode && !stroke.isEmpty {
+        } else if (drawingMode || erasingMode) && !stroke.isEmpty {
             if stroke.count < 10000 { stroke.append(current) }
         } else if let id = resizingBlock, let start = dragStart, let original = board.blocks.first(where: { $0.id == id }) {
             resizeWidth = max(140, min(2000, original.width + current.x - start.x))
@@ -350,6 +364,10 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
         if let id = resizingBlock {
             let width = resizeWidth
             workspace?.edit("Resize Block") { try $0.resizeBoardBlock(id, width: width) }; return
+        }
+        if erasingMode && !stroke.isEmpty {
+            let path = stroke
+            workspace?.edit("Erase Drawing") { try $0.eraseBoardDrawing(path: path, radius: 8 / zoom) }; return
         }
         if stroke.count > 1 {
             let points = stroke

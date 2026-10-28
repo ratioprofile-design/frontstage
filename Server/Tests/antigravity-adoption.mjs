@@ -23,3 +23,14 @@ const original=structuredClone(archived),deleted=deletePulledOutBeats(archived,n
 assert.deepEqual(archived,original);assert.equal(deleted.project.beats.some(s=>s.id===1),false);assert.equal(deleted.project.frontstagePullouts.length,0);assert.deepEqual(deleted.project.frontstageStudio.assets,original.project.frontstageStudio.assets);assert.equal(deleted.project.frontstageStudio.records[0].sceneID,undefined);assert.deepEqual(deleted.project.frontstageProduction.days[0].sceneIDs,[2]);
 archived.project.beats.find(s=>s.id===1).frontstageTextLocked=true;assert.throws(()=>deletePulledOutBeats(archived,new Set(['beat-1'])));assert.throws(()=>deletePulledOutBeats(archived,new Set(['missing'])));
 console.log('PASS: Antigravity typography, unknown fields, baseline history, atomic shelf deletion and locks');
+const {renderFDX,renderFountain}=await import('../Public/screenplay-interchange.js');
+const paragraphs=JSON.parse(await readFile(new URL('../../Tests/Fixtures/interchange-contract.json',import.meta.url)));
+const fdx=renderFDX(paragraphs),fountain=renderFountain(paragraphs);
+assert.match(fdx,/<DualDialogue>/);assert.match(fdx,/Number="12"/);assert.match(fdx,/தமிழ் &amp; &lt;light&gt;/);assert.match(fdx,/Style="Bold\+Underline"/);assert.match(fountain,/@ABI \^/);assert.match(fountain,/#12#/);assert.match(fountain,/தமிழ்/);
+assert.throws(()=>renderFDX([{element:'character',runs:[{text:'A'}],dualSide:'left'}]),/legacy/);
+assert.throws(()=>renderFDX(paragraphs.filter(p=>p.element!=='dialogue')),/incomplete/);
+const {strokeHit,eraseBoardDrawing}=await import('../Public/board-drawing.js');
+const stroke={points:[{x:0,y:0},{x:100,y:100}],width:2},path=[{x:0,y:100},{x:100,y:0}];
+assert.equal(strokeHit(stroke,path,1),true);assert.equal(strokeHit(stroke,[{x:200,y:0}],1),false);
+const board={strokes:[stroke,{points:[{x:500,y:500}],width:2}]};eraseBoardDrawing(board,path,1);assert.equal(board.strokes.length,1);assert.throws(()=>eraseBoardDrawing(board,[{x:NaN,y:0}]));
+console.log('PASS: dual export structure, scene numbers, Tamil, emphasis and crossed-stroke erasing');

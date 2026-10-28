@@ -11,6 +11,7 @@ struct WhiteboardWorkspace: View {
     @State private var showTimeline = true
     @State private var expandedTimeline = false
     @State private var scriptBeforeTimeline = true
+    @State private var erasing = false
     @State private var drawing = false
     @State private var pushing = false
     @State private var fitRequest = 0
@@ -47,7 +48,7 @@ struct WhiteboardWorkspace: View {
                             Spacer(); Button("Cancel") { workspace.pendingBoardCauseID = nil }
                         }.font(.caption).padding(6).background(.cyan.opacity(0.18))
                     }
-                    if !expandedTimeline || workspace.timelineDetached { WhiteboardCanvas(workspace: workspace, selection: $selection, blockSelection: $blockSelection, pushing: pushing, drawing: drawing, fitRequest: fitRequest)
+                    if !expandedTimeline || workspace.timelineDetached { WhiteboardCanvas(workspace: workspace, selection: $selection, blockSelection: $blockSelection, pushing: pushing, erasing: erasing, drawing: drawing, fitRequest: fitRequest)
                         .frame(minHeight: 100, maxHeight: .infinity) }
                 }.frame(minWidth: 240, maxWidth: .infinity, maxHeight: .infinity)
                     .safeAreaInset(edge: .bottom, spacing: 0) { if !expandedTimeline || workspace.timelineDetached { bottomTools } }
@@ -77,9 +78,10 @@ struct WhiteboardWorkspace: View {
     private var bottomTools: some View {
         ScrollView(.horizontal, showsIndicators: true) {
         HStack(spacing: 12) {
-            Button { drawing = false } label: { Image(systemName: "cursorarrow") }.tint(drawing ? .gray : DOTTheme.accent)
-            Button { drawing.toggle() } label: { Image(systemName: "pencil.tip") }.tint(drawing ? DOTTheme.accent : .gray)
+            Button { drawing = false; erasing = false } label: { Image(systemName: "cursorarrow") }.tint(drawing ? .gray : DOTTheme.accent)
+            Button { drawing.toggle(); erasing = false } label: { Image(systemName: "pencil.tip") }.tint(drawing ? DOTTheme.accent : .gray)
                 .help("Draw board annotations")
+            Button { erasing.toggle(); drawing = false } label: { Image(systemName: "eraser") }.tint(erasing ? DOTTheme.accent : .gray).help("Erase drawn strokes")
             Button { fitRequest += 1 } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }.help("Fit selection or board")
             Toggle("Push", isOn: $pushing).toggleStyle(.button).help("Push space open or closed; also Command-drag on the board")
             Toggle("Ripple", isOn: $workspace.whiteboardRipple).toggleStyle(.button)

@@ -93,4 +93,17 @@ final class AntigravityAdoptionTests: XCTestCase {
         XCTAssertThrowsError(try DualDialogueRules.pair(in: empty, at: 2))
     }
 
+    func testInterchangeAndDrawingContracts() throws {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Fixtures/interchange-contract.json")
+        let paragraphs = try JSONDecoder().decode([ScreenplayExportParagraph].self, from: Data(contentsOf: url))
+        let fdx = try ScreenplayInterchange.fdx(paragraphs), fountain = try ScreenplayInterchange.fountain(paragraphs)
+        XCTAssertTrue(fdx.contains("<DualDialogue>")); XCTAssertTrue(fdx.contains("Number=\"12\""))
+        XCTAssertTrue(fdx.contains("தமிழ் &amp; &lt;light&gt;")); XCTAssertTrue(fdx.contains("Style=\"Bold+Underline\""))
+        XCTAssertTrue(fountain.contains("@ABI ^")); XCTAssertTrue(fountain.contains("#12#"))
+        XCTAssertThrowsError(try ScreenplayInterchange.fdx(paragraphs.filter { $0.element != .dialogue }))
+        let stroke = BoardStroke(points: [.init(x: 0, y: 0), .init(x: 100, y: 100)])
+        XCTAssertTrue(BoardDrawing.hits(stroke, path: [.init(x: 0, y: 100), .init(x: 100, y: 0)], radius: 1))
+        XCTAssertFalse(BoardDrawing.hits(stroke, path: [.init(x: 200, y: 0)], radius: 1))
+    }
+
 }

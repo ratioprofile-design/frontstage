@@ -81,6 +81,7 @@ final class ScreenplayEditorController: ObservableObject {
             element = ScreenplayTextCodec.element(in: textView.attributedString(), at: textView.selectedRange().location)
         }
         if activeElement != element { activeElement = element }
+        TamilInputManager.update(for: textView, enabled: typography.isTamil(for: element))
     }
 
     func format(_ element: ScreenplayElement) { command { formatParagraph(element) } }
@@ -273,6 +274,11 @@ class ScreenplayTextView: NSTextView {
         if splitScene != nil, selectedRange().length == 0 { splitCaret = selectedRange() }
         super.rightMouseDown(with: event)
         splitCaret = nil
+    }
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned && !hasMarkedText() { TamilInputManager.restoreStandardInput() }
+        return resigned
     }
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = super.menu(for: event) ?? NSMenu()
@@ -484,7 +490,7 @@ struct ScreenplayEditor: NSViewRepresentable {
                 loading = false
             }
             pendingElement = nil
-            loading = true; ScriptCueNames.capitalize(in: text); loading = false
+            loading = true; ScriptCueNames.capitalize(in: text, settings: controller.typography); loading = false
             let result = ScreenplayTextCodec.encode(text.attributedString())
             lastHTML = result
             html.wrappedValue = result
