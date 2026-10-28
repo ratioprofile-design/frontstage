@@ -7,8 +7,13 @@ public struct PreferenceImportReview: Sendable {
     public let current: [String: JSONValue]
     public var conflicts: Set<String> { Set(incoming.keys.filter { current[$0] != nil && current[$0] != incoming[$0] }) }
     public init(current: [String: JSONValue], incoming: [String: JSONValue]) {
-        self.current = current.filter { Self.recognizedKeys.contains($0.key) && Self.valid($0.key, $0.value) }
-        self.incoming = incoming.filter { Self.recognizedKeys.contains($0.key) && Self.valid($0.key, $0.value) }
+        func normalize(_ fields: [String: JSONValue]) -> [String: JSONValue] {
+            var fields = fields
+            if let paper = fields["default_paper_size"]?.string { fields["default_paper_size"] = .string(paper == "letter" ? "US Letter" : paper == "a4" ? "A4" : paper) }
+            return fields
+        }
+        self.current = normalize(current).filter { Self.recognizedKeys.contains($0.key) && Self.valid($0.key, $0.value) }
+        self.incoming = normalize(incoming).filter { Self.recognizedKeys.contains($0.key) && Self.valid($0.key, $0.value) }
     }
     /// Conflicts default to keeping the current device settings.
     public func accepted(replaceConflicts: Set<String> = []) -> [String: JSONValue] {

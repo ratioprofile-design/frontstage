@@ -20,6 +20,12 @@ final class AntigravityAdoptionTests: XCTestCase {
         XCTAssertEqual(try Project(data: p.encoded()).scriptLayout, layout)
         layout.elements["character"]?.fontSize = .infinity
         let before = p; XCTAssertThrowsError(try p.setScriptLayout(layout)); XCTAssertEqual(before, p)
+        layout = p.scriptLayout; layout.elements.removeValue(forKey: "character"); try p.setScriptLayout(layout)
+        XCTAssertEqual(p.scriptLayout.effectiveFontName(for: .character), "Courier")
+        XCTAssertEqual(p.state["frontstageScriptLayout"]?.object?["frontstageInactiveElementTypography"]?.object?["character"]?.object?["futureTrait"], .string("retained"))
+        layout.elements["character"] = ElementTypography(isUppercase: true); try p.setScriptLayout(layout)
+        XCTAssertEqual(p.scriptLayout.effectiveFontName(for: .character), "Courier")
+        XCTAssertEqual(p.state["frontstageScriptLayout"]?.object?["elements"]?.object?["character"]?.object?["futureTrait"], .string("retained"))
     }
     func testRevisionBaselineHistoryAndIdentity() throws {
         let contract = try fixture(); var p = Project()
@@ -100,6 +106,12 @@ final class AntigravityAdoptionTests: XCTestCase {
         XCTAssertTrue(fdx.contains("<DualDialogue>")); XCTAssertTrue(fdx.contains("Number=\"12\""))
         XCTAssertTrue(fdx.contains("தமிழ் &amp; &lt;light&gt;")); XCTAssertTrue(fdx.contains("Style=\"Bold+Underline\""))
         XCTAssertTrue(fountain.contains("@ABI ^")); XCTAssertTrue(fountain.contains("#12#"))
+        let parsedFDX = try ScreenplayInterchange.parseFDX(Data(fdx.utf8)), parsedFountain = try ScreenplayInterchange.parseFountain(fountain)
+        XCTAssertEqual(parsedFDX.map(\.text), paragraphs.map(\.text)); XCTAssertEqual(parsedFountain.map(\.text), paragraphs.map(\.text))
+        XCTAssertEqual(parsedFDX.map(\.element), paragraphs.map(\.element)); XCTAssertEqual(parsedFountain.map(\.element), paragraphs.map(\.element))
+        XCTAssertEqual(parsedFDX.map(\.runs), paragraphs.map(\.runs)); XCTAssertEqual(parsedFountain.map(\.runs), paragraphs.map(\.runs))
+        XCTAssertEqual(parsedFDX.map(\.dualSide), paragraphs.map(\.dualSide)); XCTAssertEqual(parsedFountain.map(\.dualSide), paragraphs.map(\.dualSide))
+        XCTAssertEqual(parsedFDX.first?.number, "12"); XCTAssertEqual(parsedFountain.first?.number, "12")
         XCTAssertThrowsError(try ScreenplayInterchange.fdx(paragraphs.filter { $0.element != .dialogue }))
         let stroke = BoardStroke(points: [.init(x: 0, y: 0), .init(x: 100, y: 100)])
         XCTAssertTrue(BoardDrawing.hits(stroke, path: [.init(x: 0, y: 100), .init(x: 100, y: 0)], radius: 1))

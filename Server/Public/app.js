@@ -1,4 +1,4 @@
-import {validateTypography} from './script-typography.js';
+import {validateTypography,applyTypography,popupTypography} from './script-typography.js';
 import {eraseBoardDrawing} from './board-drawing.js';
 import {parseProjectFile,projectFilename} from './project-files.js';
 import {insertScriptScene} from './continuous-script.js';
@@ -604,7 +604,7 @@ function openEditor(id) {
   const sceneID=beat.sceneID;
   const controls=sluglineFields(()=>doc.project.beats.find(s=>s.id===sceneID),()=>doc.project.beats,edit,current.access!=='reader');
   panel.querySelector('.paper-desk').before(controls);
-  const text = field('snippet-editor'); text.before(element('h3',heading(doc.project.beats.find(s=>s.id===sceneID)),'popup-slugline script-heading')); text.innerHTML = cleanHTML(beat.html);
+  const text = field('snippet-editor');text.classList.add('script-text');const typography=popupTypography(doc.project.frontstageScriptLayout);applyTypography(text,typography);text.style.fontFamily=JSON.stringify(typography.fontName)+',monospace';text.style.fontSize=typography.fontSize+'px';text.style.lineHeight=typography.lineHeight+'px'; text.before(element('h3',heading(doc.project.beats.find(s=>s.id===sceneID)),'popup-slugline script-heading')); text.innerHTML = cleanHTML(beat.html);
   text.contentEditable = current.access === 'reader' || doc.project.beats.find(s => s.id === beat.sceneID)?.frontstageTextLocked ? 'false' : 'true';
   text.oninput = () => { const html = cleanHTML(text.innerHTML); edit(() => { const target = board().beats.find(b => b.id === id); if (target) target.html = html; }); };
   const toolbar=screenplayToolbar(text, () => text.dispatchEvent(new Event('input')), text.contentEditable === 'true',()=>characterNames(doc,id),()=>doc.project.beats.map(heading),{status,continuationSeed:()=>dialogueSeed(doc,id),newScene:node=>{

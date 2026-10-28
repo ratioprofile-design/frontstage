@@ -65,7 +65,9 @@ struct DOTPreferences: View {
                         if let migration {
                             Text("Recognized preferences: \(migration.incoming.count). Conflicts keep current settings unless selected below.")
                             ForEach(migration.conflicts.sorted(), id: \.self) { key in
-                                Toggle("Use Antigravity: \(key)", isOn: Binding(get: { replacements.contains(key) }, set: { if $0 { replacements.insert(key) } else { replacements.remove(key) } }))
+                                Text(preferenceName(key)).font(.headline)
+                                Text("Current: \(describe(migration.current[key]))\nAntigravity: \(describe(migration.incoming[key]))").font(.caption).textSelection(.enabled)
+                                Toggle("Use Antigravity settings for \(preferenceName(key))", isOn: Binding(get: { replacements.contains(key) }, set: { if $0 { replacements.insert(key) } else { replacements.remove(key) } }))
                             }
                             Button("Back Up and Import Reviewed Settings") { importSettings(migration) }
                         } else { Button("Review Antigravity Settings…", action: reviewSettings) }
@@ -77,6 +79,19 @@ struct DOTPreferences: View {
         .onAppear {
             if let data = UserDefaults.standard.data(forKey: "default_script_layout"), let saved = try? JSONDecoder().decode(ScriptLayoutSettings.self, from: data) { defaults = saved }
         }
+    }
+    private func preferenceName(_ key: String) -> String {
+        ["default_script_layout": "Typography defaults", "frontstage_restore_last_project": "Session restoration", "frontstage_recent_projects": "Recent projects", "frontstage_last_project_path": "Last project", "write-left-visible": "Scene cards visibility", "write-right-visible": "Inspector visibility", "default_paper_size": "Default paper size"][key] ?? key
+    }
+    private func describe(_ value: JSONValue?) -> String {
+        guard let value else { return "Not set" }
+        if value == .bool(true) { return "On" }; if value == .bool(false) { return "Off" }
+        if let fields = value.object, fields["fontName"] != nil {
+            return "\(fields["fontName"]?.string ?? "Courier"), \(fields["fontSize"]?.double ?? 12) pt, \(fields["elements"]?.object?.count ?? 0) element overrides"
+        }
+        if let string = value.string { return string }
+        if let array = value.array { return array.compactMap(\.string).joined(separator: "\n") }
+        return "Imported preference"
     }
     private func fontField(_ label: String, value: String, changed: @escaping (String) -> Void) -> some View {
         VStack(alignment: .leading) {

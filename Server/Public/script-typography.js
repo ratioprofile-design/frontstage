@@ -11,10 +11,10 @@ export function validateTypography(value){
  return value;
 }
 export function setTypography(document,value){
- validateTypography(value);const prior=document.project.frontstageScriptLayout||{},elements={...prior.elements};
- for(const key of scriptElements)if(!Object.hasOwn(value.elements||{},key))delete elements[key];
- for(const[key,entry]of Object.entries(value.elements||{}))elements[key]={...elements[key],...entry};
- document.project.frontstageScriptLayout={...prior,...structuredClone(value),elements};
+ validateTypography(value);const prior=document.project.frontstageScriptLayout||{},elements={...prior.elements},inactive={...prior.frontstageInactiveElementTypography},known=new Set(['fontName','fontSize','isBold','isItalic','isUnderline','isUppercase','isTamil']);
+ for(const key of scriptElements)if(!Object.hasOwn(value.elements||{},key)){if(elements[key]&&Object.keys(elements[key]).some(k=>!known.has(k)))inactive[key]=structuredClone(elements[key]);delete elements[key];}
+ for(const[key,entry]of Object.entries(value.elements||{})){const extensions=Object.fromEntries(Object.entries(inactive[key]||{}).filter(([k])=>!known.has(k)));elements[key]={...(elements[key]||extensions),...entry};delete inactive[key];}
+ const next={...prior,...structuredClone(value),elements};if(Object.keys(inactive).length)next.frontstageInactiveElementTypography=inactive;else delete next.frontstageInactiveElementTypography;document.project.frontstageScriptLayout=next;
 }
 export function applyTypography(node,t={}){
  node.style.setProperty('--script-font',JSON.stringify(t.fontName||'Courier'));
@@ -27,3 +27,5 @@ export function applyTypography(node,t={}){
   for(const[key,value]of Object.entries({weight:entry.isBold?'bold':'normal',style:entry.isItalic?'italic':'normal',decoration:entry.isUnderline?'underline':'none',case:entry.isUppercase?'uppercase':'none'}))node.style.setProperty(`--script-${element}-${key}`,value);
  }
 }
+
+export function popupTypography(settings={}){const t={fontName:'Courier',fontSize:12,lineHeight:14,paragraphSpacing:10,...structuredClone(settings)},scale=Math.max(1,15/t.fontSize);t.fontSize*=scale;t.lineHeight*=scale;t.paragraphSpacing*=scale;for(const entry of Object.values(t.elements||{}))if(entry.fontSize)entry.fontSize=Math.max(15,entry.fontSize*scale);return t;}

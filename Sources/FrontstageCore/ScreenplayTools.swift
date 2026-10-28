@@ -143,11 +143,19 @@ extension Project {
         var raw = state["frontstageScriptLayout"]?.object ?? [:]
         for (key, value) in encoded.object ?? [:] where key != "elements" { raw[key] = value }
         var elements = raw["elements"]?.object ?? [:]
-        // Known elements can be reset; future element records and extension fields survive.
-        for element in ScreenplayElement.allCases where layout.elements[element.rawValue] == nil { elements.removeValue(forKey: element.rawValue) }
-        for (key, value) in encoded.object?["elements"]?.object ?? [:] {
-            elements[key] = .object((elements[key]?.object ?? [:]).merging(value.object ?? [:]) { _, new in new })
+        var inactive = raw["frontstageInactiveElementTypography"]?.object ?? [:]
+        let known: Set<String> = ["fontName", "fontSize", "isBold", "isItalic", "isUnderline", "isUppercase", "isTamil"]
+        // Explicitly disabling a known override archives its extension fields; future elements stay active.
+        for element in ScreenplayElement.allCases where layout.elements[element.rawValue] == nil {
+            if let original = elements[element.rawValue]?.object, original.keys.contains(where: { !known.contains($0) }) { inactive[element.rawValue] = .object(original) }
+            elements.removeValue(forKey: element.rawValue)
         }
+        for (key, value) in encoded.object?["elements"]?.object ?? [:] {
+            let extensions = (inactive[key]?.object ?? [:]).filter { !known.contains($0.key) }
+            elements[key] = .object((elements[key]?.object ?? extensions).merging(value.object ?? [:]) { _, new in new })
+            inactive.removeValue(forKey: key)
+        }
+        if !inactive.isEmpty { raw["frontstageInactiveElementTypography"] = .object(inactive) } else { raw.removeValue(forKey: "frontstageInactiveElementTypography") }
         raw["elements"] = .object(elements)
         state["frontstageScriptLayout"] = .object(raw)
     }

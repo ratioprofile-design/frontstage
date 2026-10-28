@@ -183,6 +183,13 @@ struct BeatPopupView: View {
             }.fixedSize(horizontal: false, vertical: true)
         }
     }
+    private var popupTypography: ScriptLayoutSettings {
+        var value = workspace.project.scriptLayout
+        let scale = max(1, 15 / value.fontSize)
+        value.fontSize *= scale; value.lineHeight *= scale; value.paragraphSpacing *= scale
+        for key in Array(value.elements.keys) { if let size = value.elements[key]?.fontSize { value.elements[key]?.fontSize = max(15, size * scale) } }
+        return value
+    }
     @ViewBuilder private var scriptControls: some View {
         if let scene {
             HStack {
@@ -212,7 +219,7 @@ struct BeatPopupView: View {
                     .buttonStyle(.plain).background(Color(white: 0.13))
                 if scriptExpanded {
                     scriptControls.disabled(scene?.isTextLocked == true)
-                    ScreenplayEditor(html: text(\.html, label: "Snippet Text"), controller: controller, width: 532, typography: workspace.project.scriptLayout,
+                    ScreenplayEditor(html: text(\.html, label: "Snippet Text"), controller: controller, width: 532, typography: popupTypography,
                         onError: { workspace.errorMessage = $0 }, editable: scene?.isTextLocked != true && !workspace.whiteboard.isLocked(beat), paper: true, paperTopInset: 16, suggestions: workspace.screenplayCompletions,
                         continuationSeed: DialoguePresentation.seed(project: workspace.project, beatID: beatID), explicitCharacters: workspace.project.characters.map(\.name) + workspace.whiteboard.beats.flatMap(\.characters)).id(beatID)
                         .frame(maxWidth: .infinity, minHeight: 220).environment(\.colorScheme, .light)

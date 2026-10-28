@@ -1,3 +1,4 @@
+import {dualPairPlan} from './dual-dialogue.js';
 import {scriptSegments,heading} from './workspace-model.js';
 import {paragraphKind,scriptParagraphs,decorateDialogue} from './dialogue-rules.js';
 const xml=text=>String(text).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
@@ -26,14 +27,45 @@ export function renderFDX(paragraphs){
 export function renderFountain(paragraphs){
  renderFDX(paragraphs);const output=[];
  for(const[index,p]of paragraphs.entries()){
-  const value=p.runs.map(run=>{let value=run.text;if(run.underline)value='_'+value+'_';if(run.italic)value='*'+value+'*';if(run.bold)value='**'+value+'**';return value;}).join('');
+  const value=p.runs.map(run=>{let value=run.text.replaceAll('\\','\\\\').replaceAll('*','\\*').replaceAll('_','\\_');if(run.underline)value='_'+value+'_';if(run.italic)value='*'+value+'*';if(run.bold)value='**'+value+'**';return value;}).join('');
   if(p.element==='slugline')output.push('','.'+value+(p.number!=null?` #${p.number}#`:''),'');
   else if(p.element==='character')output.push('','@'+value+(p.dualSide==='right'?' ^':''));
   else if(p.element==='parenthetical')output.push((value.startsWith('(')?'':'(')+value+(value.endsWith(')')?'':')'));
   else if(p.element==='dialogue'){output.push(value);if(!['dialogue','parenthetical'].includes(paragraphs[index+1]?.element))output.push('');}
   else if(p.element==='transition')output.push('','> '+value,'');
   else if(p.element==='lyrics')output.push('~'+value);
+  else if(p.element==='shot')output.push('','/* DOT element: shot */','!'+value,'');
   else output.push('','!'+value,'');
  }
  return output.join('\n').replace(/^\n+|\n+$/g,'')+'\n';
+}
+
+export function parseFDX(source){
+ if(new TextEncoder().encode(source).length>32*1024*1024)throw Error('The script exceeds the 32 MB import limit.');
+ const root=new DOMParser().parseFromString(source,'application/xml');if(root.querySelector('parsererror')||root.documentElement.tagName!=='FinalDraft'||root.documentElement.getAttribute('DocumentType')!=='Script')throw Error('The document is not a readable Final Draft script.');
+ const result=[];
+ const visit=(parent,pair=null)=>{let cues=0;for(const child of parent.children){if(child.tagName==='Paragraph'){
+  const nested=child.querySelector(':scope > DualDialogue');if(nested){visit(nested,crypto.randomUUID());continue;}
+  const type=child.getAttribute('Type'),element=type==='Scene Heading'?'slugline':(type||'Action').toLowerCase();if(element==='character')cues++;
+  const runs=[...child.querySelectorAll(':scope > Text')].map(n=>{const style=n.getAttribute('Style')||'';return {text:n.textContent,bold:style.includes('Bold'),italic:style.includes('Italic'),underline:style.includes('Underline')};});
+  result.push({element:['slugline','action','character','dialogue','parenthetical','transition','shot','lyrics'].includes(element)?element:'action',runs,number:child.getAttribute('Number')??child.querySelector('SceneProperties')?.getAttribute('Number')??null,dualPair:pair,dualSide:pair?(cues>1?'right':'left'):null});
+ }}};const content=root.querySelector('Content');if(content)visit(content);renderFDX(result);return result;
+}
+function fountainRuns(source){const runs=[];let value='',bold=false,italic=false,underline=false;const flush=()=>{if(value){runs.push({text:value,bold,italic,underline});value='';}};for(let i=0;i<source.length;i++){const c=source[i];if(c==='\\'&&i+1<source.length){value+=source[++i];continue;}if(c==='_'){flush();underline=!underline;continue;}if(c==='*'){flush();if(source[i+1]==='*'){bold=!bold;i++;}else italic=!italic;continue;}value+=c;}flush();return runs;}
+export function parseFountain(source){
+ if(new TextEncoder().encode(source).length>32*1024*1024)throw Error('The script exceeds the 32 MB import limit.');
+ const result=[],pairCues=[],scenes=[];let speech=false,shot=false,scene=0;
+ for(const raw of source.replaceAll('\r\n','\n').split('\n')){const line=raw.trim();if(!line){speech=false;continue;}if(line==='/* DOT element: shot */'){shot=true;continue;}let element='action',content=line,number=null,dual=false;
+  if(line.startsWith('.')||/^(INT\.|EXT\.|INT\.\/EXT\.|EXT\.\/INT\.|I\/E\.)\s/i.test(line)){element='slugline';scene++;speech=false;if(line.startsWith('.'))content=content.slice(1);const match=content.match(/\s+#([^#]+)#$/);if(match){number=match[1];content=content.slice(0,match.index);}}
+  else if(line.startsWith('@')){element='character';content=content.slice(1);speech=true;if(content.endsWith(' ^')){content=content.slice(0,-2);dual=true;}}
+  else if(line.startsWith('!')){element=shot?'shot':'action';content=content.slice(1);speech=false;shot=false;}
+  else if(line.startsWith('>')){element='transition';content=content.slice(1).trim();speech=false;}
+  else if(line.startsWith('~')){element='lyrics';content=content.slice(1);}
+  else if(speech&&line.startsWith('('))element='parenthetical';
+  else if(speech)element='dialogue';
+  else if(line===line.toUpperCase()&&!line.includes('.')&&line.length<100){element='character';speech=true;if(content.endsWith(' ^')){content=content.slice(0,-2);dual=true;}}
+  if(dual)pairCues.push(result.length);result.push({element,runs:fountainRuns(content),number,dualPair:null,dualSide:null});scenes.push(String(scene));
+ }
+ for(const cue of pairCues){const plan=dualPairPlan(result.map((p,i)=>({element:p.element,text:text(p),scene:scenes[i]})),cue),id=crypto.randomUUID();for(const[range,side]of [[plan.left,'left'],[plan.right,'right']])for(let i=range[0];i<range[1];i++){if(result[i].dualPair)throw Error('Ambiguous Fountain dual dialogue.');result[i].dualPair=id;result[i].dualSide=side;}}
+ return result;
 }

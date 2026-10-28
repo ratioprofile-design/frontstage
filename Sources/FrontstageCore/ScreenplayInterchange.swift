@@ -53,7 +53,7 @@ public enum ScreenplayInterchange {
         var output = [String]()
         for (index, p) in paragraphs.enumerated() {
             let text = p.runs.map { run in
-                var text = run.text
+                var text = run.text.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "*", with: "\\*").replacingOccurrences(of: "_", with: "\\_")
                 if run.underline { text = "_" + text + "_" }
                 if run.italic { text = "*" + text + "*" }
                 if run.bold { text = "**" + text + "**" }
@@ -68,7 +68,8 @@ public enum ScreenplayInterchange {
                 if index + 1 == paragraphs.count || ![.dialogue, .parenthetical].contains(paragraphs[index + 1].element) { output.append("") }
             case .transition: output += ["", "> " + text, ""]
             case .lyrics: output.append("~" + text)
-            case .action, .shot: output += ["", "!" + text, ""]
+            case .shot: output += ["", "/* DOT element: shot */", "!" + text, ""]
+            case .action: output += ["", "!" + text, ""]
             }
         }
         return output.joined(separator: "\n").trimmingCharacters(in: .newlines) + "\n"

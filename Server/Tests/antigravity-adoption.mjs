@@ -11,6 +11,7 @@ const layout=structuredClone(contract.typography);layout.fontSize=13;delete layo
 setTypography(document,layout);
 assert.deepEqual(document.project.frontstageScriptLayout.futureSetting,{preserve:true});assert.equal(document.project.frontstageScriptLayout.elements.character.futureTrait,'retained');
 assert.throws(()=>validateTypography({...layout,fontSize:Infinity}));assert.throws(()=>validateTypography({...layout,elements:{character:{isBold:'yes'}}}));
+const reset=structuredClone(document.project.frontstageScriptLayout);delete reset.elements.character;setTypography(document,reset);assert.equal(document.project.frontstageScriptLayout.frontstageInactiveElementTypography.character.futureTrait,'retained');assert.equal(document.project.frontstageScriptLayout.elements.character,undefined);reset.elements.character={isUppercase:true};setTypography(document,reset);assert.equal(document.project.frontstageScriptLayout.elements.character.futureTrait,'retained');assert.equal(document.project.frontstageScriptLayout.elements.character.fontName,undefined);
 document.project.productionRevision=structuredClone(contract.revision);
 setRevisionColor(document,'Pink');assert.equal(document.project.productionRevision.id,contract.revision.id);assert.equal(document.project.productionRevision.date,contract.revision.date);
 const prior=structuredClone(document.project.productionRevision);startNextRevision(document,{id:'new-baseline',date:1760000000000});assert.deepEqual(document.project.productionRevisionHistory,[prior]);assert.deepEqual(document.project.productionRevision.futureRevisionField,{preserve:true});
@@ -23,10 +24,11 @@ const original=structuredClone(archived),deleted=deletePulledOutBeats(archived,n
 assert.deepEqual(archived,original);assert.equal(deleted.project.beats.some(s=>s.id===1),false);assert.equal(deleted.project.frontstagePullouts.length,0);assert.deepEqual(deleted.project.frontstageStudio.assets,original.project.frontstageStudio.assets);assert.equal(deleted.project.frontstageStudio.records[0].sceneID,undefined);assert.deepEqual(deleted.project.frontstageProduction.days[0].sceneIDs,[2]);
 archived.project.beats.find(s=>s.id===1).frontstageTextLocked=true;assert.throws(()=>deletePulledOutBeats(archived,new Set(['beat-1'])));assert.throws(()=>deletePulledOutBeats(archived,new Set(['missing'])));
 console.log('PASS: Antigravity typography, unknown fields, baseline history, atomic shelf deletion and locks');
-const {renderFDX,renderFountain}=await import('../Public/screenplay-interchange.js');
+const {renderFDX,renderFountain,parseFountain}=await import('../Public/screenplay-interchange.js');
 const paragraphs=JSON.parse(await readFile(new URL('../../Tests/Fixtures/interchange-contract.json',import.meta.url)));
 const fdx=renderFDX(paragraphs),fountain=renderFountain(paragraphs);
 assert.match(fdx,/<DualDialogue>/);assert.match(fdx,/Number="12"/);assert.match(fdx,/தமிழ் &amp; &lt;light&gt;/);assert.match(fdx,/Style="Bold\+Underline"/);assert.match(fountain,/@ABI \^/);assert.match(fountain,/#12#/);assert.match(fountain,/தமிழ்/);
+const roundTrip=parseFountain(fountain);assert.deepEqual(roundTrip.map(p=>p.runs),paragraphs.map(p=>p.runs));assert.deepEqual(roundTrip.map(p=>p.element),paragraphs.map(p=>p.element));assert.deepEqual(roundTrip.map(p=>p.dualSide??null),paragraphs.map(p=>p.dualSide??null));assert.equal(roundTrip[0].number,'12');
 assert.throws(()=>renderFDX([{element:'character',runs:[{text:'A'}],dualSide:'left'}]),/legacy/);
 assert.throws(()=>renderFDX(paragraphs.filter(p=>p.element!=='dialogue')),/incomplete/);
 const {strokeHit,eraseBoardDrawing}=await import('../Public/board-drawing.js');
