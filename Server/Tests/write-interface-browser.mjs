@@ -32,7 +32,7 @@ try{
  const heading=sheet.locator('[data-heading-scene="1"]');await heading.selectText();await page.keyboard.type('ext. park - n');await page.keyboard.press('Enter');assert.equal(await heading.innerText(),'EXT. PARK - NIGHT');
  const body=sheet.locator('[data-beat-id="beat-1"]:not([data-heading-scene])').first();await body.fill('Before split. After split.');
  await body.evaluate(n=>{const range=document.createRange();range.setStart(n.firstChild,14);range.collapse(true);getSelection().removeAllRanges();getSelection().addRange(range);});
- await body.click({button:'right'});await page.getByRole('menuitem',{name:'Split scene at cursor',exact:true}).click();
+ await body.click({button:'right'});await page.getByRole('menuitem',{name:'Beat ›',exact:true}).click();await page.getByRole('menuitem',{name:'Split at Cursor',exact:true}).click();
  assert.ok(!(await page.locator('#status').innerText()).includes('Place the cursor'),await page.locator('#status').innerText());
  await page.waitForFunction(()=>document.querySelectorAll('.simple-beat-card').length===3);
  assert.ok((await sheet.innerText()).includes('Before split.'));assert.ok((await sheet.innerText()).includes('After split.'));assert.equal(await sheet.locator('[data-heading-scene]').count(),3);

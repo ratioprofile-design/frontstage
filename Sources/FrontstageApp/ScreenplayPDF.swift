@@ -121,6 +121,7 @@ enum ScreenplayPDF {
     }
 
     private static func drawFrameHighlights(_ frame: CTFrame, context: CGContext) {
+        context.saveGState(); defer { context.restoreGState() }
         let lines = CTFrameGetLines(frame) as! [CTLine]
         var origins = Array(repeating: CGPoint.zero, count: lines.count)
         CTFrameGetLineOrigins(frame, CFRange(location: 0, length: 0), &origins)
@@ -128,7 +129,7 @@ enum ScreenplayPDF {
         for (index, line) in lines.enumerated() {
             for run in CTLineGetGlyphRuns(line) as! [CTRun] {
                 let attributes = CTRunGetAttributes(run) as NSDictionary
-                guard let color = attributes[NSAttributedString.Key.backgroundColor] as? NSColor else { continue }
+                guard let color = attributes[NSAttributedString.Key.backgroundColor.rawValue] as? NSColor else { continue }
                 let range = CTRunGetStringRange(run)
                 var ascent: CGFloat = 0, descent: CGFloat = 0
                 _ = CTRunGetTypographicBounds(run, CFRange(location: 0, length: 0), &ascent, &descent, nil)
