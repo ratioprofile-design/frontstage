@@ -273,6 +273,7 @@ struct ContinuousScriptEditor: NSViewRepresentable {
             guard text.isEditable, !text.hasMarkedText() else { return }
             let source = text.attributedString(), caret = min(text.selectedRange().location, max(0, source.length - 1))
             guard source.length > 0, let id = source.attribute(ownerKey, at: caret, effectiveRange: nil) as? String else { return }
+            guard let beat = workspace.whiteboard.beats.first(where: { $0.id == id }), !workspace.whiteboard.isLocked(beat), !beat.omitted, !workspace.whiteboard.isUnused(beat), workspace.project.scenes.first(where: { $0.id == beat.sceneID })?.isTextLocked == false else { workspace.errorMessage = "Unlock this active scene before creating a new scene."; return }
             let paragraph = (source.string as NSString).paragraphRange(for: NSRange(location: caret, length: 0)), boundary = NSMaxRange(paragraph)
             func focus(_ id: String) {
                 workspace.selectBoardBeat(id); load(text)
@@ -283,7 +284,8 @@ struct ContinuousScriptEditor: NSViewRepresentable {
             }
             if boundary < source.length, source.attribute(headingKey, at: boundary, effectiveRange: nil) != nil,
                let nextID = source.attribute(ownerKey, at: boundary, effectiveRange: nil) as? String,
-               let next = workspace.whiteboard.beats.first(where: { $0.id == nextID }),
+               let next = workspace.whiteboard.beats.first(where: { $0.id == nextID }), !workspace.whiteboard.isLocked(next),
+               workspace.project.scenes.first(where: { $0.id == next.sceneID })?.isTextLocked == false,
                workspace.project.scenes.first(where: { $0.id == next.sceneID })?.heading.inlineText.isEmpty == true,
                ((try? ScreenplayTextCodec.decode(next.html).string) ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 focus(nextID); return

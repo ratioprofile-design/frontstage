@@ -34,6 +34,31 @@ final class BeatPopupTests: XCTestCase {
         }
     }
 
+    func testTransitionReturnKeepsOriginalPopupAndFocusesNewHeading() async throws {
+        try await MainActor.run {
+            _ = NSApplication.shared
+            let workspace = Workspace()
+            workspace.addWhiteboardBeat()
+            defer { workspace.popup.close() }
+            let original = try XCTUnwrap(workspace.selectedBoardBeatID)
+            let controller = try XCTUnwrap(workspace.popup.controller(for: original))
+            let text = try XCTUnwrap(controller.textView)
+            text.setSelectedRange(NSRange(location: 0, length: text.string.utf16.count))
+            text.insertText("CUT TO:", replacementRange: text.selectedRange())
+            controller.format(.transition)
+            XCTAssertTrue(controller.handleCommand(#selector(NSResponder.insertNewline(_:)), in: text))
+            XCTAssertEqual(workspace.popup.panels.count, 2)
+            XCTAssertNotNil(workspace.popup.panels[original])
+            XCTAssertTrue(try XCTUnwrap(workspace.whiteboard.beats.first { $0.id == original }).html.contains("CUT TO:"))
+            let next = try XCTUnwrap(workspace.selectedBoardBeatID)
+            XCTAssertNotEqual(next, original)
+            workspace.popup.focusHeading(next)
+            let responder = workspace.popup.panels[next]?.firstResponder
+            let field = (responder as? NSTextView)?.delegate as? NSTextField
+            XCTAssertTrue((responder as? NSTextField)?.placeholderString == "Location" || field?.placeholderString == "Location")
+        }
+    }
+
     func testMultiplePaperEditorsKeepIndependentTextAndCloseIndividually() async throws {
         try await MainActor.run {
             _ = NSApplication.shared

@@ -21,6 +21,19 @@ final class ProjectHistoryTests: XCTestCase {
         XCTAssertFalse(history.canRedo)
     }
 
+    func testParagraphCommandsHaveIndependentUndoFromTyping() {
+        var history = ProjectHistory(), project = Project(name: "Prefix")
+        let time = Date(timeIntervalSince1970: 100)
+        history.record(project, label: "Type", key: "writer", now: time)
+        project.name = "Accepted name"
+        history.endTypingGroup()
+        history.record(project, label: "Change element", key: "writer", now: time.addingTimeInterval(0.1))
+        project.name = "Transition"
+        history.endTypingGroup()
+        XCTAssertEqual(history.undo(current: project)?.name, "Accepted name")
+        XCTAssertEqual(history.undo(current: project)?.name, "Prefix")
+    }
+
     func testHistoryLimitAndSnapshotsRemainIndependent() {
         var history = ProjectHistory(limit: 2)
         var project = Project()

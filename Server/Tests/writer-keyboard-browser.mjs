@@ -45,6 +45,7 @@ try{
  await page.keyboard.press('Enter'); // accepts CUT TO: and creates one scene
  assert.match((await active()).kind,/sc-slugline/);assert.equal(await page.locator('.simple-beat-card').count(),3);
  assert.equal(await sheet.locator('[data-beat-id="beat-1"].sc-transition').last().textContent(),'CUT TO:');
+ await sheet.locator('[data-beat-id="beat-1"].sc-transition').last().click();await page.keyboard.press('Enter');assert.equal(await page.locator('.simple-beat-card').count(),3);assert.match((await active()).kind,/sc-slugline/);
  await page.keyboard.type('ext. river - night');await page.keyboard.press('Escape');await page.keyboard.press('Enter');assert.match((await active()).kind,/sc-action/);
  await page.keyboard.insertText('தமிழ் action.');await page.keyboard.press('Control+Enter');await page.keyboard.type('Later text.');
  const sceneHeading=await sheet.locator('[data-active-heading="true"]').getAttribute('data-beat-id');

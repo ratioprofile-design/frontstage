@@ -126,6 +126,19 @@ final class WriterTypingAcceptanceTests: XCTestCase {
             XCTAssertEqual(workspace.whiteboard.beats.count, oldCount + 1)
         }
     }
+    func testRepeatedTransitionReturnReusesEmptyHeading() async throws {
+        try await MainActor.run {
+            let (workspace, _, window, text) = try Self.editor("<p class='sc-transition'>CUT TO:</p>"); defer { window.close() }
+            let oldCount = workspace.whiteboard.beats.count
+            try Self.press(text, "\n")
+            XCTAssertEqual(workspace.whiteboard.beats.count, oldCount + 1)
+            let oldTransition = (text.string as NSString).range(of: "CUT TO:")
+            text.setSelectedRange(NSRange(location: oldTransition.location, length: 0))
+            try Self.press(text, "\n")
+            XCTAssertEqual(workspace.whiteboard.beats.count, oldCount + 1)
+            XCTAssertEqual(Self.kind(text), .sceneHeading)
+        }
+    }
     func testFilledActionTabPreservesWholeParagraphAndSelectionFormatting() async throws {
         try await MainActor.run {
             let (_, controller, window, text) = try Self.editor("<p class='sc-action'>She walks across the room.</p>"); defer { window.close() }

@@ -187,7 +187,7 @@ final class ScreenplayEditorController: ObservableObject {
             format(.transition); return true
         }
         clearAcceptedCue()
-        if key == "Enter", activeElement == .parenthetical {
+        if ["Enter", "ForceAction", "Tab"].contains(key), activeElement == .parenthetical {
             let line = (textView.string as NSString).paragraphRange(for: textView.selectedRange())
             let value = (textView.string as NSString).substring(with: line).trimmingCharacters(in: .newlines)
             if !ScreenplayParenthetical.isEmpty(value), ScreenplayParenthetical.wrapped(value) != value { format(.parenthetical) }

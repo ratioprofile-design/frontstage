@@ -50,4 +50,23 @@ final class ScriptInclusionTests: XCTestCase {
         XCTAssertNotEqual(try p.whiteboard().beats.first { $0.id == id }?.sceneID, 1); XCTAssertEqual(p.writingNotes(sceneID: 1), notes)
         XCTAssertEqual(try Project(data: p.encoded()), p)
     }
+    func testTransitionScenePreservesIdentityAndRejectsInactiveSources() throws {
+        var project = Project(oneBeatPerScene: true)
+        let source = try project.addBoardBeat(title: "Source"), other = try project.addBoardBeat(title: "Other")
+        try project.groupBoardBeats([source, other])
+        let before = try project.whiteboard(), original = try XCTUnwrap(before.beats.first { $0.id == source })
+        let id = try project.insertScriptScene(afterSplitting: source, beforeHTML: "<p class='sc-transition'>CUT TO:</p>", afterHTML: "<p>தமிழ் after</p>", heading: "")
+        let board = try project.whiteboard(), next = try XCTUnwrap(board.beats.first { $0.id == id })
+        XCTAssertNotEqual(next.sceneID, original.sceneID); XCTAssertEqual(next.blockID, original.blockID)
+        XCTAssertEqual(board.blocks, before.blocks)
+        XCTAssertTrue(try XCTUnwrap(board.beats.first { $0.id == source }).html.contains("CUT TO:"))
+        XCTAssertEqual(next.html, "<p>தமிழ் after</p>")
+        try project.validateSceneModel()
+        XCTAssertEqual(try Project(data: project.encoded()), project)
+        try project.editWhiteboard { board in board.layers[0].unused = true }
+        let inactive = project
+        XCTAssertThrowsError(try project.insertScriptScene(afterSplitting: source, beforeHTML: "", afterHTML: "", heading: ""))
+        XCTAssertEqual(project, inactive)
+    }
+
 }
