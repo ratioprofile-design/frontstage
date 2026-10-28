@@ -87,7 +87,9 @@ struct DOTPreferences: View {
         guard let value else { return "Not set" }
         if value == .bool(true) { return "On" }; if value == .bool(false) { return "Off" }
         if let fields = value.object, fields["fontName"] != nil {
-            return "\(fields["fontName"]?.string ?? "Courier"), \(fields["fontSize"]?.double ?? 12) pt, \(fields["elements"]?.object?.count ?? 0) element overrides"
+            let size: String
+            if case .number(let value) = fields["fontSize"] { size = NSDecimalNumber(decimal: value).stringValue } else { size = "12" }
+            return "\(fields["fontName"]?.string ?? "Courier"), \(size) pt, \(fields["elements"]?.object?.count ?? 0) element overrides"
         }
         if let string = value.string { return string }
         if let array = value.array { return array.compactMap(\.string).joined(separator: "\n") }
