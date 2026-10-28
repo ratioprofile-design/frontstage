@@ -72,13 +72,23 @@ final class SharedProjectClient: ObservableObject {
         } catch { status = error.localizedDescription }
     }
     func refresh() async throws { projects = try await request("api/projects", as: [RemoteProject].self).0 }
+    private func requireCompatibleServer(_ project: Project) async throws {
+        guard !project.requiredWriteFeatures.isEmpty else { return }
+        struct Capabilities: Decodable { var supportedFeatures: Set<String>? }
+        let (health, _) = try await request("health", as: Capabilities.self)
+        guard project.requiredWriteFeatures.isSubset(of: health.supportedFeatures ?? []) else {
+            throw ProjectError.invalidProject("Update the DOT shared server before syncing this project. Local changes remain saved.")
+        }
+    }
     func create(from workspace: Workspace) async {
         busy = true; defer { busy = false }
-        let session = workspace.documentSessionID
+        let session = workspace.documentSessionID, connection = server, credential = token
         do {
-            let value = try JSONDecoder().decode(JSONValue.self, from: workspace.project.encoded())
+            let sent = workspace.project, value = try JSONDecoder().decode(JSONValue.self, from: sent.encoded())
+            try await requireCompatibleServer(sent)
+            guard server == connection, token == credential else { throw ProjectError.invalidProject("The shared connection changed. Local changes remain saved.") }
             let (snapshot, _) = try await request("api/projects", method: "POST", body: .object(["document": value]), as: RemoteProject.self)
-            guard workspace.documentSessionID == session else { try await refresh(); status = "Shared copy created; the newly opened local project remains separate."; return }
+            guard workspace.documentSessionID == session, server == connection, token == credential else { try await refresh(); status = "Shared copy created; the newly opened local project remains separate."; return }
             linked = snapshot; base = snapshot.document; try cacheBase(); try await refresh(); status = "Shared project created."
         } catch { status = error.localizedDescription }
     }
@@ -97,13 +107,15 @@ final class SharedProjectClient: ObservableObject {
     func synchronize(_ workspace: Workspace) async {
         guard let link = linked, link.access != "reader", !busy else { status = "Select an editable shared project first."; return }
         busy = true; defer { busy = false }
-        let session = workspace.documentSessionID
+        let session = workspace.documentSessionID, connection = server, credential = token
         do {
             let sent = workspace.project, value = try JSONDecoder().decode(JSONValue.self, from: sent.encoded())
+            try await requireCompatibleServer(sent)
+            guard server == connection, token == credential else { throw ProjectError.invalidProject("The shared connection changed. Local changes remain saved.") }
             let (result, code) = try await request("api/projects/\(link.id.uuidString)", method: "PUT", body: .object([
                 "expectedRevision": .number(Decimal(link.revision)), "changeID": .string(UUID().uuidString), "document": value, "supportedFeatures": .array(Project.supportedWriteFeatures.sorted().map { .string($0) })
             ]), as: RemoteUpdate.self)
-            guard workspace.documentSessionID == session, linked?.id == link.id else { status = "The previous project's upload finished. Your current project remains separate."; return }
+            guard workspace.documentSessionID == session, linked?.id == link.id, server == connection, token == credential else { status = "The previous project's upload finished. Your current project remains separate."; return }
             if code == 409, let remote = result.snapshot.document, let base {
                 let local = try JSONDecoder().decode(JSONValue.self, from: workspace.project.encoded())
                 let merge = ProjectMerge.mergeDocuments(base: base, local: local, remote: remote)

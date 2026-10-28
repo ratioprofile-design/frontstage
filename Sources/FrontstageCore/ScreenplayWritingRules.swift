@@ -43,7 +43,7 @@ public struct CharacterCue: Equatable, Sendable {
     private static func isContinuation(_ text: String) -> Bool { normalized(text).hasPrefix("(CONT") }
     public init(_ source: String) {
         var remaining = source.trimmingCharacters(in: .whitespacesAndNewlines), suffixes: [String] = []
-        let regex = try! NSRegularExpression(pattern: #"\s*\((?:V\.?O\.?|O\.?S\.?|O\.?C\.?|CONT['’]?D|CONT\.?|CONTINUED|OVER THE PHONE|ON THE PHONE)\)\s*$"#, options: .caseInsensitive)
+        let regex = try! NSRegularExpression(pattern: #"\s*\((?:V\.?O\.?|O\.?S\.?|O\.?C\.?|CONT['’]?D|CONT\.?|CONTINUED|OVER THE PHONE|ON THE PHONE|INTO PHONE|OVER PHONE|PRE-LAP|FILTERED)\)\s*$"#, options: .caseInsensitive)
         while let match = regex.firstMatch(in: remaining, range: NSRange(location: 0, length: remaining.utf16.count)) {
             let value = remaining as NSString
             suffixes.insert(value.substring(with: match.range).trimmingCharacters(in: .whitespacesAndNewlines), at: 0)

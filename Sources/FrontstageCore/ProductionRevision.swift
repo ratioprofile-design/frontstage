@@ -146,10 +146,10 @@ extension Project {
         guard let revision = currentRevision, let scene = scenes.first(where: { $0.id == sceneID }) else { return false }
         let key = String(describing: sceneID)
         guard let baseline = revision.sceneBaselineHTML[key] else { return true }
-        return baseline != scene.html || revision.sceneBaselineHeadings?[key].map { $0 != scene.heading.inlineText } == true
+        return baseline != scene.html || revision.sceneBaselineHeadings?[key].map { CharacterCue.normalized($0) != CharacterCue.normalized(scene.heading.inlineText) } == true
     }
 
-    private var productionHeadingBaseline: [String: String] { Dictionary(uniqueKeysWithValues: scenes.map { (String(describing: $0.id), $0.heading.inlineText) }) }
+    private var productionHeadingBaseline: [String: String] { Dictionary(uniqueKeysWithValues: scenes.map { (String(describing: $0.id), CharacterCue.normalized($0.heading.inlineText)) }) }
 
     public mutating func startNextRevision(label customLabel: String? = nil) {
         archiveCurrentProductionRevision()

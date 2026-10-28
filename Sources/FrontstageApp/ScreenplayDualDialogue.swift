@@ -89,7 +89,9 @@ enum ScreenplayDualDialogue {
                 if let existing = cells[cellKey] { block = existing } else {
                     block = NSTextTableBlock(table: table, startingRow: 0, rowSpan: 1, startingColumn: side == "left" ? 0 : 1, columnSpan: 1)
                     block.setValue(width / 2, type: .absoluteValueType, for: .width)
-                    block.setWidth(6, type: .absoluteValueType, for: .padding)
+                    block.setWidth(0, type: .absoluteValueType, for: .padding)
+                    block.setWidth(side == "right" ? 12 : 0, type: .absoluteValueType, for: .padding, edge: .minX)
+                    block.setWidth(side == "left" ? 12 : 0, type: .absoluteValueType, for: .padding, edge: .maxX)
                     cells[cellKey] = block
                 }
                 let attrs = ScreenplayTypography.attributes(element, width: max(1, width / 2 - 12), settings: settings)

@@ -1,3 +1,4 @@
+import {requiredWriteFeatures,validateServerFeatures} from './feature-compatibility.js';
 import {validateTypography,applyTypography,popupTypography} from './script-typography.js';
 import {eraseBoardDrawing} from './board-drawing.js';
 import {parseProjectFile,projectFilename} from './project-files.js';
@@ -78,7 +79,13 @@ function cleanHTML(source) {
 }
 function plain(html) { const node = document.createElement('div'); node.innerHTML = cleanHTML(html); return node.textContent; }
 async function api(path, method = 'GET', body) {
-  const response = await fetch(apiOrigin + path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const origin=apiOrigin,sessionToken=token;
+  if(body?.document&&requiredWriteFeatures(body.document).length){
+    const health=await fetch(origin+'/health');if(!health.ok||!(health.headers.get('Content-Type')||'').includes('application/json'))throw Error('Update the DOT shared server before syncing this project. Local changes remain saved.');
+    validateServerFeatures(body.document,(await health.json()).supportedFeatures||[]);
+    if(origin!==apiOrigin||sessionToken!==token)throw Error('The shared connection changed. Local changes remain saved.');
+  }
+  const response = await fetch(origin + path, { method, headers: { 'Content-Type': 'application/json', ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
   if (!(response.headers.get('Content-Type') || '').includes('application/json') && response.status !== 204) throw Error('Shared service unavailable. Enter your DOT server address to sign in.');
   const data = response.status === 204 ? null : await response.json();
   if (!response.ok && response.status !== 409) throw Error(data?.reason || `Request failed (${response.status})`);

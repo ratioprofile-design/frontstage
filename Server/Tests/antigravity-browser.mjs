@@ -48,7 +48,7 @@ try{
  await page.locator('#view-mode').selectOption('pages');await page.locator('.paper-sheet').first().waitFor();
  const pages=await page.locator('.pages-desk').textContent();assert.equal((pages.match(/LEFT_UNIQUE/g)||[]).length,500);assert.equal((pages.match(/RIGHT_UNIQUE/g)||[]).length,30);assert.ok(await page.locator('.paper-sheet').count()>1);
  const columns=await page.locator('.sc-dual-group').evaluateAll(groups=>groups.map(g=>{const [l,r]=[...g.children].map(n=>n.getBoundingClientRect());return {delta:Math.abs(l.top-r.top),width:g.getBoundingClientRect().width};}));assert.ok(columns.every(c=>c.delta<2&&c.width>0));
- assert.equal(await page.locator('.sc-slugline[data-revised=true]').count(),1);
+ assert.equal(await page.locator('.pages-desk .sc-slugline[data-revised=true]').count(),1);
  const exported=await page.evaluate(async()=>{const m=await import('/screenplay-interchange.js');return {ready:typeof m.renderFDX==='function'};});assert.equal(exported.ready,true);
  assert.deepEqual(errors,[]);console.log('PASS: typography preview, baseline history/marks, drawing, panning, undo/redo, paired caret stability, FDX structure and multi-page unequal columns');
 }finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}

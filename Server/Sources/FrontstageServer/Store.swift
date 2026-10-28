@@ -104,7 +104,7 @@ actor ProjectStore {
         guard current.revision == expected else { return UpdateResult(conflict: true, snapshot: try snapshot(current, user: user)) }
         let project = try validated(document)
         let prior = try validated(current.document)
-        guard !prior.usesOneBeatPerScene || project.usesOneBeatPerScene else { throw Abort(.badRequest, reason: "Update Frontstage: the scene model cannot be downgraded") }
+        guard !prior.usesOneBeatPerScene || project.usesOneBeatPerScene else { throw Abort(.badRequest, reason: "Update DOT: the scene model cannot be downgraded") }
         do { try project.validateWriterCompatibility(previous: prior, supported: supportedFeatures) }
         catch { throw Abort(.badRequest, reason: error.localizedDescription) }
         current.document = try JSONDecoder().decode(JSONValue.self, from: project.encoded())

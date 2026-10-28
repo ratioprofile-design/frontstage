@@ -7,7 +7,7 @@ struct Token: Content { var token: String; var username: String }
 struct Create: Content { var document: JSONValue }
 struct Update: Content { var expectedRevision: Int; var changeID: UUID; var document: JSONValue; var supportedFeatures: Set<String>? }
 struct Share: Content { var username: String; var access: Access? }
-struct Health: Content { var status: String; var protocolVersion: Int }
+struct Health: Content { var status: String; var protocolVersion: Int; var supportedFeatures: Set<String> }
 
 struct BrowserHeaders: AsyncMiddleware {
     func respond(to request: Request, chainingTo next: any AsyncResponder) async throws -> Response {
@@ -39,7 +39,7 @@ do {
     }
     app.middleware.use(BrowserHeaders())
     app.middleware.use(FileMiddleware(publicDirectory: app.directory.publicDirectory))
-    app.get("health") { _ in Health(status: "ok", protocolVersion: 1) }
+    app.get("health") { _ in Health(status: "ok", protocolVersion: 1, supportedFeatures: Project.supportedWriteFeatures) }
     app.get { req async throws -> Response in try await req.fileio.asyncStreamFile(at: app.directory.publicDirectory + "index.html") }
     let user: @Sendable (Request) async throws -> String = { req in
         guard let token = req.headers.bearerAuthorization?.token else { throw Abort(.unauthorized) }

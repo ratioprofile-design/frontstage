@@ -16,13 +16,13 @@ Mac Settings includes a one-time **Review Antigravity Settings** workflow. It re
 - `productionRevision` retains the reference's ID, color, label, millisecond date, baseline-lock flag and scene baseline map. Newly captured baselines also retain headings in `sceneBaselineHeadings`; legacy baselines without headings continue comparing their recorded body text. Previous raw baselines are retained in `productionRevisionHistory`. Color/label edits preserve revision identity and capture date. Scene stars and revision headers are generated presentation, not authored HTML.
 - Paired speech paragraphs carry `sc-dual-left` / `sc-dual-right` plus `data-dual-pair`. Pairing requires two adjacent complete speech blocks in one scene. Moving complete scenes preserves identity; duplication allocates new pair IDs. A scene split through a pair is rejected until it is unpaired.
 - **Review Legacy Dual Dialogue** previews normalization into a separate backed-up copy. Ambiguous annotations are rejected without changing the original. Mac adds identifiers directly to the original HTML so inline/imported extension markup is retained.
-- Shared writes advertise supported features. The server rejects older clients when the previous or proposed document contains typography, baseline or dual-dialogue data the client cannot preserve.
+- Shared writes advertise supported features. The server rejects older clients when the previous or proposed document contains typography, baseline or dual-dialogue data the client cannot preserve. New clients also check server feature support before uploading a feature-bearing document, so an older shared server requires an upgrade before these projects can be synced; local editing remains available.
 
 ## Workflow
 
 The current agreed Enter/Tab rules, numbered element shortcuts, non-mutating suggestions, IME protection, caret handling, duplication and project undo/redo remain authoritative. Antigravity keyboard handlers were not copied over them.
 
-Use the screenplay context menu or Cmd/Ctrl+Shift+L to pair/unpair the selected second speech block. Mac uses TextKit table cells for a common top; the browser keeps editable paragraphs flat and derives column geometry without replacing active nodes. Pages and exports group paired speech separately from authored text.
+Use the screenplay context menu or Cmd/Ctrl+Shift+L to pair/unpair the selected second speech block. Mac uses TextKit table cells for a common top in live editors and independent Core Text column frames for PDF pagination; the browser keeps editable paragraphs flat and derives column geometry without replacing active nodes. Pages and exports group paired speech separately from authored text.
 
 Mac Tamil switching is opt-in per element, suspended during composition, and restores only a source DOT actually changed. Browser Tamil settings adjust typography without changing the OS keyboard. Popup typography scales for reading without changing project settings.
 

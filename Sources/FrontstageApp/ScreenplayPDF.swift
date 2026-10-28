@@ -39,6 +39,7 @@ struct ScreenplayPageLayout {
     let rect: CGRect
     let continuedCharacter: String?
     let continuesCharacter: String?
+    var sourceRanges: [NSRange] = []
 }
 
 @MainActor
@@ -112,90 +113,173 @@ enum ScreenplayPDF {
         return RenderedScreenplay(data: output as Data, text: text, pageRanges: pages.map(\.range), paper: paper, pages: pages)
     }
 
-    private struct TextKitPage {
-        let storage: NSTextStorage
-        let manager: NSLayoutManager
-        let container: NSTextContainer
-        let glyphs: NSRange
-        let range: NSRange
-        let headerReserve: CGFloat
-    }
-    private static func dualPages(_ original: NSAttributedString, paper: ScreenplayPaper) throws -> [TextKitPage] {
-        var starts = [0]
-        original.enumerateAttribute(explicitPageStart, in: NSRange(location: 0, length: original.length)) { value, range, _ in
-            if value as? Bool == true, range.location > 0 { starts.append(range.location) }
+    private struct FlowFragment { let range: NSRange; let rect: CGRect }
+    private struct FlowMarker { let value: String; let x: CGFloat; let header: Bool; let width: CGFloat? }
+    private struct FlowPage {
+        var fragments = [FlowFragment]()
+        var markers = [FlowMarker]()
+        var used: CGFloat = 0
+        var range: NSRange {
+            guard let first = fragments.map(\.range.location).min(), let end = fragments.map({ NSMaxRange($0.range) }).max() else { return NSRange(location: 0, length: 0) }
+            return NSRange(location: first, length: end - first)
         }
-        starts.append(original.length)
-        var pages = [TextKitPage]()
-        for index in 0..<(starts.count - 1) {
-            let chunk = NSRange(location: starts[index], length: starts[index + 1] - starts[index])
-            let storage = NSTextStorage(attributedString: original.attributedSubstring(from: chunk))
-            ScreenplayDualDialogue.layout(storage, width: paper.contentWidth, settings: .init())
-            let manager = NSLayoutManager(); manager.usesFontLeading = true; storage.addLayoutManager(manager)
-            var laidOut = 0
-            while laidOut < storage.length {
-                let headerReserve: CGFloat = manager.textContainers.isEmpty ? 0 : 28
-                let container = NSTextContainer(containerSize: NSSize(width: paper.contentWidth, height: paper.contentHeight - headerReserve - 14))
-                container.lineFragmentPadding = 0; manager.addTextContainer(container); manager.ensureLayout(for: container)
-                let glyphs = manager.glyphRange(for: container), range = manager.characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)
-                guard range.length > 0, NSMaxRange(range) > laidOut else { throw ScreenplayPDFError.cannotLayOut }
-                pages.append(TextKitPage(storage: storage, manager: manager, container: container, glyphs: glyphs, range: NSRange(location: chunk.location + range.location, length: range.length), headerReserve: headerReserve))
-                laidOut = NSMaxRange(range)
-                guard pages.count < 10000 else { throw ScreenplayPDFError.cannotLayOut }
+    }
+    private struct FlowUnit { let range: NSRange; let right: Int?; let forced: Bool }
+    private static func dualFlow(_ original: NSAttributedString, paper: ScreenplayPaper) throws -> (text: NSMutableAttributedString, pages: [FlowPage]) {
+        let text = NSMutableAttributedString(attributedString: original), source = text.string as NSString
+        let columnWidth = (paper.contentWidth - 24) / 2
+        var units = [FlowUnit](), offset = 0
+        while offset < text.length {
+            let paragraph = source.paragraphRange(for: NSRange(location: offset, length: 0))
+            let pair = text.attribute(.screenplayDualPair, at: offset, effectiveRange: nil) as? String
+            let owner = text.attribute(NSAttributedString.Key("FrontstageBeatOwner"), at: offset, effectiveRange: nil) as? String
+            let forced = text.attribute(explicitPageStart, at: offset, effectiveRange: nil) as? Bool == true
+            if let pair {
+                var end = offset, right: Int?
+                while end < text.length, text.attribute(.screenplayDualPair, at: end, effectiveRange: nil) as? String == pair,
+                      (text.attribute(NSAttributedString.Key("FrontstageBeatOwner"), at: end, effectiveRange: nil) as? String) == owner {
+                    let range = source.paragraphRange(for: NSRange(location: end, length: 0))
+                    if text.attribute(.screenplayDualDialogue, at: end, effectiveRange: nil) as? String == "right", right == nil { right = end }
+                    let element = ScreenplayTextCodec.element(in: text, at: end)
+                    let style = (text.attribute(.paragraphStyle, at: end, effectiveRange: nil) as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+                    let geometry = ScreenplayTypography.attributes(element, width: columnWidth)[.paragraphStyle] as! NSParagraphStyle
+                    style.headIndent = geometry.headIndent; style.firstLineHeadIndent = geometry.firstLineHeadIndent; style.tailIndent = geometry.tailIndent; style.textBlocks = []
+                    text.addAttribute(.paragraphStyle, value: style, range: range)
+                    end = NSMaxRange(range)
+                }
+                guard let right, right > offset, right < end else { throw ScreenplayPDFError.cannotLayOut }
+                units.append(FlowUnit(range: NSRange(location: offset, length: end - offset), right: right, forced: forced)); offset = end
+            } else {
+                if let previous = units.last, previous.right == nil, !forced {
+                    units[units.count - 1] = FlowUnit(range: NSRange(location: previous.range.location, length: NSMaxRange(paragraph) - previous.range.location), right: nil, forced: previous.forced)
+                } else { units.append(FlowUnit(range: paragraph, right: nil, forced: forced)) }
+                offset = NSMaxRange(paragraph)
             }
         }
-        return pages
-    }
-    private static func dualMarkers(_ page: TextKitPage) -> [(side: String, cue: String, head: Bool, foot: Bool)] {
-        struct Speech { var side: String; var cue = ""; var visible = false; var cueVisible = false; var future = false }
-        var speeches = [String: Speech](), offset = 0
-        let storage = page.storage, source = storage.string as NSString
-        let pageIndex = page.manager.textContainers.firstIndex { $0 === page.container } ?? 0
-        while offset < storage.length {
-            let range = source.paragraphRange(for: NSRange(location: offset, length: 0))
-            defer { offset = NSMaxRange(range) }
-            guard let pair = storage.attribute(.screenplayDualPair, at: offset, effectiveRange: nil) as? String,
-                  let side = storage.attribute(.screenplayDualDialogue, at: offset, effectiveRange: nil) as? String else { continue }
-            let owner = storage.attribute(NSAttributedString.Key("FrontstageBeatOwner"), at: offset, effectiveRange: nil) as? String ?? "popup"
-            let key = owner + ":" + pair + ":" + side, element = ScreenplayTextCodec.element(in: storage, at: offset)
-            var speech = speeches[key] ?? Speech(side: side)
-            if element == .character { speech.cue = CharacterCue(source.substring(with: range)).withoutContinuation }
-            let glyphs = page.manager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
-            page.manager.enumerateLineFragments(forGlyphRange: glyphs) { _, _, container, _, _ in
-                if container === page.container { speech.visible = true; if element == .character { speech.cueVisible = true } }
-                if let i = page.manager.textContainers.firstIndex(where: { $0 === container }), i > pageIndex { speech.future = true }
+        let framesetter = CTFramesetterCreateWithAttributedString(text as CFAttributedString)
+        var pages = [FlowPage]()
+        var page = FlowPage()
+        func nextPage() { if !page.fragments.isEmpty { pages.append(page) }; page = FlowPage() }
+        func fit(_ range: NSRange, x: CGFloat, width: CGFloat, used: CGFloat, keep: Bool = true) -> (fragment: FlowFragment?, consumed: CGFloat) {
+            let height = paper.contentHeight - used - 14
+            guard range.length > 0, height > 0 else { return (nil, 0) }
+            let rect = CGRect(x: x, y: paper.height - paper.topMargin - used - height, width: width, height: height)
+            var end = range.location
+            let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: range.location, length: range.length), CGPath(rect: rect, transform: nil), nil)
+            end += min(range.length, CTFrameGetVisibleStringRange(frame).length)
+            guard end > range.location else { return (nil, 0) }
+            if keep, end < NSMaxRange(range) {
+                while end > range.location {
+                    let last = source.paragraphRange(for: NSRange(location: end - 1, length: 0))
+                    guard ScreenplayTextCodec.element(in: text, at: last.location).keepsWithNext else { break }
+                    end = last.location
+                }
+                if end <= range.location { return (nil, 0) }
             }
-            speeches[key] = speech
+            let fitted = NSRange(location: range.location, length: end - range.location)
+            let measured = CTFramesetterCreateFrame(framesetter, CFRange(location: fitted.location, length: fitted.length), CGPath(rect: rect, transform: nil), nil)
+            let lines = CTFrameGetLines(measured) as! [CTLine]
+            guard let last = lines.last else { return (nil, 0) }
+            var origins = Array(repeating: CGPoint.zero, count: lines.count)
+            CTFrameGetLineOrigins(measured, CFRange(location: 0, length: 0), &origins)
+            var descent: CGFloat = 0
+            _ = CTLineGetTypographicBounds(last, nil, &descent, nil)
+            let paragraph = source.paragraphRange(for: NSRange(location: end - 1, length: 0))
+            let spacing = NSMaxRange(paragraph) == end ? (text.attribute(.paragraphStyle, at: end - 1, effectiveRange: nil) as? NSParagraphStyle)?.paragraphSpacing ?? 0 : 0
+            return (FlowFragment(range: fitted, rect: rect), min(height, max(1, height - origins[origins.count - 1].y + descent + spacing)))
         }
-        return speeches.values.filter { $0.visible && !$0.cue.isEmpty }.map { ($0.side, $0.cue, !$0.cueVisible && page.headerReserve > 0, $0.future) }
+        func marker(_ cue: String, x: CGFloat, header: Bool, width: CGFloat? = nil) { page.markers.append(FlowMarker(value: header ? cue + " (CONT'D)" : "(MORE)", x: x, header: header, width: width)) }
+        func startingSpeechHeight(_ start: Int, end: Int) -> CGFloat {
+            var position = start, height: CGFloat = 0
+            while position < end {
+                let range = source.paragraphRange(for: NSRange(location: position, length: 0))
+                let element = ScreenplayTextCodec.element(in: text, at: position)
+                if element.keepsWithNext {
+                    height += CTFramesetterSuggestFrameSizeWithConstraints(framesetter, CFRange(location: position, length: min(range.length, end - position)), nil, CGSize(width: columnWidth, height: .greatestFiniteMagnitude), nil).height
+                } else {
+                    let style = text.attribute(.paragraphStyle, at: position, effectiveRange: nil) as? NSParagraphStyle
+                    height += max(14, style?.minimumLineHeight ?? 14); break
+                }
+                position = NSMaxRange(range)
+            }
+            return height + 14
+        }
+        for (unitIndex, unit) in units.enumerated() {
+            if unit.forced && !page.fragments.isEmpty { nextPage() }
+            if let right = unit.right {
+                let starts = [unit.range.location, right], ends = [right, NSMaxRange(unit.range)]
+                let cues = starts.map { CharacterCue(source.substring(with: source.paragraphRange(for: NSRange(location: $0, length: 0)))).withoutContinuation }
+                var cursors = starts
+                while cursors[0] < ends[0] || cursors[1] < ends[1] {
+                    let continued = (0...1).filter { cursors[$0] > starts[$0] && cursors[$0] < ends[$0] }
+                    if page.fragments.isEmpty && !continued.isEmpty { page.used = 28 }
+                    let fits = (0...1).map { index in fit(NSRange(location: cursors[index], length: ends[index] - cursors[index]), x: paper.leftMargin + CGFloat(index) * (columnWidth + 24), width: columnWidth, used: page.used) }
+                    let stalled = (0...1).contains { cursors[$0] < ends[$0] && fits[$0].fragment == nil }
+                    if stalled {
+                        if !page.fragments.isEmpty { nextPage(); continue }
+                        throw ScreenplayPDFError.cannotLayOut
+                    }
+                    for index in continued { marker(cues[index], x: paper.leftMargin + CGFloat(index) * (columnWidth + 24) + columnWidth * WorkspaceDesign.characterIndent / 100, header: true, width: columnWidth * (1 - WorkspaceDesign.characterIndent / 100)) }
+                    for index in 0...1 {
+                        if let fragment = fits[index].fragment { page.fragments.append(fragment); cursors[index] = NSMaxRange(fragment.range) }
+                    }
+                    page.used += max(fits[0].consumed, fits[1].consumed)
+                    if cursors[0] < ends[0] || cursors[1] < ends[1] {
+                        for index in 0...1 where cursors[index] < ends[index] { marker(cues[index], x: paper.leftMargin + CGFloat(index) * (columnWidth + 24) + columnWidth * WorkspaceDesign.characterIndent / 100, header: false, width: columnWidth * (1 - WorkspaceDesign.characterIndent / 100)) }
+                        nextPage()
+                    }
+                }
+            } else {
+                var cursor = unit.range.location
+                while cursor < NSMaxRange(unit.range) {
+                    if page.fragments.isEmpty, let cue = continuingCharacter(in: text, at: cursor) {
+                        page.used = 28; marker(cue, x: paper.leftMargin + paper.contentWidth * WorkspaceDesign.characterIndent / 100, header: true)
+                    }
+                    var result = fit(NSRange(location: cursor, length: NSMaxRange(unit.range) - cursor), x: paper.leftMargin, width: paper.contentWidth, used: page.used)
+                    guard var fragment = result.fragment else {
+                        if !page.fragments.isEmpty { nextPage(); continue }
+                        throw ScreenplayPDFError.cannotLayOut
+                    }
+                    if NSMaxRange(fragment.range) == NSMaxRange(unit.range), unitIndex + 1 < units.count, units[unitIndex + 1].right != nil,
+                       paper.contentHeight - page.used - result.consumed < max(startingSpeechHeight(units[unitIndex + 1].range.location, end: units[unitIndex + 1].right!), startingSpeechHeight(units[unitIndex + 1].right!, end: NSMaxRange(units[unitIndex + 1].range))) {
+                        let last = source.paragraphRange(for: NSRange(location: NSMaxRange(fragment.range) - 1, length: 0))
+                        if ScreenplayTextCodec.element(in: text, at: last.location).keepsWithNext {
+                            if last.location == cursor { if !page.fragments.isEmpty { nextPage(); continue } }
+                            else {
+                                result = fit(NSRange(location: cursor, length: last.location - cursor), x: paper.leftMargin, width: paper.contentWidth, used: page.used)
+                                if let shortened = result.fragment { fragment = shortened }
+                            }
+                        }
+                    }
+                    page.fragments.append(fragment); page.used += result.consumed; cursor = NSMaxRange(fragment.range)
+                    if cursor < NSMaxRange(unit.range) {
+                        if let cue = continuingCharacter(in: text, at: cursor) { marker(cue, x: paper.leftMargin + paper.contentWidth * WorkspaceDesign.characterIndent / 100, header: false) }
+                        nextPage()
+                    }
+                }
+            }
+        }
+        nextPage()
+        return (text, pages)
     }
-
-    private static func renderDualText(_ text: NSAttributedString, title: String, paper: ScreenplayPaper, revisionHeader: String?) throws -> RenderedScreenplay {
-        let laidOut = try dualPages(text, paper: paper)
+    private static func renderDualText(_ original: NSAttributedString, title: String, paper: ScreenplayPaper, revisionHeader: String?) throws -> RenderedScreenplay {
+        let flow = try dualFlow(original, paper: paper)
         let output = CFDataCreateMutable(nil, 0)!
         guard let consumer = CGDataConsumer(data: output) else { throw ScreenplayPDFError.cannotCreatePDF }
         var bounds = CGRect(x: 0, y: 0, width: paper.width, height: paper.height)
         guard let context = CGContext(consumer: consumer, mediaBox: &bounds, [kCGPDFContextTitle as String: title, kCGPDFContextCreator as String: "DOT"] as CFDictionary) else { throw ScreenplayPDFError.cannotCreatePDF }
-        for (index, page) in laidOut.enumerated() {
-            context.beginPDFPage(nil); context.setFillColor(NSColor.white.cgColor); context.fill(bounds)
-            context.saveGState(); context.translateBy(x: paper.leftMargin, y: paper.height - paper.topMargin - page.headerReserve); context.scaleBy(x: 1, y: -1)
-            NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
-            page.manager.drawBackground(forGlyphRange: page.glyphs, at: .zero)
-            page.manager.drawGlyphs(forGlyphRange: page.glyphs, at: .zero)
-            NSGraphicsContext.restoreGraphicsState(); context.restoreGState()
-            for marker in dualMarkers(page) {
-                let column = (paper.contentWidth - 24) / 2
-                let x = paper.leftMargin + (marker.side == "right" ? column + 24 : 0) + column * WorkspaceDesign.characterIndent / 100
-                if marker.head { drawMarker(marker.cue + " (CONT'D)", x: x, y: paper.height - paper.topMargin - 12, in: context, paper: paper, maxWidth: column * (1 - WorkspaceDesign.characterIndent / 100)) }
-                if marker.foot { drawMarker("(MORE)", x: x, y: paper.bottomMargin + 2, in: context, paper: paper) }
-            }
-            if let revisionHeader { drawMarker(revisionHeader, x: paper.leftMargin, y: paper.height - 42, in: context, paper: paper) }
+        let framesetter = CTFramesetterCreateWithAttributedString(flow.text as CFAttributedString)
+        for (index, page) in flow.pages.enumerated() {
+            context.beginPDFPage(nil); context.setFillColor(NSColor.white.cgColor); context.fill(bounds); context.textMatrix = .identity
+            for fragment in page.fragments { CTFrameDraw(CTFramesetterCreateFrame(framesetter, CFRange(location: fragment.range.location, length: fragment.range.length), CGPath(rect: fragment.rect, transform: nil), nil), context) }
+            for marker in page.markers { drawMarker(marker.value, x: marker.x, y: marker.header ? paper.height - paper.topMargin - 12 : paper.bottomMargin + 2, in: context, paper: paper, maxWidth: marker.width) }
+            if let revisionHeader { drawMarker(revisionHeader, x: paper.leftMargin, y: paper.height - 42, in: context, paper: paper, maxWidth: paper.contentWidth - 36) }
             if index > 0 { drawMarker("\(index + 1).", x: paper.width - paper.rightMargin - 24, y: paper.height - 42, in: context, paper: paper) }
             context.endPDFPage()
         }
         context.closePDF()
-        let pages = laidOut.map { ScreenplayPageLayout(range: $0.range, rect: contentRect(paper), continuedCharacter: nil, continuesCharacter: nil) }
-        return RenderedScreenplay(data: output as Data, text: text, pageRanges: pages.map(\.range), paper: paper, pages: pages)
+        let pages = flow.pages.map { ScreenplayPageLayout(range: $0.range, rect: contentRect(paper), continuedCharacter: $0.markers.first(where: \.header)?.value, continuesCharacter: $0.markers.first(where: { !$0.header })?.value, sourceRanges: $0.fragments.map(\.range)) }
+        return RenderedScreenplay(data: output as Data, text: flow.text, pageRanges: pages.map(\.range), paper: paper, pages: pages)
     }
 
     static func paginate(_ text: NSAttributedString, paper: ScreenplayPaper) throws -> [NSRange] {
@@ -204,7 +288,7 @@ enum ScreenplayPDF {
 
     static func layoutPages(_ text: NSAttributedString, paper: ScreenplayPaper) throws -> [ScreenplayPageLayout] {
         if text.containsAttribute(.screenplayDualPair) {
-            return try dualPages(text, paper: paper).map { ScreenplayPageLayout(range: $0.range, rect: contentRect(paper), continuedCharacter: nil, continuesCharacter: nil) }
+            return try dualFlow(text, paper: paper).pages.map { ScreenplayPageLayout(range: $0.range, rect: contentRect(paper), continuedCharacter: nil, continuesCharacter: nil, sourceRanges: $0.fragments.map(\.range)) }
         }
         let framesetter = CTFramesetterCreateWithAttributedString(text as CFAttributedString)
         let source = text.string as NSString

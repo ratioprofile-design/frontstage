@@ -8,7 +8,7 @@ export const headingTimes=['DAY','NIGHT','MORNING','AFTERNOON','EVENING','DAWN',
 export const normalized=text=>text.normalize('NFC').trim().toUpperCase().replace(/\s+/g,' ');
 export function characterCue(source){
  let remaining=source.trim(),extensions=[],match;
- const suffix=/\s*\((?:V\.?O\.?|O\.?S\.?|O\.?C\.?|CONT['’]?D|CONT\.?|CONTINUED|OVER THE PHONE|ON THE PHONE)\)\s*$/i;
+ const suffix=/\s*\((?:V\.?O\.?|O\.?S\.?|O\.?C\.?|CONT['’]?D|CONT\.?|CONTINUED|OVER THE PHONE|ON THE PHONE|INTO PHONE|OVER PHONE|PRE-LAP|FILTERED)\)\s*$/i;
  while((match=suffix.exec(remaining))){extensions.unshift(match[0].trim());remaining=remaining.slice(0,match.index);}
  const name=normalized(remaining),hasContinuation=extensions.some(e=>normalized(e).startsWith('(CONT'));
  return {name,extensions,hasContinuation,withoutContinuation:[name,...extensions.filter(e=>!normalized(e).startsWith('(CONT'))].join(' ')};

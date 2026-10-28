@@ -6,8 +6,9 @@ extension Project {
         var result = Set<String>()
         if state["frontstageScriptLayout"]?.object?["elements"]?.object?.isEmpty == false || state["frontstageScriptLayout"]?.object?["frontstageInactiveElementTypography"]?.object?.isEmpty == false { result.insert("elementTypography") }
         if state["productionRevision"]?.object != nil || state["productionRevisionHistory"]?.array?.isEmpty == false { result.insert("productionBaselines") }
+        let boardHTML = (state["frontstageWhiteboard"]?.object?["beats"]?.array ?? []).compactMap { $0.object?["html"]?.string }
         let archivedHTML = (state["frontstagePullouts"]?.array ?? []).compactMap { $0.object?["beat"]?.object?["html"]?.string }
-        if archivedHTML.contains(where: { $0.contains("sc-dual-") || $0.contains("data-dual-pair") }) || scenes.contains(where: { $0.html.contains("sc-dual-") || $0.html.contains("data-dual-pair") }) { result.insert("dualDialogue") }
+        if (archivedHTML + boardHTML).contains(where: { $0.contains("sc-dual-") || $0.contains("data-dual-pair") }) || scenes.contains(where: { $0.html.contains("sc-dual-") || $0.html.contains("data-dual-pair") }) { result.insert("dualDialogue") }
         return result
     }
     public func validateWriterCompatibility(previous: Project, supported: Set<String>) throws {

@@ -31,8 +31,8 @@ enum ScreenplayDOCX {
                 let side = text.attribute(.screenplayDualDialogue, at: offset, effectiveRange: nil) as? String
                 var geometry = ""
                 if pair != nil {
-                    let left = Int(paper.contentWidth * 10 * (element == .character ? WorkspaceDesign.characterIndent : element == .dialogue ? WorkspaceDesign.dialogueIndent : element == .parenthetical ? WorkspaceDesign.parentheticalIndent : 0) / 100)
-                    let right = Int(paper.contentWidth * 10 * (element == .dialogue ? WorkspaceDesign.dialogueIndent : element == .parenthetical ? WorkspaceDesign.parentheticalRight : 0) / 100)
+                    let left = Int((paper.contentWidth - 24) * 10 * (element == .character ? WorkspaceDesign.characterIndent : element == .dialogue ? WorkspaceDesign.dialogueIndent : element == .parenthetical ? WorkspaceDesign.parentheticalIndent : 0) / 100)
+                    let right = Int((paper.contentWidth - 24) * 10 * (element == .dialogue ? WorkspaceDesign.dialogueIndent : element == .parenthetical ? WorkspaceDesign.parentheticalRight : 0) / 100)
                     geometry = "<w:ind w:left=\"\(left)\" w:right=\"\(right)\"/>"
                 }
                 bodyParagraphs.append(("<w:p><w:pPr><w:pStyle w:val=\"\(element.rawValue)\"/>\(geometry)</w:pPr>\(runs)</w:p>", pair, side))
@@ -46,7 +46,7 @@ enum ScreenplayDOCX {
                     while end < bodyParagraphs.count && bodyParagraphs[end].pair == pair { end += 1 }
                     let values = bodyParagraphs[index..<end]
                     let width = Int(paper.contentWidth * 10)
-                    func cell(_ side: String) -> String { "<w:tc><w:tcPr><w:tcW w:w=\"\(width)\" w:type=\"dxa\"/><w:vAlign w:val=\"top\"/></w:tcPr>" + values.filter { $0.side == side }.map(\.xml).joined() + "</w:tc>" }
+                    func cell(_ side: String) -> String { "<w:tc><w:tcPr><w:tcW w:w=\"\(width)\" w:type=\"dxa\"/><w:vAlign w:val=\"top\"/><w:tcMar><w:top w:w=\"0\" w:type=\"dxa\"/><w:bottom w:w=\"0\" w:type=\"dxa\"/><w:left w:w=\"\(side == "right" ? 240 : 0)\" w:type=\"dxa\"/><w:right w:w=\"\(side == "left" ? 240 : 0)\" w:type=\"dxa\"/></w:tcMar></w:tcPr>" + values.filter { $0.side == side }.map(\.xml).joined() + "</w:tc>" }
                     paragraphs += "<w:tbl><w:tblPr><w:tblLayout w:type=\"fixed\"/><w:tblW w:w=\"\(width * 2)\" w:type=\"dxa\"/></w:tblPr><w:tblGrid><w:gridCol w:w=\"\(width)\"/><w:gridCol w:w=\"\(width)\"/></w:tblGrid><w:tr>" + cell("left") + cell("right") + "</w:tr></w:tbl><w:p/>"
                     index = end
                 } else { paragraphs += item.xml; index += 1 }
