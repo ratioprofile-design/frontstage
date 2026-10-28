@@ -208,6 +208,19 @@ enum ScreenplayTextCodec {
                 if !printing { text.addAttribute(.backgroundColor, value: NSColor(dotHex: ScriptAnnotations.categoryColors[category] ?? "#dddddd").withAlphaComponent(0.45), range: range) }
             }
         }
+        if !printing || UserDefaults.standard.bool(forKey: "dot_export_highlights") {
+            text.enumerateAttribute(.screenplayHighlight, in: NSRange(location: 0, length: text.length)) { value, range, _ in
+                if let name = value as? String, let hex = ScriptAnnotations.highlights[name] { text.addAttribute(.backgroundColor, value: NSColor(dotHex: hex), range: range) }
+            }
+        }
+    }
+    static func refreshHighlightInk(_ text: NSTextView) {
+        guard !text.hasMarkedText(), let storage = text.textStorage, let manager = text.layoutManager else { return }
+        let whole = NSRange(location: 0, length: storage.length)
+        manager.removeTemporaryAttribute(.foregroundColor, forCharacterRange: whole)
+        storage.enumerateAttribute(.screenplayHighlight, in: whole) { value, range, _ in
+            if let name = value as? String, ScriptAnnotations.highlights[name] != nil { manager.addTemporaryAttribute(.foregroundColor, value: NSColor.black, forCharacterRange: range) }
+        }
     }
 
     private static func escape(_ value: String) -> String {

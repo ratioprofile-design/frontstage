@@ -61,6 +61,7 @@ enum DialoguePresentation {
     }
     static func refresh(_ text: ScreenplayTextView) {
         guard !text.hasMarkedText(), let storage = text.textStorage else { return }
+        ScreenplayTextCodec.refreshHighlightInk(text)
         let generated = Dictionary(uniqueKeysWithValues: ranges(in: storage, seed: text.continuationSeed, byOwner: text.continuationFlags).map { ($0.location, $0) })
         var location = 0, tokens = [DialoguePresentationToken]()
         storage.beginEditing()

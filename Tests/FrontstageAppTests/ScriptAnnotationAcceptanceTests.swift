@@ -19,6 +19,10 @@ final class ScriptAnnotationAcceptanceTests: XCTestCase {
             XCTAssertEqual(text.attribute(.screenplayBreakdown, at: range.location, effectiveRange: nil) as? String, "req-1")
             XCTAssertEqual(text.attribute(.screenplayHighlight, at: range.location, effectiveRange: nil) as? String, "Yellow")
             XCTAssertNotNil(text.attribute(.backgroundColor, at: range.location, effectiveRange: nil))
+            let darkView = NSTextView(frame: NSRect(x: 0, y: 0, width: 500, height: 300))
+            darkView.textStorage?.setAttributedString(text); darkView.textColor = .white
+            ScreenplayTextCodec.refreshHighlightInk(darkView)
+            XCTAssertEqual(darkView.layoutManager?.temporaryAttribute(.foregroundColor, atCharacterIndex: range.location, effectiveRange: nil) as? NSColor, .black)
             let saved = ScreenplayTextCodec.encode(text)
             XCTAssertTrue(saved.contains("data-dot-breakdown=\"req-1\"")); XCTAssertTrue(saved.contains("data-dot-highlight=\"Yellow\"")); XCTAssertFalse(saved.contains("INLINE"))
             let printText = try ScreenplayTextCodec.decode(saved, printing: true)
