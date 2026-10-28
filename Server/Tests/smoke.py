@@ -100,6 +100,17 @@ with tempfile.TemporaryDirectory(prefix="frontstage-sync-test-") as directory:
         assert request(path, token=accounts["owner"])["revision"] == 2
         request(path + "/members", "POST", {"username": "editor", "access": None}, accounts["owner"], expected=204)
         request(path, token=accounts["editor"], expected=404)
+        featured = copy.deepcopy(document)
+        featured["project"]["frontstageScriptLayout"] = {"fontName": "Courier", "fontSize": 12, "lineHeight": 14, "paragraphSpacing": 10, "elements": {"character": {"fontSize": 16, "isTamil": True}}}
+        feature_project = request("/api/projects", "POST", {"document": featured}, accounts["owner"])
+        feature_path = "/api/projects/" + feature_project["id"]
+        payload = {"expectedRevision": 1, "changeID": str(uuid.uuid4()), "document": featured}
+        request(feature_path, "PUT", payload, accounts["owner"], expected=400)
+        payload["document"] = copy.deepcopy(document)
+        request(feature_path, "PUT", payload, accounts["owner"], expected=400)
+        payload["document"] = featured
+        payload["supportedFeatures"] = ["elementTypography", "productionBaselines", "dualDialogue"]
+        assert request(feature_path, "PUT", payload, accounts["owner"])["snapshot"]["revision"] == 2
         request("/api/logout", "POST", token=accounts["owner"], expected=204)
         request(path, token=accounts["owner"], expected=401)
         print("PASS: restricted browser origin, authentication, permissions, revisions, conflict rejection, retry idempotency, restart durability and logout")

@@ -51,6 +51,8 @@ struct FrontstageApp: App {
                     .disabled(!workspace.hasActiveScenes)
             }
             CommandMenu("Screenplay") {
+                Button("Pair / Unpair Dual Dialogue") { if let controller = workspace.focusedScreenplayController { ScreenplayDualDialogue.toggle(controller) } }
+                    .keyboardShortcut("l", modifiers: [.command, .shift]).disabled(workspace.focusedScreenplayController == nil)
                 ForEach(Array(ScreenplayElement.editable.enumerated()), id: \.element.rawValue) { index, element in
                     Button("\(index + 1) \(element.label)") { workspace.focusedScreenplayController?.format(element) }
                         .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: [.command])
@@ -58,6 +60,7 @@ struct FrontstageApp: App {
                 }
             }
             CommandMenu("Project") {
+                Button("Review Legacy Dual Dialogue…", action: workspace.reviewLegacyDualDialogue)
                 Button("Undo \(workspace.history.undoLabel)", action: workspace.undoProject)
                     .keyboardShortcut("z", modifiers: [.command, .option]).disabled(!workspace.history.canUndo)
                 Button("Redo \(workspace.history.redoLabel)", action: workspace.redoProject)
@@ -398,6 +401,11 @@ final class Workspace: ObservableObject {
     }
 
     @Published private(set) var recentProjectPaths = UserDefaults.standard.stringArray(forKey: "frontstage_recent_projects") ?? []
+    func reloadDevicePreferences() {
+        recentProjectPaths = UserDefaults.standard.stringArray(forKey: "frontstage_recent_projects") ?? []
+        writeCardsVisible = UserDefaults.standard.object(forKey: "write-left-visible") as? Bool ?? true
+        writeInspectorVisible = UserDefaults.standard.object(forKey: "write-right-visible") as? Bool ?? true
+    }
     private func recordRecent(_ url: URL) {
         let path = url.standardizedFileURL.path
         recentProjectPaths = [path] + recentProjectPaths.filter { $0 != path }.prefix(19)

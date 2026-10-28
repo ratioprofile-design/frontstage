@@ -81,6 +81,7 @@ enum DialoguePresentation {
             if let range = generated[location], range.length > 0 { tokens.append(DialoguePresentationToken(range: range, width: width)) }
             location = NSMaxRange(paragraph)
         }
+        if let controller = text.screenplayController { ScreenplayDualDialogue.layout(storage, width: controller.contentWidth, settings: controller.typography) }
         storage.endEditing()
         text.continuationTokens = tokens; text.needsDisplay = true
     }

@@ -33,6 +33,7 @@ jobs:
             node Server/Tests/scene-cards-browser.mjs
             node Server/Tests/script-inclusion.mjs
             node Server/Tests/antigravity-adoption.mjs
+            node Server/Tests/antigravity-browser.mjs
             node Server/Tests/continuous-inclusion-browser.mjs
             node Server/Tests/write-panel-model.mjs
             node Server/Tests/write-panels-browser.mjs

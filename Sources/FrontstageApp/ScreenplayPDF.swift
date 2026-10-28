@@ -45,6 +45,7 @@ struct ScreenplayPageLayout {
 enum ScreenplayPDF {
     private static let explicitPageStart = NSAttributedString.Key("design.ratioprofile.frontstage.pageStart")
     static func render(project: Project, paper: ScreenplayPaper) throws -> RenderedScreenplay {
+        _ = try ScreenplayInterchange.fdx(ScreenplayInterchangeDocument.paragraphs(project))
         let active = try project.orderedScript()
         guard !active.isEmpty else { throw ScreenplayPDFError.noScenes }
         let text = NSMutableAttributedString(string: "")
@@ -55,6 +56,7 @@ enum ScreenplayPDF {
                 attributes: ScreenplayTypography.attributes(.sceneHeading, width: paper.contentWidth, printing: true, settings: project.scriptLayout)))
             if scene.startsNewPage { text.addAttribute(explicitPageStart, value: true, range: NSRange(location: headingStart, length: 1)) }
             let body = try ScreenplayTextCodec.decode(scene.html, width: paper.contentWidth, printing: true, settings: project.scriptLayout)
+            if body.length > 0 { body.addAttribute(NSAttributedString.Key("FrontstageBeatOwner"), value: "pdf-scene-\(text.length)", range: NSRange(location: 0, length: body.length)) }
             text.append(body)
             if !text.string.hasSuffix("\n") {
                 text.append(NSAttributedString(string: "\n", attributes:
@@ -67,6 +69,9 @@ enum ScreenplayPDF {
     static func renderText(_ text: NSAttributedString, title: String, paper: ScreenplayPaper) throws -> RenderedScreenplay {
         let text = DialoguePresentation.materialized(text)
         guard text.length > 0 else { throw ScreenplayPDFError.cannotLayOut }
+        if text.length > 0, text.containsAttribute(.screenplayDualPair) {
+            return try renderDualText(text, title: title, paper: paper)
+        }
         let pages = try layoutPages(text, paper: paper)
         let output = CFDataCreateMutable(nil, 0)!
         guard let consumer = CGDataConsumer(data: output) else { throw ScreenplayPDFError.cannotCreatePDF }
@@ -106,11 +111,67 @@ enum ScreenplayPDF {
         return RenderedScreenplay(data: output as Data, text: text, pageRanges: pages.map(\.range), paper: paper, pages: pages)
     }
 
+    private struct TextKitPage {
+        let storage: NSTextStorage
+        let manager: NSLayoutManager
+        let container: NSTextContainer
+        let glyphs: NSRange
+        let range: NSRange
+    }
+    private static func dualPages(_ original: NSAttributedString, paper: ScreenplayPaper) throws -> [TextKitPage] {
+        var starts = [0]
+        original.enumerateAttribute(explicitPageStart, in: NSRange(location: 0, length: original.length)) { value, range, _ in
+            if value as? Bool == true, range.location > 0 { starts.append(range.location) }
+        }
+        starts.append(original.length)
+        var pages = [TextKitPage]()
+        for index in 0..<(starts.count - 1) {
+            let chunk = NSRange(location: starts[index], length: starts[index + 1] - starts[index])
+            let storage = NSTextStorage(attributedString: original.attributedSubstring(from: chunk))
+            ScreenplayDualDialogue.layout(storage, width: paper.contentWidth, settings: .init())
+            let manager = NSLayoutManager(); manager.usesFontLeading = true; storage.addLayoutManager(manager)
+            var laidOut = 0
+            while laidOut < storage.length {
+                let container = NSTextContainer(containerSize: NSSize(width: paper.contentWidth, height: paper.contentHeight))
+                container.lineFragmentPadding = 0; manager.addTextContainer(container); manager.ensureLayout(for: container)
+                let glyphs = manager.glyphRange(for: container), range = manager.characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)
+                guard range.length > 0, NSMaxRange(range) > laidOut else { throw ScreenplayPDFError.cannotLayOut }
+                pages.append(TextKitPage(storage: storage, manager: manager, container: container, glyphs: glyphs, range: NSRange(location: chunk.location + range.location, length: range.length)))
+                laidOut = NSMaxRange(range)
+                guard pages.count < 10000 else { throw ScreenplayPDFError.cannotLayOut }
+            }
+        }
+        return pages
+    }
+    private static func renderDualText(_ text: NSAttributedString, title: String, paper: ScreenplayPaper) throws -> RenderedScreenplay {
+        let laidOut = try dualPages(text, paper: paper)
+        let output = CFDataCreateMutable(nil, 0)!
+        guard let consumer = CGDataConsumer(data: output) else { throw ScreenplayPDFError.cannotCreatePDF }
+        var bounds = CGRect(x: 0, y: 0, width: paper.width, height: paper.height)
+        guard let context = CGContext(consumer: consumer, mediaBox: &bounds, [kCGPDFContextTitle as String: title, kCGPDFContextCreator as String: "DOT"] as CFDictionary) else { throw ScreenplayPDFError.cannotCreatePDF }
+        for (index, page) in laidOut.enumerated() {
+            context.beginPDFPage(nil); context.setFillColor(NSColor.white.cgColor); context.fill(bounds)
+            context.saveGState(); context.translateBy(x: paper.leftMargin, y: paper.height - paper.topMargin); context.scaleBy(x: 1, y: -1)
+            NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
+            page.manager.drawBackground(forGlyphRange: page.glyphs, at: .zero)
+            page.manager.drawGlyphs(forGlyphRange: page.glyphs, at: .zero)
+            NSGraphicsContext.restoreGraphicsState(); context.restoreGState()
+            if index > 0 { drawMarker("\(index + 1).", x: paper.width - paper.rightMargin - 24, y: paper.height - 42, in: context, paper: paper) }
+            context.endPDFPage()
+        }
+        context.closePDF()
+        let pages = laidOut.map { ScreenplayPageLayout(range: $0.range, rect: contentRect(paper), continuedCharacter: nil, continuesCharacter: nil) }
+        return RenderedScreenplay(data: output as Data, text: text, pageRanges: pages.map(\.range), paper: paper, pages: pages)
+    }
+
     static func paginate(_ text: NSAttributedString, paper: ScreenplayPaper) throws -> [NSRange] {
         try layoutPages(text, paper: paper).map(\.range)
     }
 
     static func layoutPages(_ text: NSAttributedString, paper: ScreenplayPaper) throws -> [ScreenplayPageLayout] {
+        if text.containsAttribute(.screenplayDualPair) {
+            return try dualPages(text, paper: paper).map { ScreenplayPageLayout(range: $0.range, rect: contentRect(paper), continuedCharacter: nil, continuesCharacter: nil) }
+        }
         let framesetter = CTFramesetterCreateWithAttributedString(text as CFAttributedString)
         let source = text.string as NSString
         var forcedStarts: [Int] = []
@@ -206,6 +267,16 @@ struct ScreenplayPDFView: NSViewRepresentable {
     }
     func updateNSView(_ view: PDFView, context: Context) {
         if view.document !== document { view.document = document }
+    }
+}
+#endif
+
+#if os(macOS)
+private extension NSAttributedString {
+    func containsAttribute(_ key: NSAttributedString.Key) -> Bool {
+        var found = false
+        enumerateAttribute(key, in: NSRange(location: 0, length: length)) { value, _, stop in if value != nil { found = true; stop.pointee = true } }
+        return found
     }
 }
 #endif

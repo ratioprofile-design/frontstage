@@ -1,3 +1,4 @@
+import {duplicatedPairIDs} from './dual-dialogue.js';
 import {blockLocked} from './board-operations.js';
 const clone=value=>structuredClone(value);
 export const sceneModel='oneBeatPerScene';
@@ -6,7 +7,7 @@ export function duplicateBeat(document,id){
  const p=document.project,b=p.frontstageWhiteboard,original=b.beats.find(beat=>beat.id===id),scene=p.beats.find(s=>s.id===original?.sceneID);
  if(!original||!scene||original.locked||blockLocked(b,original.blockID)||scene.frontstageTextLocked)throw Error('Choose an unlocked beat to duplicate.');
  const copy=clone(original),next=clone(scene),sceneID=Math.max(p.nextId||1,...p.beats.map(s=>s.id+1));
- copy.id=crypto.randomUUID();copy.sceneID=sceneID;copy.title+=' copy';next.id=sceneID;next.title=copy.title;next.summary=copy.synopsis||'';next.content=copy.html;
+ copy.html=duplicatedPairIDs(copy.html);copy.id=crypto.randomUUID();copy.sceneID=sceneID;copy.title+=' copy';next.id=sceneID;next.title=copy.title;next.summary=copy.synopsis||'';next.content=copy.html;
  for(const key of ['sceneNumber','versions','frontstageLegacySceneID'])delete next[key];
  const newIDs=list=>Array.isArray(list)?list.map(item=>item&&typeof item==='object'&&item.id!=null?{...item,id:crypto.randomUUID()}:item):list;
  if(next.notes)next.notes=newIDs(next.notes);for(const key of ['breakdown','breakdownData'])if(next[key]&&typeof next[key]==='object'&&!Array.isArray(next[key]))next[key]=Object.fromEntries(Object.entries(next[key]).map(([category,items])=>[category,newIDs(items)]));

@@ -38,6 +38,7 @@ jobs:
           node scripts/generate-workspace-design.mjs --check
             node Server/Tests/screenplay-writing-rules.mjs
           node Server/Tests/workspace-model.mjs
+          node Server/Tests/antigravity-browser.mjs
           node Server/Tests/merge.mjs
           node Server/Tests/board-operations.mjs
           node Server/Tests/write-navigation-browser.mjs 2>&1 | tee build/browser-navigation.log

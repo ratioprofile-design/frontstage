@@ -293,6 +293,7 @@ class ScreenplayTextView: NSTextView {
             item.target = self; item.representedObject = element.rawValue; item.isEnabled = isEditable; submenu.addItem(item)
         }
         styles.submenu = submenu; menu.addItem(.separator()); menu.addItem(styles)
+        let dual = NSMenuItem(title: "Pair / Unpair Dual Dialogue", action: #selector(toggleDualDialogue), keyEquivalent: ""); dual.target = self; dual.isEnabled = isEditable; menu.addItem(dual)
         if splitScene != nil {
             let split = NSMenuItem(title: "Split scene at cursor", action: #selector(splitWriteScene), keyEquivalent: "")
             split.target = self; split.isEnabled = isEditable; menu.addItem(split)
@@ -301,6 +302,7 @@ class ScreenplayTextView: NSTextView {
         if openBeat != nil { let item = NSMenuItem(title: "Open Beat Editor", action: #selector(openWriteBeat), keyEquivalent: ""); item.target = self; menu.addItem(item) }
         return menu
     }
+    @objc private func toggleDualDialogue() { if let controller = screenplayController { ScreenplayDualDialogue.toggle(controller) } }
     @objc private func undoProjectContext() { screenplayController?.projectUndo?() }
     @objc private func redoProjectContext() { screenplayController?.projectRedo?() }
     @objc private func duplicateWriteBeat() { duplicateBeat?() }
@@ -490,7 +492,7 @@ struct ScreenplayEditor: NSViewRepresentable {
                 loading = false
             }
             pendingElement = nil
-            loading = true; ScriptCueNames.capitalize(in: text, settings: controller.typography); loading = false
+            loading = true; ScriptCueNames.capitalize(in: text, settings: controller.typography); ScreenplayDualDialogue.reconcile(text); loading = false
             let result = ScreenplayTextCodec.encode(text.attributedString())
             lastHTML = result
             html.wrappedValue = result

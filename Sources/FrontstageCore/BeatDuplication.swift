@@ -13,7 +13,8 @@ extension Project {
         let sceneID = candidate.addScene(), newID = UUID().uuidString
         var fields = raw, copy = original
         fields["id"] = .number(sceneID); fields["title"] = .string(original.title + " copy")
-        fields["summary"] = .string(original.synopsis); fields["content"] = .string(original.html)
+        copy.html = DualDialogueImport.duplicatedPairIDs(original.html)
+        fields["summary"] = .string(original.synopsis); fields["content"] = .string(copy.html)
         for key in ["sceneNumber", "versions", "frontstageLegacySceneID"] { fields.removeValue(forKey: key) }
         func newIDs(_ value: JSONValue) -> JSONValue {
             guard let list = value.array else { return value }

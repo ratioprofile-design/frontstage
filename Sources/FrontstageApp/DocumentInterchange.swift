@@ -7,13 +7,15 @@ import UniformTypeIdentifiers
 @MainActor
 enum ScreenplayDOCX {
     static func render(_ project: Project, paper: ScreenplayPaper = .letter) throws -> Data {
+        _ = try ScreenplayInterchange.fdx(ScreenplayInterchangeDocument.paragraphs(project))
         let xml = OfficeArchive.xml
         var paragraphs = ""
         for segment in try project.orderedScript() {
             let scene = segment.scene
             paragraphs += paragraph("\(segment.number)  \(scene.heading.text)\(segment.isContinuation ? " (CONTINUED)" : "")", element: .sceneHeading, newPage: scene.startsNewPage)
-            let text = DialoguePresentation.materialized(try ScreenplayTextCodec.decode(scene.html)), source = text.string as NSString
+            let text = DialoguePresentation.materialized(try ScreenplayTextCodec.decode(scene.html, settings: project.scriptLayout)), source = text.string as NSString
             var offset = 0
+            var bodyParagraphs = [(xml: String, pair: String?, side: String?)]()
             while offset < text.length {
                 let range = source.paragraphRange(for: NSRange(location: offset, length: 0))
                 let element = ScreenplayTextCodec.element(in: text, at: offset)
@@ -22,10 +24,32 @@ enum ScreenplayDOCX {
                     let value = source.substring(with: range).trimmingCharacters(in: .newlines)
                     let traits = (attributes[.font] as? NSFont).map { NSFontManager.shared.traits(of: $0) } ?? []
                     let properties = (traits.contains(.boldFontMask) ? "<w:b/>" : "") + (traits.contains(.italicFontMask) ? "<w:i/>" : "") + ((attributes[.underlineStyle] as? Int ?? 0) > 0 ? "<w:u w:val=\"single\"/>" : "")
-                    runs += "<w:r><w:rPr>\(properties)</w:rPr><w:t xml:space=\"preserve\">\(xml(value))</w:t></w:r>"
+                    let font = project.scriptLayout.effectiveFontName(for: element), size = project.scriptLayout.effectiveFontSize(for: element)
+                    runs += "<w:r><w:rPr><w:rFonts w:ascii=\"\(xml(font))\" w:hAnsi=\"\(xml(font))\" w:cs=\"\(xml(font))\"/><w:sz w:val=\"\(Int(size * 2))\"/>\(properties)</w:rPr><w:t xml:space=\"preserve\">\(xml(value))</w:t></w:r>"
                 }
-                paragraphs += "<w:p><w:pPr><w:pStyle w:val=\"\(element.rawValue)\"/></w:pPr>\(runs)</w:p>"
+                let pair = text.attribute(.screenplayDualPair, at: offset, effectiveRange: nil) as? String
+                let side = text.attribute(.screenplayDualDialogue, at: offset, effectiveRange: nil) as? String
+                var geometry = ""
+                if pair != nil {
+                    let left = Int(paper.contentWidth * 10 * (element == .character ? WorkspaceDesign.characterIndent : element == .dialogue ? WorkspaceDesign.dialogueIndent : element == .parenthetical ? WorkspaceDesign.parentheticalIndent : 0) / 100)
+                    let right = Int(paper.contentWidth * 10 * (element == .dialogue ? WorkspaceDesign.dialogueIndent : element == .parenthetical ? WorkspaceDesign.parentheticalRight : 0) / 100)
+                    geometry = "<w:ind w:left=\"\(left)\" w:right=\"\(right)\"/>"
+                }
+                bodyParagraphs.append(("<w:p><w:pPr><w:pStyle w:val=\"\(element.rawValue)\"/>\(geometry)</w:pPr>\(runs)</w:p>", pair, side))
                 offset = NSMaxRange(range)
+            }
+            var index = 0
+            while index < bodyParagraphs.count {
+                let item = bodyParagraphs[index]
+                if let pair = item.pair {
+                    var end = index + 1
+                    while end < bodyParagraphs.count && bodyParagraphs[end].pair == pair { end += 1 }
+                    let values = bodyParagraphs[index..<end]
+                    let width = Int(paper.contentWidth * 10)
+                    func cell(_ side: String) -> String { "<w:tc><w:tcPr><w:tcW w:w=\"\(width)\" w:type=\"dxa\"/><w:vAlign w:val=\"top\"/></w:tcPr>" + values.filter { $0.side == side }.map(\.xml).joined() + "</w:tc>" }
+                    paragraphs += "<w:tbl><w:tblPr><w:tblLayout w:type=\"fixed\"/><w:tblW w:w=\"\(width * 2)\" w:type=\"dxa\"/></w:tblPr><w:tblGrid><w:gridCol w:w=\"\(width)\"/><w:gridCol w:w=\"\(width)\"/></w:tblGrid><w:tr>" + cell("left") + cell("right") + "</w:tr></w:tbl><w:p/>"
+                    index = end
+                } else { paragraphs += item.xml; index += 1 }
             }
         }
         let namespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"

@@ -419,7 +419,7 @@ function render() {
 
       const text=element('div',undefined,'side-script-text script-text');text.innerHTML=cleanHTML(beat.html);text.dataset.scriptBeat=id;text.dataset.placeholder='Write this beat’s screenplay here…';text.tabIndex=0;text.setAttribute('aria-label',`Edit script: ${beat.title}`);text.contentEditable=current.access!=='reader'&&!segment.scene.frontstageTextLocked;text.setAttribute('role','textbox');
       text.onfocus=()=>{selected=id;selectedBeats=new Set([id]);highlightScript();document.querySelectorAll('[data-beat-id]').forEach(n=>n.classList.toggle('selected',n.dataset.beatId===id));};
-      text.oninput=()=>edit(()=>{board().beats.find(b=>b.id===id).html=cleanHTML(text.innerHTML);});screenplayToolbar(text,()=>text.dispatchEvent(new Event('input')),text.contentEditable==='true',()=>characterNames(doc,id),()=>doc.project.beats.map(heading),{continuationSeed:()=>dialogueSeed(doc,id)});text.ondblclick=()=>openEditor(id);
+      text.oninput=()=>edit(()=>{board().beats.find(b=>b.id===id).html=cleanHTML(text.innerHTML);});screenplayToolbar(text,()=>text.dispatchEvent(new Event('input')),text.contentEditable==='true',()=>characterNames(doc,id),()=>doc.project.beats.map(heading),{status,continuationSeed:()=>dialogueSeed(doc,id)});text.ondblclick=()=>openEditor(id);
       body.append(text);section.append(body);$('snippet-list').append(section);
     }
     if(!segment.beatIDs.length){const text=element('div',undefined,'script-text');text.innerHTML=cleanHTML(segment.html);$('snippet-list').append(text);}
@@ -606,7 +606,7 @@ function openEditor(id) {
   const text = field('snippet-editor'); text.before(element('h3',heading(doc.project.beats.find(s=>s.id===sceneID)),'popup-slugline script-heading')); text.innerHTML = cleanHTML(beat.html);
   text.contentEditable = current.access === 'reader' || doc.project.beats.find(s => s.id === beat.sceneID)?.frontstageTextLocked ? 'false' : 'true';
   text.oninput = () => { const html = cleanHTML(text.innerHTML); edit(() => { const target = board().beats.find(b => b.id === id); if (target) target.html = html; }); };
-  const toolbar=screenplayToolbar(text, () => text.dispatchEvent(new Event('input')), text.contentEditable === 'true',()=>characterNames(doc,id),()=>doc.project.beats.map(heading),{continuationSeed:()=>dialogueSeed(doc,id),newScene:node=>{
+  const toolbar=screenplayToolbar(text, () => text.dispatchEvent(new Event('input')), text.contentEditable === 'true',()=>characterNames(doc,id),()=>doc.project.beats.map(heading),{status,continuationSeed:()=>dialogueSeed(doc,id),newScene:node=>{
     const parts=[...text.children],index=parts.indexOf(node);if(index<0)return;
     let next;const first=parts.slice(0,index+1).map(n=>cleanHTML(n.outerHTML)).join(''),second=parts.slice(index+1).map(n=>cleanHTML(n.outerHTML)).join('');
     const ordered=[...board().beats].sort((a,b)=>a.order-b.order),rank=ordered.findIndex(b=>b.id===id),following=ordered[rank+1],nextScene=doc.project.beats.find(s=>s.id===following?.sceneID);

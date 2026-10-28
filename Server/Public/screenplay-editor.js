@@ -1,3 +1,4 @@
+import {toggleDualDialogue,reconcileDualDialogue,layoutDualDialogue} from './dual-dialogue.js';
 import {screenplayElements as elements,headingTimes,headingCompletions,characterCompletions,parentheticalCompletions,screenplayCommand,characterCue,normalized,deliveryNotes,decorateDialogue,scriptParagraphs,paragraphKind,elementShortcuts,wrappedParenthetical,emptyParenthetical} from './dialogue-rules.js';
 export {elements,elementShortcuts,headingTimes,headingCompletions};
 export function screenplaySelection(text) {
@@ -12,9 +13,9 @@ export function restoreScreenplaySelection(text,bookmark) {
 }
 export function screenplayToolbar(text, changed, editable=true, characters=()=>[],headings=()=>[],options={}) {
   const authoredChange=changed;let commanding=false;
-  changed=meta=>{if(commanding||!text.isConnected)return;authoredChange(meta);decorateDialogue(text,options.continuationSeed?.()??null,options.continuationFlags?.()??null);};
+  changed=meta=>{if(commanding||!text.isConnected)return;reconcileDualDialogue(text);authoredChange(meta);decorateDialogue(text,options.continuationSeed?.()??null,options.continuationFlags?.()??null);layoutDualDialogue(text);};
   const transaction=action=>{const prior=commanding;commanding=true;try{return action();}finally{commanding=prior;if(!prior)changed({command:true});}};
-  text.addEventListener('input',event=>{if(commanding)event.stopImmediatePropagation();},true);
+  text.addEventListener('input',event=>{if(commanding)event.stopImmediatePropagation();else if(!event.isComposing)reconcileDualDialogue(text);},true);
   const bar=document.createElement('div');bar.className='screenplay-toolbar';
   let acceptedCue=null;
   const clearAccepted=()=>{acceptedCue=null;document.removeEventListener('selectionchange',acceptedSelection);};
@@ -64,9 +65,9 @@ export function screenplayToolbar(text, changed, editable=true, characters=()=>[
     if(decision.placement==='afterParagraph'||decision.placement==='body'){
       const next=node?.nextElementSibling,sameOwner=next?.dataset.beatId===node?.dataset.beatId;
       if(next&&sameOwner&&(decision.placement==='body'||(!next.textContent.trim()&&!next.dataset.headingScene))){place(next);if(decision.placement!=='body')format(decision.element);return;}
-      if(node&&node!==text)place(node,true);document.execCommand('insertParagraph');format(decision.element);return;
+      if(node&&node!==text)place(node,true);document.execCommand('insertParagraph');if(['character','action','transition','slugline'].includes(decision.element)){const fresh=paragraph();if(fresh){delete fresh.dataset.dualPair;fresh.classList.remove('sc-dual-left','sc-dual-right');}}format(decision.element);return;
     }
-    document.execCommand('insertParagraph');format(decision.element);
+    document.execCommand('insertParagraph');if(['character','action','transition','slugline'].includes(decision.element)){const fresh=paragraph();if(fresh){delete fresh.dataset.dualPair;fresh.classList.remove('sc-dual-left','sc-dual-right');}}format(decision.element);
   });
   const completions=attachCompletions(text,paragraph,characters,changed,headings,()=>applyCommand('Enter'),transaction,(node,value)=>{const selection=getSelection();acceptedCue={node,value,anchor:selection.anchorNode,offset:selection.anchorOffset};document.addEventListener('selectionchange',acceptedSelection);});
   text.addEventListener('keydown',event=>{
@@ -76,6 +77,7 @@ export function screenplayToolbar(text, changed, editable=true, characters=()=>[
     if(event.key==='('&&kind==='dialogue'&&!node?.textContent.trim()){event.preventDefault();format('parenthetical');return;}
     if(event.key===')'&&kind==='parenthetical'&&getSelection().isCollapsed&&node.textContent[offset()]===')'){event.preventDefault();selectOffsets(node,offset()+1);return;}
     if(event.key==='Backspace'&&kind==='parenthetical'&&node.textContent==='()'&&getSelection().isCollapsed&&offset()===1){event.preventDefault();format('dialogue');return;}
+    if(event.key.toLowerCase()==='l'&&event.shiftKey&&(event.metaKey||event.ctrlKey)){event.preventDefault();try{text.toggleDualDialogue();}catch(error){options.status?.(error.message);}return;}
     if(event.key==='Enter'&&(event.metaKey||event.ctrlKey)){event.preventDefault();completions.close();clearAccepted();applyCommand('ForceAction');return;}
     if(event.key!=='Tab')clearAccepted();
     if(event.key==='Tab'){event.preventDefault();applyCommand(event.shiftKey?'Backtab':'Tab');return;}
@@ -109,8 +111,10 @@ export function screenplayToolbar(text, changed, editable=true, characters=()=>[
     }
   });};
   for(const event of ['input','keyup','click','compositionend'])text.addEventListener(event,followCaret);
-  const refresh=()=>decorateDialogue(text,options.continuationSeed?.()??null,options.continuationFlags?.()??null);refresh();text.refreshScreenplayPresentation=refresh;
-  bar.editor={format:kind=>{text.focus();if(savedRange&&text.contains(savedRange.startContainer)){const selection=window.getSelection();selection.removeAllRanges();selection.addRange(savedRange);}format(kind);},inline:command=>{text.focus();if(savedRange&&text.contains(savedRange.startContainer)){const selection=window.getSelection();selection.removeAllRanges();selection.addRange(savedRange);}document.execCommand(command);changed();},remember,refresh};
+  const refresh=()=>{decorateDialogue(text,options.continuationSeed?.()??null,options.continuationFlags?.()??null);layoutDualDialogue(text);};refresh();text.refreshScreenplayPresentation=refresh;
+  text.toggleDualDialogue=()=>transaction(()=>toggleDualDialogue(text));
+  const resize=new ResizeObserver(entries=>{const width=entries[0]?.contentRect.width;if(width!==text.dualLayoutWidth){text.dualLayoutWidth=width;layoutDualDialogue(text);}if(!text.isConnected)resize.disconnect();});resize.observe(text);
+  bar.editor={dual:()=>text.toggleDualDialogue(),format:kind=>{text.focus();if(savedRange&&text.contains(savedRange.startContainer)){const selection=window.getSelection();selection.removeAllRanges();selection.addRange(savedRange);}format(kind);},inline:command=>{text.focus();if(savedRange&&text.contains(savedRange.startContainer)){const selection=window.getSelection();selection.removeAllRanges();selection.addRange(savedRange);}document.execCommand(command);changed();},remember,refresh};
   return bar;
 }
 // A collapsed Range has no rectangle on an empty line in Chromium/WebKit.

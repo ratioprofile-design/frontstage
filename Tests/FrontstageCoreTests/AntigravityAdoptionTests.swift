@@ -106,4 +106,22 @@ final class AntigravityAdoptionTests: XCTestCase {
         XCTAssertFalse(BoardDrawing.hits(stroke, path: [.init(x: 200, y: 0)], radius: 1))
     }
 
+    func testLegacyDualReviewPreservesHTMLAndDuplicateIdentity() throws {
+        let html = "<p class='sc-character sc-dual-left'>A</p><p class='sc-dialogue sc-dual-left'><span style='color:red' data-future='keep'>தமிழ்</span></p><p class='sc-character sc-dual-right'>B</p><p class='sc-dialogue sc-dual-right'>Yes</p>"
+        let result = try DualDialogueImport.normalize(html)
+        XCTAssertEqual(result.pairs, 1); XCTAssertTrue(result.html.contains("<span style='color:red' data-future='keep'>தமிழ்</span>"))
+        XCTAssertEqual(try DualDialogueImport.normalize(result.html).pairs, 0)
+        let duplicate = DualDialogueImport.duplicatedPairIDs(result.html)
+        XCTAssertNotEqual(duplicate, result.html); XCTAssertTrue(duplicate.contains("data-future='keep'"))
+        XCTAssertThrowsError(try DualDialogueImport.normalize("<p class='sc-character sc-dual-left'>A</p>"))
+        var project = Project(oneBeatPerScene: true); let id = try project.addBoardBeat(title: "Original")
+        try project.updateBoardBeat(id) { $0.html = html }
+        let original = project, reviewed = try project.reviewingLegacyDualDialogue()
+        XCTAssertEqual(project, original); XCTAssertEqual(reviewed.pairs, 1)
+        var copy = reviewed.project
+        let second = try copy.duplicateBoardBeat(id)
+        XCTAssertNotEqual(try copy.whiteboard().beats.first { $0.id == id }?.html, try copy.whiteboard().beats.first { $0.id == second }?.html)
+        try copy.validateSceneModel()
+    }
+
 }

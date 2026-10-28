@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import PDFKit
 import XCTest
 import FrontstageCore
 @testable import FrontstageApp
@@ -28,5 +29,27 @@ final class AntigravityNativeAdoptionTests: XCTestCase {
             XCTAssertTrue(firstStyle?.textBlocks.first === dialogueStyle?.textBlocks.first)
         }
     }
+    func testDualColumnsAndPDFUseOneSharedTop() async throws {
+        try await MainActor.run {
+            _ = NSApplication.shared
+            let html = "<p class='sc-character sc-dual-left' data-dual-pair='pair'>KAMAL</p><p class='sc-dialogue sc-dual-left' data-dual-pair='pair'>" + String(repeating: "Unequal speech length. ", count: 25) + "</p><p class='sc-character sc-dual-right' data-dual-pair='pair'>ABI</p><p class='sc-dialogue sc-dual-right' data-dual-pair='pair'>Yes.</p><p class='sc-action'>After both speakers.</p>"
+            let storage = NSTextStorage(attributedString: try ScreenplayTextCodec.decode(html))
+            ScreenplayDualDialogue.layout(storage, width: 432, settings: .init())
+            let manager = NSLayoutManager(), container = NSTextContainer(containerSize: NSSize(width: 432, height: 2000)); container.lineFragmentPadding = 0
+            storage.addLayoutManager(manager); manager.addTextContainer(container); manager.ensureLayout(for: container)
+            func rect(_ value: String) -> NSRect {
+                let range = (storage.string as NSString).range(of: value)
+                return manager.boundingRect(forGlyphRange: manager.glyphRange(forCharacterRange: range, actualCharacterRange: nil), in: container)
+            }
+            XCTAssertEqual(rect("KAMAL").minY, rect("ABI").minY, accuracy: 1)
+            XCTAssertGreaterThan(rect("ABI").minX, rect("KAMAL").minX + 150)
+            XCTAssertGreaterThan(rect("After both speakers.").minY, rect("Yes.").maxY)
+            let pdf = try ScreenplayPDF.renderText(storage, title: "Dual", paper: .a4)
+            let document = try XCTUnwrap(PDFDocument(data: pdf.data))
+            XCTAssertTrue(document.string?.contains("KAMAL") == true); XCTAssertTrue(document.string?.contains("ABI") == true)
+            XCTAssertTrue(document.string?.contains("After both speakers.") == true)
+        }
+    }
+
 }
 #endif

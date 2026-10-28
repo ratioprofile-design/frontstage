@@ -124,6 +124,7 @@ struct DOTPreferences: View {
                 else { UserDefaults.standard.set(try JSONSerialization.jsonObject(with: data, options: .fragmentsAllowed), forKey: key) }
             }
             UserDefaults.standard.set(true, forKey: "dot_antigravity_preferences_imported")
+            workspace.reloadDevicePreferences()
             migration = nil
         } catch { workspace.errorMessage = error.localizedDescription }
     }

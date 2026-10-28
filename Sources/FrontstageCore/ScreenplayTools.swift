@@ -75,7 +75,7 @@ public struct ScriptLayoutSettings: Codable, Equatable, Sendable {
     }
 
     public func validate() throws {
-        guard !fontName.isEmpty, fontName.count <= 120, fontSize.isFinite, (8...36).contains(fontSize),
+        guard !fontName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, fontName.count <= 120, fontSize.isFinite, (8...36).contains(fontSize),
               lineHeight.isFinite, (fontSize...60).contains(lineHeight), paragraphSpacing.isFinite, (0...48).contains(paragraphSpacing) else {
             throw ProjectError.invalidProject("invalid screenplay typography")
         }

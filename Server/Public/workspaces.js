@@ -1,3 +1,4 @@
+import {normalizeLegacyDualHTML} from './dual-dialogue.js';
 import {interchangeParagraphs,renderFDX,renderFountain} from './screenplay-interchange.js';
 import * as productionRevisions from './production-revision.js';
 import {applyTypography as applyScriptTypography,scriptElements} from './script-typography.js';
@@ -29,7 +30,7 @@ export function mountWorkspaces(api) {
   for(const p of design.pages){const o=el('option',p.title);o.value=p.id;selector.append(o);}
   const doc=()=>api.document(),state=()=>doc().project,scenes=()=>state().beats,currentScene=()=>scenes().find(s=>s.id===sceneID),readonly=()=>api.current()?.access==='reader';
   const change=(action,refresh=false,key=null)=>{writing=true;let result;try{result=api.edit(()=>action(doc()),key);}finally{writing=false;}writePanels?.refreshMetadata?.();for(const preview of root.querySelectorAll('[data-typography-preview]'))applyTypography(preview);if(refresh)render();return result;};
-  const button=(text,action,write=false)=>{const b=el('button',text);if(write)b.disabled=readonly();b.onclick=()=>{try{action();}catch(e){api.status(e.message);}};return b;};
+  const button=(text,action,write=false)=>{const b=el('button',text);if(write)b.disabled=readonly();b.onclick=()=>{try{const result=action();result?.catch?.(e=>api.status(e.message));}catch(e){api.status(e.message);}};return b;};
   const field=(name,value,action,type='text')=>{const label=el('label',name,'workspace-field'),input=el(type==='textarea'?'textarea':'input');input.setAttribute('aria-label',name);input.placeholder=name;if(type==='textarea')input.rows=1;if(type!=='textarea')input.type=type;input.value=value??'';input.disabled=readonly();input.onchange=()=>change(d=>action(input.type==='number'?Number(input.value):input.value,d));label.append(input);return label;};
   const toggle=(name,value,action)=>{const l=el('label',null,'workspace-toggle'),input=el('input');input.type='checkbox';input.checked=!!value;input.disabled=readonly();input.onchange=()=>change(d=>action(input.checked,d),true);l.append(input,document.createTextNode(name));return l;};
   const pick=(name,value,values,action,write=false)=>{const l=el('label',name,'workspace-field'),select=el('select');select.setAttribute('aria-label',name);for(const [key,text]of values){const o=el('option',text);o.value=key;select.append(o);}select.value=value??'';select.disabled=write&&readonly();select.onchange=()=>action(select.value);l.append(select);return l;};
@@ -121,7 +122,7 @@ export function mountWorkspaces(api) {
           const text=el('div',null,'script-text');text.contentEditable=!(readonly()||s.frontstageTextLocked||beat.locked||blockLocked(model.board(doc()),beat.blockID));text.setAttribute('role','textbox');text.setAttribute('aria-label',`Script: ${beat.title}`);text.innerHTML=api.cleanHTML(beat.html);text.dataset.beatId=id;text.hidden=!plain&&((scriptView.display==='Collapse All')!==expandedBeats.has(id));
           const changed=()=>{if(text.isComposing)return;change(d=>{const target=model.board(d).beats.find(b=>b.id===id);if(target)target.html=api.cleanHTML(text.innerHTML);});};
           text.addEventListener('compositionstart',()=>text.isComposing=true);text.addEventListener('compositionend',()=>{text.isComposing=false;changed();});text.oninput=changed;
-          const behavior=screenplayToolbar(text,changed,text.contentEditable==='true',()=>characterNames(doc(),id),()=>scenes().map(model.heading),{continuationSeed:()=>dialogueSeed(doc(),id)}).editor;
+          const behavior=screenplayToolbar(text,changed,text.contentEditable==='true',()=>characterNames(doc(),id),()=>scenes().map(model.heading),{status:api.status,continuationSeed:()=>dialogueSeed(doc(),id)}).editor;
           behavior.split=()=>{const [first,last]=splitAtCaret(text);change(d=>model.splitBeat(d,id,first,last),true);};behavior.open=()=>api.openBeat(id);
           text.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'&&!e.isComposing){e.preventDefault();try{behavior.split();}catch(error){api.status(error.message);}}});
           text.onfocus=()=>{activeEditor=behavior;sceneID=s.id;api.selectScene(s.id,id);writePanels?.select(s.id,id);enableFormatting(text.isContentEditable);};
@@ -203,6 +204,14 @@ export function mountWorkspaces(api) {
         const preview=el('div',null,'script-text');preview.dataset.typographyPreview='true';preview.append(el('p','Preview · தமிழ்',element==='slugline'?'sc-slugline':`sc-${element}`));applyTypography(preview);card.append(preview);
       }body.append(card);
     }
+    const legacyDual=section('Legacy dual dialogue');legacyDual.append(el('p','Review imported speech pairing in a separate copy. The original remains unchanged.'),button('Review Legacy Dual Dialogue…',async()=>{
+      const original=structuredClone(doc()),next=structuredClone(original);let pairs=0;
+      for(const beat of [...model.board(next).beats,...(next.project.frontstagePullouts||[]).map(item=>item.beat)]){const result=normalizeLegacyDualHTML(beat.html||'');beat.html=result.html;pairs+=result.pairs;}
+      if(!pairs){api.status('No legacy pairs need conversion.');return;}
+      if(!confirm(`Create a separate reviewed copy with ${pairs} validated speech pairs? A backup of the original will be downloaded first.`))return;
+      const active=model.activeBeats(next);for(const scene of next.project.beats){const owned=model.board(next).beats.filter(b=>b.sceneID===scene.id);if(owned.length)scene.content=active.filter(b=>b.sceneID===scene.id).map(b=>b.html).join('');}
+      download(original.name+' pre-dual-review.dot',JSON.stringify(original),'application/json');next.name+=' (Reviewed Copy)';await api.createConvertedCopy(next);
+    }));body.append(legacyDual);
     const tamil=section('Bamini → Unicode Tamil'),input=el('textarea'),output=el('pre');input.setAttribute('aria-label','Bamini text');input.oninput=()=>{let result=input.value;for(const[a,b]of baminiPairs)result=result.split(a).join(b);output.textContent=result.normalize('NFC');};tamil.append(el('p','Paste Bamini text explicitly. English letters in the input will be converted too.'),input,output,button('Copy Unicode',()=>navigator.clipboard.writeText(output.textContent).catch(e=>api.status(e.message))));body.append(tamil);
     const parallel=section('Two-column script / translation');if(s){parallel.append(el('h3',s.title));for(const row of s.frontstageParallel||[]){const pair=el('div',null,'parallel-row');for(const key of ['left','right'])pair.append(field(key==='left'?'Original':'Translation',row[key],(v,d)=>model.scene(d,s.id).frontstageParallel.find(r=>r.id===row.id)[key]=v,'textarea'));pair.append(button('Remove Row',()=>change(d=>model.scene(d,s.id).frontstageParallel=model.scene(d,s.id).frontstageParallel.filter(r=>r.id!==row.id),true),true));parallel.append(pair);}parallel.append(button('Add Row',()=>change(d=>(model.scene(d,s.id).frontstageParallel||=[]).push({id:crypto.randomUUID(),left:'',right:''}),true),true),button('Print Two-column Script',()=>{const overlay=el('section',null,'report-preview');overlay.id='report-preview';overlay.append(button('Close',()=>overlay.remove()),button('Print / Save PDF',()=>window.print()),el('h1',s.title));for(const row of s.frontstageParallel||[]){const pair=el('div',null,'parallel-row');pair.append(el('p',row.left),el('p',row.right));overlay.append(pair);}document.body.append(overlay);}));}else parallel.append(empty('Select a scene'));body.append(parallel);
   }

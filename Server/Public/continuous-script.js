@@ -1,3 +1,4 @@
+import {layoutDualDialogue} from './dual-dialogue.js';
 import {pullOutBeats,replaceDocument} from './script-inclusion.js';
 import * as model from './workspace-model.js';
 import {blockLocked} from './board-operations.js';
@@ -21,7 +22,7 @@ export function mountContinuousScript(sheet, api) {
   sheet.setAttribute('aria-label', 'Screenplay');
   const visible = new Set(), headingIDs = new Set();
   const dialogueCache=new Map();
-  const refreshDialogue=()=>decorateDialogue(sheet,null,projectDialogue(api.document(),dialogueCache).flags);
+  const refreshDialogue=()=>{decorateDialogue(sheet,null,projectDialogue(api.document(),dialogueCache).flags);layoutDualDialogue(sheet);};
   let composing = false, committing = false, lastOwner = null, pendingPullouts = new Set(), pendingHeading = null, beforeEditSelection=null;
   const board = () => model.board(api.document());
   const beatFor = id => board().beats.find(beat => beat.id === id);
@@ -124,7 +125,7 @@ export function mountContinuousScript(sheet, api) {
     item('Paste',async()=>{try{const value=await navigator.clipboard.readText();sheet.focus({preventScroll:true});if(contextCaret?.startContainer.isConnected){getSelection().removeAllRanges();getSelection().addRange(contextCaret);}document.execCommand('insertText',false,value);}catch{api.status('Use Command/Ctrl+V to paste into the screenplay.');}});
     item('Select All',()=>{sheet.focus({preventScroll:true});const range=document.createRange();range.selectNodeContents(sheet);getSelection().removeAllRanges();getSelection().addRange(range);});
     for(const kind of elements)item(kind==='slugline'?'Scene Heading':kind[0].toUpperCase()+kind.slice(1),()=>behavior.format(kind));
-    item('Split scene at cursor',splitScene);item('Duplicate Beat',()=>{if(id)api.duplicate?.(id);});item('Open Beat Editor',()=>{if(id)api.open?.(id);});
+    item('Pair / Unpair Dual Dialogue',()=>sheet.toggleDualDialogue?.());item('Split scene at cursor',splitScene);item('Duplicate Beat',()=>{if(id)api.duplicate?.(id);});item('Open Beat Editor',()=>{if(id)api.open?.(id);});
     document.body.append(menu);const bounds=menu.getBoundingClientRect();menu.style.top=Math.max(4,Math.min(event.clientY,innerHeight-bounds.height-4))+'px';menu.style.left=Math.max(4,Math.min(event.clientX,innerWidth-bounds.width-4))+'px';
     const dismiss=()=>{menu.remove();document.removeEventListener('pointerdown',outside,true);document.removeEventListener('keydown',keys,true);};
     const outside=e=>{if(!menu.contains(e.target))dismiss();},keys=e=>{if(e.key==='Escape'){e.preventDefault();dismiss();}};
@@ -196,7 +197,7 @@ export function mountContinuousScript(sheet, api) {
     } catch (error) { rollback(bookmark); api.status(error.message); return false; }
     finally { beforeEditSelection=null;pendingPullouts.clear(); committing = false; refreshDialogue();select(); }
   }
-  const behavior = screenplayToolbar(sheet, commit, !api.readonly(), () => characterNames(api.document(),paragraph()?.dataset.beatId), () => api.document().project.beats.filter(s=>String(s.id)!==paragraph()?.dataset.headingScene).map(inlineHeading), {continuationFlags:()=>projectDialogue(api.document(),dialogueCache).flags,newScene:sceneAfterTransition}).editor;
+  const behavior = screenplayToolbar(sheet, commit, !api.readonly(), () => characterNames(api.document(),paragraph()?.dataset.beatId), () => api.document().project.beats.filter(s=>String(s.id)!==paragraph()?.dataset.headingScene).map(inlineHeading), {status:api.status,continuationFlags:()=>projectDialogue(api.document(),dialogueCache).flags,newScene:sceneAfterTransition}).editor;
   sheet.addEventListener('compositionstart', () => { composing = true; sheet.isComposing = true; });
   sheet.addEventListener('compositionend', () => { composing = false; sheet.isComposing = false; commit(); });
   sheet.addEventListener('input', event => {
