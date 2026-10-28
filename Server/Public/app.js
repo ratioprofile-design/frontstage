@@ -25,6 +25,9 @@ const uuid = () => crypto.randomUUID();
 let token = '', current = null, doc = null, base = null, selected = null, editorID = null, source = null;
 let dirty = false, syncing = false, timer = null, pendingConflict = null;
 let documentEpoch = 0;
+let revealedBoardEpoch = -1;
+const revealedBoardContainers = new Set();
+const boardCollapsed = item => !!item.collapsed && !(revealedBoardEpoch === documentEpoch && revealedBoardContainers.has(item.id));
 let apiOrigin = '';
 let localMode = false;
 let selectedBlocks = new Set(), selectedBeats = new Set();
@@ -250,6 +253,17 @@ async function openProject(id) {
   $('projects').hidden = true; $('workspace').hidden = false; render(); status(dirty ? 'Local changes ready to sync' : `Synced · revision ${current.revision}`);
   if (dirty) sync();
 }
+function revealBoardBeat(id) {
+  const beat=board().beats.find(b=>b.id===id);if(!beat){status('This beat is no longer on the whiteboard.');return;}
+  source=null;revealedBoardEpoch=documentEpoch;revealedBoardContainers.clear();
+  let block=board().blocks.find(b=>b.id===beat.blockID);const seen=new Set();
+  if(block)revealedBoardContainers.add(block.layerID);
+  while(block&&!seen.has(block.id)){seen.add(block.id);revealedBoardContainers.add(block.id);block=board().blocks.find(b=>b.id===block.parentID);}
+  selectedBlocks.clear();selectedBeats=new Set([id]);selected=id;render();
+  const canvas=$('canvas'),tile=[...$('blocks').querySelectorAll('[data-beat-id]')].find(n=>n.dataset.beatId===id);
+  if(tile){const frame=canvas.getBoundingClientRect(),rect=tile.getBoundingClientRect(),x=canvas.scrollLeft+rect.left-frame.left-canvas.clientLeft+rect.width/2,y=canvas.scrollTop+rect.top-frame.top-canvas.clientTop+rect.height/2,extent=$('board-extent');extent.style.minWidth=Math.ceil(x+canvas.clientWidth/2)+'px';extent.style.minHeight=Math.ceil(y+canvas.clientHeight/2)+'px';canvas.scrollLeft=Math.max(0,x-canvas.clientWidth/2);canvas.scrollTop=Math.max(0,y-canvas.clientHeight/2);}
+  highlightScript(false);canvas.focus({preventScroll:true});status('Selected '+beat.title+' on the whiteboard.');
+}
 function choose(id, multiple = false) {
   if (source && source !== id) {
     const cause = source; source = null;
@@ -283,6 +297,7 @@ function storyIssues() {
 let boardZoom=1;
 function boardPoint(event){const canvas=$('canvas'),frame=canvas.getBoundingClientRect();return {x:(event.clientX-frame.left+canvas.scrollLeft)/boardZoom,y:(event.clientY-frame.top+canvas.scrollTop)/boardZoom};}
 function sizeBoardSurface(g=geometry()){
+  if(revealedBoardEpoch!==documentEpoch){$('board-extent').style.minWidth='';$('board-extent').style.minHeight='';}
   $('board-world').style.width=g.width+'px';$('board-world').style.height=g.height+'px';$('board-world').style.transform=`scale(${boardZoom})`;
   $('board-extent').style.width=g.width*boardZoom+'px';$('board-extent').style.height=g.height*boardZoom+'px';$('board-zoom-reset').textContent=Math.round(boardZoom*100)+'%';
 }
@@ -296,16 +311,16 @@ $('canvas').addEventListener('keydown',e=>{if(e.target!==$('canvas')||!(e.ctrlKe
 function geometry() {
   const blocks = new Map(), beats = new Map(), layers = new Map(); let y = 0, maxX = 1500;
   for (const layer of board().layers) {
-    const members = board().blocks.filter(b => b.layerID === layer.id), height = layer.collapsed ? 38 : Math.max(layer.height, ...members.map(b => b.position.y + board().beats.filter(t => t.blockID === b.id).reduce((h,t)=>h+beatSize(t.title,b.width-12).height+4,80)));
+    const members = board().blocks.filter(b => b.layerID === layer.id), height = boardCollapsed(layer) ? 38 : Math.max(layer.height, ...members.map(b => b.position.y + board().beats.filter(t => t.blockID === b.id).reduce((h,t)=>h+beatSize(t.title,b.width-12).height+4,80)));
     layers.set(layer.id, { y, height });
-    if (!layer.collapsed) for (const block of members) {
+    if (!boardCollapsed(layer)) for (const block of members) {
       let parent = board().blocks.find(b => b.id === block.parentID), hidden = false; const seen = new Set();
-      while (parent && !seen.has(parent.id)) { if (parent.collapsed) hidden = true; seen.add(parent.id); parent = board().blocks.find(b => b.id === parent.parentID); }
+      while (parent && !seen.has(parent.id)) { if (boardCollapsed(parent)) hidden = true; seen.add(parent.id); parent = board().blocks.find(b => b.id === parent.parentID); }
       if (hidden) continue;
       const children = board().beats.filter(b => b.blockID === block.id).sort((a, b) => a.order - b.order);
-      const rect = { x: block.position.x + 110, y: block.position.y + y, width: block.width, height: block.collapsed ? 28 : Math.max(layer.useBlocks===true&&!block.standalone&&block.containerKind!=='beatGroup'?180:60, children.reduce((h,b)=>h+beatSize(b.title,block.width-12).height+4,32)) };
+      const rect = { x: block.position.x + 110, y: block.position.y + y, width: block.width, height: boardCollapsed(block) ? 28 : Math.max(layer.useBlocks===true&&!block.standalone&&block.containerKind!=='beatGroup'?180:60, children.reduce((h,b)=>h+beatSize(b.title,block.width-12).height+4,32)) };
       blocks.set(block.id, rect); maxX = Math.max(maxX, rect.x + rect.width + 120);
-      if (!block.collapsed) { let top=rect.y+24;for(const beat of children){const size=beatSize(beat.title,block.width-12);beats.set(beat.id,{x:rect.x+(beat.position?.x??6),y:beat.position?rect.y+beat.position.y:top,...size});rect.width=Math.max(rect.width,(beat.position?.x??6)+size.width+12);rect.height=Math.max(rect.height,(beat.position?.y??top-rect.y)+size.height+12);top+=size.height+4;} }
+      if (!boardCollapsed(block)) { let top=rect.y+24;for(const beat of children){const size=beatSize(beat.title,block.width-12);beats.set(beat.id,{x:rect.x+(beat.position?.x??6),y:beat.position?rect.y+beat.position.y:top,...size});rect.width=Math.max(rect.width,(beat.position?.x??6)+size.width+12);rect.height=Math.max(rect.height,(beat.position?.y??top-rect.y)+size.height+12);top+=size.height+4;} }
     }
     const expanded=Math.max(height,...[...blocks.values()].filter(r=>r.y>=y).map(r=>r.y+r.height-y+45));layers.get(layer.id).height=expanded;
     y += expanded;
@@ -315,7 +330,7 @@ function geometry() {
   const ready = [...remaining].filter(([, count]) => count === 0).map(([id]) => id);
   for (let i = 0; i < ready.length; i++) {
     const id = ready[i], parent = byID.get(id)?.parentID, c = blocks.get(id), r = blocks.get(parent);
-    if (!c || !r || byID.get(parent).collapsed) continue;
+    if (!c || !r || boardCollapsed(byID.get(parent))) continue;
     const left = Math.min(r.x, c.x - 12), top = Math.min(r.y, c.y - 28);
     blocks.set(parent, { x: left, y: top, width: Math.max(r.x + r.width, c.x + c.width + 12) - left, height: Math.max(r.y + r.height, c.y + c.height + 12) - top });
     remaining.set(parent, remaining.get(parent) - 1); if (!remaining.get(parent)) ready.push(parent);
@@ -336,7 +351,7 @@ function render() {
   $('layers').replaceChildren(); $('blocks').replaceChildren(); $('links').replaceChildren(); if(!editingSide)$('snippet-list').replaceChildren(); $('issues').replaceChildren();
   for (const layer of board().layers) {
     const rect = g.layers.get(layer.id), node = element('div', undefined, 'layer'); position(node, { x: 0, y: rect.y, width: g.width, height: rect.height });
-    const label = element('button', `${layer.collapsed ? '▸' : '▾'} ${layer.name}`, 'layer-label'); label.onclick = () => edit(() => { layer.collapsed = !layer.collapsed; }); node.append(label);const policy=element('button',usesBlocks(board(),layer.id)?'Blocks: On':layer.useBlocks==null&&board().blocks.some(b=>b.layerID===layer.id&&!b.standalone&&b.containerKind!=='beatGroup')?'Blocks: Legacy':'Blocks: Off','layer-block-policy');policy.setAttribute('aria-label',layer.name+' Use Blocks');policy.onclick=()=>edit(()=>{if(layer.locked)throw Error('Unlock the layer first.');layer.useBlocks=!usesBlocks(board(),layer.id);});node.append(policy); $('layers').append(node);
+    const label = element('button', `${boardCollapsed(layer) ? '▸' : '▾'} ${layer.name}`, 'layer-label'); label.onclick = () => edit(() => { const collapsed=boardCollapsed(layer);revealedBoardContainers.delete(layer.id);layer.collapsed=!collapsed; }); node.append(label);const policy=element('button',usesBlocks(board(),layer.id)?'Blocks: On':layer.useBlocks==null&&board().blocks.some(b=>b.layerID===layer.id&&!b.standalone&&b.containerKind!=='beatGroup')?'Blocks: Legacy':'Blocks: Off','layer-block-policy');policy.setAttribute('aria-label',layer.name+' Use Blocks');policy.onclick=()=>edit(()=>{if(layer.locked)throw Error('Unlock the layer first.');layer.useBlocks=!usesBlocks(board(),layer.id);});node.append(policy); $('layers').append(node);
   }
   const blockOrder = [...board().blocks].sort((a, b) => { const x = g.blocks.get(a.id), y = g.blocks.get(b.id); return (y ? y.width * y.height : 0) - (x ? x.width * x.height : 0); });
   for (const block of blockOrder) {
@@ -376,7 +391,7 @@ function render() {
       edit(() => { moving.blockID = block.id; moving.order = Math.max(-1, ...board().beats.filter(b => b.blockID === block.id && b.id !== id).map(b => b.order)) + 1;
         const hit=e.target.closest('[data-beat-id]');if(hit&&hit.dataset.beatId!==id){doc.project.frontstageWhiteboard=spatialOrder(dropBeats(board(),new Set([id]),hit.dataset.beatId));return;}if(!hit){const frame=node.getBoundingClientRect();moving.position={x:Math.max(6,(e.clientX-frame.left)/boardZoom),y:Math.max(24,(e.clientY-frame.top)/boardZoom)};}else delete moving.position; doc.project.frontstageWhiteboard=spatialOrder(pruneEmptyBeatContainers(board())); });
     };
-    if (!block.collapsed) for (const beat of board().beats.filter(b => b.blockID === block.id).sort((a, b) => a.order - b.order)) {
+    if (!boardCollapsed(block)) for (const beat of board().beats.filter(b => b.blockID === block.id).sort((a, b) => a.order - b.order)) {
       const tile = element('div', undefined, `beat${selectedBeats.has(beat.id) ? ' selected' : ''}`); tile.style.backgroundColor = beat.omitted ? '#777777' : /^#[a-f0-9]{6}$/i.test(beat.color) ? beat.color : '#a34eae';tile.classList.toggle('omitted',beat.omitted);tile.setAttribute('aria-label',beat.title+(beat.omitted?' · Omitted':''));
       tile.dataset.beatId = beat.id;
       const card=g.beats.get(beat.id);if(card){tile.style.position='absolute';position(tile,{...card,x:card.x-rect.x,y:card.y-rect.y});}
@@ -859,7 +874,7 @@ const workspaces = mountWorkspaces({
   selectedBeat: () => selected,
   selectedScene: () => board().beats.find(b => b.id === selected)?.sceneID,
   selectScene: (id, beatID) => { const beat = board().beats.find(b => b.id === beatID) || board().beats.find(b => b.sceneID === id); if (beat) { selected = beat.id; selectedBeats = new Set([selected]); } },
-  selectBeat: id => choose(id), openBeat: openEditor,
+  selectBeat: id => choose(id), revealBeat: revealBoardBeat, openBeat: openEditor,
   addScene: () => { selected = null; addBeat(true); if (selected) closeEditor(selected); },
   projects: () => $('back').click(), sync, download,
   refresh: async () => {

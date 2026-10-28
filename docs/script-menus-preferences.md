@@ -1,6 +1,6 @@
 # Screenplay menus and Preferences
 
-Web Write uses grouped Edit, Element, Style, Highlight, Beat, Production Breakdown, Dialogue and Settings menus. Element numbers and shortcuts remain unchanged. Open a group by pointer, click/touch or arrow keys; Escape dismisses without changing the selection.
+Web Write uses grouped Edit, Element, Style, Highlight, Beat, Production Breakdown, Dialogue and Settings menus. Element numbers and shortcuts remain unchanged. Open a group by pointer, click/touch or arrow keys; Escape dismisses without changing the selection. Show in Whiteboard selects and centers the exact beat, temporarily reveals collapsed ancestors, and cancels pending dependency mode without changing saved container states.
 
 Preferences opens from the web Settings menu or script Settings group. Mac uses DOT Settings (Cmd+,) and Screenplay → Typography Preferences. Script Typography includes font search, independent font/size inheritance, element traits and language, reset controls and a full screenplay preview. Current-project settings remain separate from defaults for new projects. General Settings includes supported startup/paper controls and highlight export preferences. Native input-source selection is device-only and opt-in; browser language settings cannot change the OS keyboard. Installed browser font discovery is optional and requested explicitly; custom names remain usable without it.
 
