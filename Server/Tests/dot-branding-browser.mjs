@@ -51,7 +51,7 @@ try{
  await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('Word templates'));
  await page.locator('#import-project').setInputFiles({name:'DOT project.dot',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(saved))});
  await page.waitForSelector('#workspace:not([hidden])');
- await page.reload();await page.locator('#local-mode').click();assert.ok(await page.getByRole('button',{name:fixture.name+' · on this device',exact:true}).count());
+ await page.reload();await page.locator('#local-mode').click();await page.getByRole('button',{name:fixture.name+' · on this device',exact:true}).first().waitFor();
  // Install/offline shell includes branding and keeps the pre-existing cache namespace.
  await page.waitForFunction(()=>navigator.serviceWorker.controller!=null);
  await page.evaluate(()=>navigator.serviceWorker.ready);
