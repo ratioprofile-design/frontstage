@@ -144,7 +144,7 @@ export function mountContinuousScript(sheet, api) {
       {label:'Dialogue',items:[act('Pair / Unpair Dual Dialogue',()=>sheet.toggleDualDialogue?.(),{disabled:!canEdit})]},
       {label:'Settings',items:[act('Typography Preferences…',()=>api.preferences?.())]}
     ];for(const group of groups)group.error=api.status;
-    showScriptContextMenu(event.clientX,event.clientY,groups,()=>{if(document.activeElement?.closest('.write-script-menu'))restore();});
+    showScriptContextMenu(event.clientX,event.clientY,groups,restoreFocus=>{if(restoreFocus)restore();});
 
   });
   function restoreHeadingAnchors(headings) {
