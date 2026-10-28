@@ -36,10 +36,10 @@ final class AntigravityAdoptionTests: XCTestCase {
         XCTAssertEqual(p.currentRevision?.date, original.date)
         XCTAssertEqual(p.state["productionRevision"]?.object?["futureRevisionField"], contract["revision"]?.object?["futureRevisionField"])
         let edited = p.state["productionRevision"]
-        p.startNextRevision()
+        try p.startNextRevision()
         XCTAssertEqual(p.state["productionRevisionHistory"]?.array?.first, edited)
         XCTAssertNotEqual(p.currentRevision?.id, original.id)
-        p.clearProductionRevision()
+        try p.clearProductionRevision()
         XCTAssertNil(p.currentRevision)
         XCTAssertEqual(p.state["productionRevisionHistory"]?.array?.count, 2)
         XCTAssertEqual(try Project(data: p.encoded()), p)
@@ -99,6 +99,21 @@ final class AntigravityAdoptionTests: XCTestCase {
         XCTAssertThrowsError(try DualDialogueRules.pair(in: empty, at: 2))
     }
 
+    func testFountainStyledParentheticalAndLiteralDialogue() throws {
+        let paragraphs: [ScreenplayExportParagraph] = [
+            .init(element: .character, runs: [.init("ABI")]),
+            .init(element: .parenthetical, runs: [.init("(quietly)", bold: true)]),
+            .init(element: .dialogue, runs: [.init("(This is spoken)")]),
+            .init(element: .dialogue, runs: [.init("@literal")])
+        ]
+        let fountain = try ScreenplayInterchange.fountain(paragraphs)
+        XCTAssertTrue(fountain.contains("(**quietly**)"))
+        let parsed = try ScreenplayInterchange.parseFountain(fountain)
+        XCTAssertEqual(parsed.map(\.text), paragraphs.map(\.text))
+        XCTAssertEqual(parsed.map(\.element), paragraphs.map(\.element))
+        XCTAssertTrue(parsed[1].runs.contains { $0.text == "quietly" && $0.bold })
+    }
+
     func testInterchangeAndDrawingContracts() throws {
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Fixtures/interchange-contract.json")
         let paragraphs = try JSONDecoder().decode([ScreenplayExportParagraph].self, from: Data(contentsOf: url))
@@ -144,10 +159,19 @@ final class AntigravityAdoptionTests: XCTestCase {
         let id = try p.addBoardBeat(title: "New since baseline"), sceneID = try XCTUnwrap(p.whiteboard().beats.first { $0.id == id }?.sceneID)
         XCTAssertTrue(p.productionSceneChanged(sceneID))
         p.setRevisionColor(.blue); XCTAssertTrue(p.productionSceneChanged(sceneID))
-        p.startNextRevision(); XCTAssertFalse(p.productionSceneChanged(sceneID))
+        try p.startNextRevision(); XCTAssertFalse(p.productionSceneChanged(sceneID))
         try p.updateScene(id: sceneID, heading: SceneHeading(prefix: "EXT.", location: "RIVER", time: "NIGHT"))
         XCTAssertTrue(p.productionSceneChanged(sceneID))
         XCTAssertEqual(try Project(data: p.encoded()), p)
+    }
+
+    func testUnsupportedRevisionHistoryCannotBeDiscarded() throws {
+        var p = Project(); p.toggleProductionLock()
+        p.state["productionRevisionHistory"] = .object(["future": .string("retained")])
+        let before = p
+        XCTAssertThrowsError(try p.startNextRevision()); XCTAssertEqual(p, before)
+        XCTAssertThrowsError(try p.clearProductionRevision()); XCTAssertEqual(p, before)
+        XCTAssertEqual(CharacterCue("KAMAL (OVER PHONE)").name, "KAMAL")
     }
 
 }

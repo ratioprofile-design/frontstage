@@ -30,6 +30,14 @@ final class ScriptInclusionTests: XCTestCase {
         try p.restorePulledOutBeats(["beat-1", "beat-2"])
         XCTAssertEqual(try p.whiteboard().orderedBeats.map(\.id), ["beat-1", "beat-2", "beat-3"])
     }
+    func testPermanentDeletionKeepsSurvivorRestoreNeighbors() throws {
+        var p = try fixture()
+        try p.editWhiteboard { board in var third = board.beats[1]; third.id = "beat-3"; third.order = 10; board.beats.append(third) }
+        try p.pullOutBeats(["beat-1", "beat-2"])
+        try p.deletePulledOutBeats(["beat-2"])
+        try p.restorePulledOutBeats(["beat-1"])
+        XCTAssertEqual(try p.whiteboard().orderedBeats.map(\.id), ["beat-1", "beat-3"])
+    }
     func testRevisionCannotDuplicatePulledOutBeat() throws {
         var p = try fixture()
         try p.saveRevision(sceneID: 1, label: "Before pull out")

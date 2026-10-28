@@ -11,6 +11,7 @@ struct DOTPreferences: View {
     @State private var defaults = ScriptLayoutSettings()
     @State private var migration: PreferenceImportReview?
     @State private var replacements = Set<String>()
+    @AppStorage("dot_switch_tamil_input") private var switchTamilInput = false
     @AppStorage("frontstage_restore_last_project") private var restoreLast = false
     @AppStorage("default_paper_size") private var defaultPaper = "A4"
     private var layout: ScriptLayoutSettings { deviceDefaults ? defaults : workspace.project.scriptLayout }
@@ -44,7 +45,7 @@ struct DOTPreferences: View {
                             TextField("Size", value: Binding(get: { override?.fontSize ?? layout.fontSize }, set: { size in update { $0.elements[element.rawValue]?.fontSize = size } }), format: .number)
                             HStack { flag("Bold", \.isBold); flag("Italic", \.isItalic); flag("Underline", \.isUnderline); flag("Uppercase", \.isUppercase); flag("Tamil", \.isTamil) }
                         }
-                        if layout.isTamil(for: element) { Text("Uses an enabled Tamil input source while this element is focused. Font selection remains separate.").font(.caption).foregroundStyle(.secondary) }
+                        if layout.isTamil(for: element) { Text("Tamil font and line spacing apply here. Optional keyboard switching is enabled under Device workflow.").font(.caption).foregroundStyle(.secondary) }
                         Text(layout.isUppercase(for: element) ? "Sample text · தமிழ்".uppercased() : "Sample text · தமிழ்")
                             .font(Font(NSFont(name: layout.effectiveFontName(for: element), size: layout.effectiveFontSize(for: element)) ?? .monospacedSystemFont(ofSize: layout.effectiveFontSize(for: element), weight: .regular)))
                             .fontWeight(layout.isBold(for: element) ? .bold : .regular)
@@ -55,6 +56,7 @@ struct DOTPreferences: View {
                 }
                 GroupBox("Device workflow") {
                     VStack(alignment: .leading) {
+                        Toggle("Switch keyboard source for Tamil elements", isOn: $switchTamilInput)
                         Toggle("Restore the last native project at startup", isOn: $restoreLast)
                         Picker("Default paper for new projects", selection: $defaultPaper) { Text("A4").tag("A4"); Text("US Letter").tag("US Letter") }
                         Text("Recovery copies take priority over session restoration.").font(.caption).foregroundStyle(.secondary)

@@ -135,8 +135,9 @@ extension Project {
     }
 
     /// Historical raw records retain imported extension fields as well as each baseline.
-    private mutating func archiveCurrentProductionRevision() {
+    private mutating func archiveCurrentProductionRevision() throws {
         guard let raw = state["productionRevision"], raw.object != nil else { return }
+        guard state["productionRevisionHistory"] == nil || state["productionRevisionHistory"] == .null || state["productionRevisionHistory"]?.array != nil else { throw ProjectError.invalidProject("Unsupported revision history is preserved; review it before starting or clearing a revision") }
         var history = state["productionRevisionHistory"]?.array ?? []
         if history.last != raw { history.append(raw) }
         state["productionRevisionHistory"] = .array(history)
@@ -151,8 +152,8 @@ extension Project {
 
     private var productionHeadingBaseline: [String: String] { Dictionary(uniqueKeysWithValues: scenes.map { (String(describing: $0.id), CharacterCue.normalized($0.heading.inlineText)) }) }
 
-    public mutating func startNextRevision(label customLabel: String? = nil) {
-        archiveCurrentProductionRevision()
+    public mutating func startNextRevision(label customLabel: String? = nil) throws {
+        try archiveCurrentProductionRevision()
         let nextColor = currentRevision?.color.next ?? .blue
         let label = customLabel ?? nextColor.label
         var baselines: [String: String] = [:]
@@ -188,8 +189,8 @@ extension Project {
         currentRevision = rev
     }
 
-    public mutating func clearProductionRevision() {
-        archiveCurrentProductionRevision()
+    public mutating func clearProductionRevision() throws {
+        try archiveCurrentProductionRevision()
         currentRevision = nil
     }
 }

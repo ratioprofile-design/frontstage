@@ -72,7 +72,17 @@ extension Project {
               !scenes.contains(where: { scene in beats.contains(where: { $0.sceneID == scene.id }) && scene.isTextLocked }) else {
             throw ProjectError.invalidProject("Unlock the archived beats, containers and scenes before deleting")
         }
-        let remaining = archive.filter { !ids.contains($0.object?["id"]?.string ?? "") }
+        let remaining = archive.filter { !ids.contains($0.object?["id"]?.string ?? "") }.map { value -> JSONValue in
+            guard var fields = value.object else { return value }
+            for key in ["previousID", "nextID"] {
+                guard let original = fields[key]?.string, ids.contains(original) else { continue }
+                var cursor: String? = original, seen = Set<String>()
+                while let id = cursor, ids.contains(id), seen.insert(id).inserted { cursor = archive.first { $0.object?["id"]?.string == id }?.object?[key]?.string }
+                if cursor.map(ids.contains) == true { cursor = nil }
+                fields[key] = cursor.map(JSONValue.string) ?? .null
+            }
+            return .object(fields)
+        }
         let owned = Set(board.beats.map(\.sceneID) + remaining.compactMap { $0.object?["beat"]?.object?["sceneID"]?.decimal })
         let removed = Set(beats.map(\.sceneID)).subtracting(owned)
         candidate.state["frontstagePullouts"] = .array(remaining)

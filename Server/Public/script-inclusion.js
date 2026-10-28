@@ -47,6 +47,7 @@ export function deletePulledOutBeats(document,ids){
  if(selected.length!==ids.size)throw Error('Select existing archived beats.');
  for(const {beat} of selected)writable(p,beat);
  p.frontstagePullouts=archive.filter(item=>!ids.has(item.id));
+ for(const item of p.frontstagePullouts)for(const key of ['previousID','nextID']){if(typeof item[key]!=='string'||!ids.has(item[key]))continue;const seen=new Set();let id=item[key];while(id&&ids.has(id)&&!seen.has(id)){seen.add(id);id=archive.find(entry=>entry.id===id)?.[key];}item[key]=ids.has(id)?null:id??null;}
  const owned=new Set([...b.beats,...p.frontstagePullouts.map(item=>item.beat)].map(beat=>beat.sceneID));
  const removed=new Set(selected.map(item=>item.beat.sceneID).filter(id=>!owned.has(id)));
  p.beats=p.beats.filter(scene=>!removed.has(scene.id));

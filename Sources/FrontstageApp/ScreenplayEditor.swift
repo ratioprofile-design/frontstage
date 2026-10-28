@@ -275,6 +275,10 @@ class ScreenplayTextView: NSTextView {
         super.rightMouseDown(with: event)
         splitCaret = nil
     }
+    override func unmarkText() {
+        super.unmarkText()
+        DispatchQueue.main.async { [weak self] in if let self { TamilInputManager.compositionEnded(in: self) } }
+    }
     override func resignFirstResponder() -> Bool {
         let resigned = super.resignFirstResponder()
         if resigned && !hasMarkedText() { TamilInputManager.restoreStandardInput() }

@@ -24,7 +24,7 @@ The current agreed Enter/Tab rules, numbered element shortcuts, non-mutating sug
 
 Use the screenplay context menu or Cmd/Ctrl+Shift+L to pair/unpair the selected second speech block. Mac uses TextKit table cells for a common top in live editors and independent Core Text column frames for PDF pagination; the browser keeps editable paragraphs flat and derives column geometry without replacing active nodes. Pages and exports group paired speech separately from authored text.
 
-Mac Tamil switching is opt-in per element, suspended during composition, and restores only a source DOT actually changed. Browser Tamil settings adjust typography without changing the OS keyboard. Popup typography scales for reading without changing project settings.
+Mac Tamil switching requires the Device workflow opt-in and the element Tamil flag; it is suspended during composition, and restores only a source DOT actually changed. Browser Tamil settings adjust typography without changing the OS keyboard. Popup typography scales for reading without changing project settings.
 
 Whiteboard Select/Draw/Eraser controls and middle-button panning are available in both editions. Erasing uses stroke/segment intersections and commits one undoable gesture. Permanent Research shelf deletion removes an unowned scene and its active references atomically, retains independent Research records/shared assets, and respects locks.
 

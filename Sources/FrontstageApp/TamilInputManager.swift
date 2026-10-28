@@ -5,6 +5,7 @@ import AppKit
 
 @MainActor
 enum TamilInputManager {
+    private static weak var trackedText: NSTextView?
     private static var previousInputSource: TISInputSource?
     private static var isTamilActive = false
 
@@ -23,9 +24,14 @@ enum TamilInputManager {
 
     /// Changes only a focused, composing-free editor, and only when the user opted in.
     static func update(for text: NSTextView, enabled: Bool) {
-        guard !text.hasMarkedText() else { return }
-        guard text.window?.firstResponder === text else { restoreStandardInput(); return }
-        if enabled { activateTamilInput() } else { restoreStandardInput() }
+        guard text.window?.firstResponder === text else { return }
+        guard !text.hasMarkedText(), trackedText?.hasMarkedText() != true else { return }
+        trackedText = text
+        if text.isEditable && enabled && UserDefaults.standard.bool(forKey: "dot_switch_tamil_input") { activateTamilInput() } else { restoreStandardInput() }
+    }
+    static func compositionEnded(in text: NSTextView) {
+        guard trackedText === text, !text.hasMarkedText() else { return }
+        if !NSApp.isActive || text.window?.firstResponder !== text { restoreStandardInput() }
     }
     static func activateTamilInput() {
         guard let current = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
@@ -34,8 +40,9 @@ enum TamilInputManager {
         if TISSelectInputSource(tamil) == noErr { previousInputSource = current; isTamilActive = true }
     }
     static func restoreStandardInput() {
+        guard trackedText?.hasMarkedText() != true else { return }
         guard let previous = previousInputSource else { return }
-        defer { previousInputSource = nil; isTamilActive = false }
+        defer { previousInputSource = nil; isTamilActive = false; trackedText = nil }
         guard let current = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(), isTamilSource(current) else { return }
         TISSelectInputSource(previous)
     }

@@ -112,15 +112,17 @@ enum ScreenplayDualDialogue {
 extension Workspace {
     func reviewLegacyDualDialogue() {
         do {
-            let reviewed = try project.reviewingLegacyDualDialogue()
+            let original = project, session = documentSessionID
+            let reviewed = try original.reviewingLegacyDualDialogue()
             let alert = NSAlert(); alert.messageText = "Review Legacy Dual Dialogue"
             guard reviewed.pairs > 0 else { alert.informativeText = "No legacy pairs need conversion."; alert.runModal(); return }
             alert.informativeText = "A separate reviewed copy will contain \(reviewed.pairs) validated speech pairs. DOT will back up the current project first. The original file and shared connection remain untouched."
             alert.addButton(withTitle: "Create Reviewed Copy"); alert.addButton(withTitle: "Cancel")
             guard alert.runModal() == .alertFirstButtonReturn else { return }
+            guard documentSessionID == session, project == original else { throw ProjectError.invalidProject("The project changed during review. Reopen the review for the current project.") }
             let root = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true).appendingPathComponent("Frontstage/Import Originals", isDirectory: true)
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-            try project.save(to: root.appendingPathComponent("pre-dual-review-\(UUID().uuidString).dot"))
+            try original.save(to: root.appendingPathComponent("pre-dual-review-\(UUID().uuidString).dot"))
             var copy = reviewed.project; copy.name += " (Reviewed Copy)"; loadCopy(copy)
         } catch { errorMessage = error.localizedDescription }
     }

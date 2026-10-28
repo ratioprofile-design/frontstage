@@ -24,7 +24,7 @@ struct ProductionBaselineControls: View {
                 Button(revision == nil ? "Capture Production Baseline" : "Start Next Revision") {
                     workspace.endScriptTypingGroup()
                     workspace.edit("Capture Production Baseline") { project in
-                        if project.currentRevision == nil { project.toggleProductionLock() } else { project.startNextRevision() }
+                        if project.currentRevision == nil { project.toggleProductionLock() } else { try project.startNextRevision() }
                     }
                 }
                 Text("\(workspace.project.preservedState["productionRevisionHistory"]?.array?.count ?? 0) previous baselines retained").font(.caption).foregroundStyle(.secondary)

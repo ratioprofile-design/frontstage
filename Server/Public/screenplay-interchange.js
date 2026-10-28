@@ -27,10 +27,12 @@ export function renderFDX(paragraphs){
 export function renderFountain(paragraphs){
  renderFDX(paragraphs);const output=[];
  for(const[index,p]of paragraphs.entries()){
-  const value=p.runs.map(run=>{let value=run.text.replaceAll('\\','\\\\').replaceAll('*','\\*').replaceAll('_','\\_');if(run.underline)value='_'+value+'_';if(run.italic)value='*'+value+'*';if(run.bold)value='**'+value+'**';return value;}).join('');
+  const runs=structuredClone(p.runs);
+  if(p.element==='parenthetical'){const first=runs.findIndex(r=>r.text.length);if(first>=0&&runs[first].text.startsWith('('))runs[first].text=runs[first].text.slice(1);let last=runs.length-1;while(last>=0&&!runs[last].text)last--;if(last>=0&&runs[last].text.endsWith(')'))runs[last].text=runs[last].text.slice(0,-1);}
+  const first=runs.findIndex(r=>r.text.length),value=runs.map((run,i)=>{if(!run.text)return '';let value=run.text.replaceAll('\\','\\\\').replaceAll('*','\\*').replaceAll('_','\\_');if(p.element==='dialogue'&&i===first&&'(.!@>~#='.includes(run.text[0]))value='\\'+value;if(run.underline)value='_'+value+'_';if(run.italic)value='*'+value+'*';if(run.bold)value='**'+value+'**';return value;}).join('');
   if(p.element==='slugline')output.push('','.'+value+(p.number!=null?` #${p.number}#`:''),'');
   else if(p.element==='character')output.push('','@'+value+(p.dualSide==='right'?' ^':''));
-  else if(p.element==='parenthetical')output.push((value.startsWith('(')?'':'(')+value+(value.endsWith(')')?'':')'));
+  else if(p.element==='parenthetical')output.push('('+value+')');
   else if(p.element==='dialogue'){output.push(value);if(!['dialogue','parenthetical'].includes(paragraphs[index+1]?.element))output.push('');}
   else if(p.element==='transition')output.push('','> '+value,'');
   else if(p.element==='lyrics')output.push('~'+value);

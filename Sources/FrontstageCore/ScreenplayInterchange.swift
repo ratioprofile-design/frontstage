@@ -52,8 +52,16 @@ public enum ScreenplayInterchange {
         _ = try fdx(paragraphs) // The same pair validation applies to both export formats.
         var output = [String]()
         for (index, p) in paragraphs.enumerated() {
-            let text = p.runs.map { run in
+            var runs = p.runs
+            if p.element == .parenthetical {
+                if let first = runs.firstIndex(where: { !$0.text.isEmpty }), runs[first].text.hasPrefix("(") { runs[first].text.removeFirst() }
+                if let last = runs.lastIndex(where: { !$0.text.isEmpty }), runs[last].text.hasSuffix(")") { runs[last].text.removeLast() }
+            }
+            let first = runs.firstIndex { !$0.text.isEmpty }
+            let text = runs.enumerated().map { index, run in
+                guard !run.text.isEmpty else { return "" }
                 var text = run.text.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "*", with: "\\*").replacingOccurrences(of: "_", with: "\\_")
+                if p.element == .dialogue, index == first, let character = run.text.first, "(.!@>~#=".contains(character) { text = "\\" + text }
                 if run.underline { text = "_" + text + "_" }
                 if run.italic { text = "*" + text + "*" }
                 if run.bold { text = "**" + text + "**" }
@@ -62,7 +70,7 @@ public enum ScreenplayInterchange {
             switch p.element {
             case .sceneHeading: output += ["", "." + text + (p.number.map { " #\($0)#" } ?? ""), ""]
             case .character: output += ["", "@" + text + (p.dualSide == "right" ? " ^" : "")]
-            case .parenthetical: output.append(ScreenplayParenthetical.wrapped(text))
+            case .parenthetical: output.append("(" + text + ")")
             case .dialogue:
                 output.append(text)
                 if index + 1 == paragraphs.count || ![.dialogue, .parenthetical].contains(paragraphs[index + 1].element) { output.append("") }

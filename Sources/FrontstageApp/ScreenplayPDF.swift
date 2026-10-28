@@ -114,7 +114,7 @@ enum ScreenplayPDF {
     }
 
     private struct FlowFragment { let range: NSRange; let rect: CGRect }
-    private struct FlowMarker { let value: String; let x: CGFloat; let header: Bool; let width: CGFloat? }
+    private struct FlowMarker { let cue: String; let value: String; let x: CGFloat; let header: Bool; let width: CGFloat? }
     private struct FlowPage {
         var fragments = [FlowFragment]()
         var markers = [FlowMarker]()
@@ -188,7 +188,7 @@ enum ScreenplayPDF {
             let spacing = NSMaxRange(paragraph) == end ? (text.attribute(.paragraphStyle, at: end - 1, effectiveRange: nil) as? NSParagraphStyle)?.paragraphSpacing ?? 0 : 0
             return (FlowFragment(range: fitted, rect: rect), min(height, max(1, height - origins[origins.count - 1].y + descent + spacing)))
         }
-        func marker(_ cue: String, x: CGFloat, header: Bool, width: CGFloat? = nil) { page.markers.append(FlowMarker(value: header ? cue + " (CONT'D)" : "(MORE)", x: x, header: header, width: width)) }
+        func marker(_ cue: String, x: CGFloat, header: Bool, width: CGFloat? = nil) { page.markers.append(FlowMarker(cue: cue, value: header ? cue + " (CONT'D)" : "(MORE)", x: x, header: header, width: width)) }
         func startingSpeechHeight(_ start: Int, end: Int) -> CGFloat {
             var position = start, height: CGFloat = 0
             while position < end {
@@ -278,7 +278,7 @@ enum ScreenplayPDF {
             context.endPDFPage()
         }
         context.closePDF()
-        let pages = flow.pages.map { ScreenplayPageLayout(range: $0.range, rect: contentRect(paper), continuedCharacter: $0.markers.first(where: \.header)?.value, continuesCharacter: $0.markers.first(where: { !$0.header })?.value, sourceRanges: $0.fragments.map(\.range)) }
+        let pages = flow.pages.map { ScreenplayPageLayout(range: $0.range, rect: contentRect(paper), continuedCharacter: $0.markers.first(where: \.header)?.cue, continuesCharacter: $0.markers.first(where: { !$0.header })?.cue, sourceRanges: $0.fragments.map(\.range)) }
         return RenderedScreenplay(data: output as Data, text: flow.text, pageRanges: pages.map(\.range), paper: paper, pages: pages)
     }
 
