@@ -23,12 +23,12 @@ private enum DOTWindowsTheme {
         return light == 0
     }
     static var accent: COLORREF {
-        typealias ReadColor = @convention(c) (UnsafeMutablePointer<DWORD>?, UnsafeMutablePointer<BOOL>?) -> HRESULT
+        typealias ReadColor = @convention(c) (UnsafeMutablePointer<DWORD>?, UnsafeMutablePointer<WindowsBool>?) -> HRESULT
         guard let library = wide("dwmapi.dll", { LoadLibraryW($0) }) else { return GetSysColor(COLOR_HIGHLIGHT) }
         defer { FreeLibrary(library) }
         guard let address = GetProcAddress(library, "DwmGetColorizationColor") else { return GetSysColor(COLOR_HIGHLIGHT) }
         let read = unsafeBitCast(address, to: ReadColor.self)
-        var argb: DWORD = 0, opaque: BOOL = false
+        var argb: DWORD = 0, opaque: WindowsBool = false
         guard read(&argb, &opaque) >= 0 else { return GetSysColor(COLOR_HIGHLIGHT) }
         return ((argb >> 16) & 255) | (argb & 0xff00) | ((argb & 255) << 16)
     }
