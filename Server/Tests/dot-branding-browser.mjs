@@ -46,9 +46,12 @@ try{
  assert.equal(saved.format,'frontstage');assert.equal(saved.version,1);
  assert.deepEqual(saved.project.beats[0].notes,fixture.project.beats[0].notes);
  assert.deepEqual(saved.project.frontstageWhiteboard.beats.map(b=>b.id),fixture.project.frontstageWhiteboard.beats.map(b=>b.id));
- await page.locator('#page-projects').click();
+ await page.locator('#page-projects').click();await page.waitForSelector('#projects:not([hidden])');
+ await page.evaluate(()=>{window.dotImportMessages=[];const status=document.querySelector('#status');new MutationObserver(()=>window.dotImportMessages.push(status.textContent)).observe(status,{childList:true,subtree:true,characterData:true});});
+ const beforeWordImport=await page.locator('#project-list button').count();
  await page.locator('#import-project').setInputFiles({name:'Word template.dot',mimeType:'application/msword',buffer:Buffer.from([0xd0,0xcf,0x11,0xe0])});
- await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('Word templates'));
+ await page.waitForFunction(()=>window.dotImportMessages.some(message=>message.includes('Word templates')));
+ assert.equal(await page.locator('#project-list button').count(),beforeWordImport);
  await page.locator('#import-project').setInputFiles({name:'DOT project.dot',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(saved))});
  await page.waitForSelector('#workspace:not([hidden])');
  await page.reload();await page.locator('#local-mode').click();await page.getByRole('button',{name:fixture.name+' · on this device',exact:true}).first().waitFor();
