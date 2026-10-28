@@ -52,6 +52,11 @@ final class BeatPopupTests: XCTestCase {
             XCTAssertTrue(try XCTUnwrap(workspace.whiteboard.beats.first { $0.id == original }).html.contains("CUT TO:"))
             let next = try XCTUnwrap(workspace.selectedBoardBeatID)
             XCTAssertNotEqual(next, original)
+            workspace.popup.panels[original]?.makeFirstResponder(text)
+            text.setSelectedRange(NSRange(location: 0, length: 0))
+            XCTAssertTrue(controller.handleCommand(#selector(NSResponder.insertNewline(_:)), in: text))
+            XCTAssertEqual(workspace.popup.panels.count, 2)
+            XCTAssertEqual(workspace.selectedBoardBeatID, next)
             workspace.popup.focusHeading(next)
             let responder = workspace.popup.panels[next]?.firstResponder
             let field = (responder as? NSTextView)?.delegate as? NSTextField

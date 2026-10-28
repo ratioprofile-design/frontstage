@@ -605,6 +605,8 @@ function openEditor(id) {
   const toolbar=screenplayToolbar(text, () => text.dispatchEvent(new Event('input')), text.contentEditable === 'true',()=>characterNames(doc,id),()=>doc.project.beats.map(heading),{continuationSeed:()=>dialogueSeed(doc,id),newScene:node=>{
     const parts=[...text.children],index=parts.indexOf(node);if(index<0)return;
     let next;const first=parts.slice(0,index+1).map(n=>cleanHTML(n.outerHTML)).join(''),second=parts.slice(index+1).map(n=>cleanHTML(n.outerHTML)).join('');
+    const ordered=[...board().beats].sort((a,b)=>a.order-b.order),rank=ordered.findIndex(b=>b.id===id),following=ordered[rank+1],nextScene=doc.project.beats.find(s=>s.id===following?.sceneID);
+    if(!second&&following&&!locked(following)&&!following.omitted&&!unused(following)&&nextScene&&!nextScene.frontstageTextLocked&&following.sceneID!==beat.sceneID&&['prefix','location','time'].every(key=>!nextScene.slug?.[key]?.trim())){openEditor(following.id);editors.get(following.id)?.querySelector('[data-slug-key="location"]')?.focus();return;}
     if(edit(()=>{next=insertScriptScene(doc,id,first,second,'');})){openEditor(next);const nextPanel=editors.get(next);nextPanel?.querySelector('[data-slug-key="location"]')?.focus();}
   }});field('element').parentElement.replaceWith(toolbar);panel.querySelector('.version-row').append(toolbar);const options=element('button','⋯');options.setAttribute('aria-label','Formatting options');options.onclick=()=>panel.classList.toggle('format-expanded');panel.querySelector('.version-row').append(options);refreshEditors();
   const place = (x, y) => {

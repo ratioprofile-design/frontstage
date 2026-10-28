@@ -104,7 +104,7 @@ export function mountContinuousScript(sheet, api) {
     if(commit()===false)return;
     const next=node.nextElementSibling;
     const focusHeading=id=>{api.rebuild?.();const heading=document.querySelector('.continuous-editor>[data-heading-scene][data-beat-id="'+CSS.escape(id)+'"]');if(heading){const editor=heading.closest('.continuous-editor');editor.focus({preventScroll:true});const range=document.createRange();range.selectNodeContents(heading);range.collapse(true);getSelection().removeAllRanges();getSelection().addRange(range);heading.scrollIntoView({block:'nearest'});editor.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));}};
-    if(next?.dataset.headingScene){const beat=beatFor(next.dataset.beatId),scene=api.document().project.beats.find(s=>s.id===beat?.sceneID);if(scene&&!locked(beat)&&!inlineHeading(scene).trim()&&!(()=>{const body=document.createElement('div');body.innerHTML=beat.html;return body.textContent.trim();})()){api.select(scene.id,beat.id);focusHeading(beat.id);return;}}
+    if(next?.dataset.headingScene){const beat=beatFor(next.dataset.beatId),scene=api.document().project.beats.find(s=>s.id===beat?.sceneID);if(scene&&!locked(beat)&&!inlineHeading(scene).trim()){api.select(scene.id,beat.id);focusHeading(beat.id);return;}}
     const id=node.dataset.beatId,parts=[...sheet.children].filter(n=>n.dataset.beatId===id&&!n.dataset.headingScene),index=parts.indexOf(node);
     if(index<0)return;
     const first=parts.slice(0,index+1).map(n=>api.cleanHTML(n.outerHTML)).join(''),second=parts.slice(index+1).map(n=>api.cleanHTML(n.outerHTML)).join('');let created;

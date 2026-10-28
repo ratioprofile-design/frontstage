@@ -62,6 +62,7 @@ try{
  await popupText.locator('p').first().click();await page.keyboard.press('Control+Alt+6');await page.keyboard.press('Enter');
  assert.equal(await page.locator('.beat-popup').count(),2);assert.equal(await originalPopup.count(),1);
  assert.equal(await page.evaluate(()=>document.activeElement?.dataset.slugKey),'location');
+ await popupText.locator('p').first().click();await page.keyboard.press('Enter');assert.equal(await page.locator('.beat-popup').count(),2);assert.equal(await page.evaluate(()=>document.activeElement?.dataset.slugKey),'location');
  await page.locator('.beat-popup.active [data-slug-key="location"]').fill('NEW LOCATION');
  await page.locator('.beat-popup.active [data-slug-key="location"]').press('Tab');
  await page.locator('#save').click();await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('Saved on this device'));

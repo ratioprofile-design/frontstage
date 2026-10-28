@@ -64,6 +64,15 @@ final class BeatPopupPresenter: NSObject, NSWindowDelegate {
             let source = text.attributedString(), boundary = NSMaxRange((text.string as NSString).paragraphRange(for: text.selectedRange()))
             let first = ScreenplayTextCodec.encode(source.attributedSubstring(from: NSRange(location: 0, length: boundary)))
             let second = ScreenplayTextCodec.encode(source.attributedSubstring(from: NSRange(location: boundary, length: source.length - boundary)))
+            let ordered = workspace.whiteboard.orderedBeats
+            if boundary == source.length, let rank = ordered.firstIndex(where: { $0.id == id }), rank + 1 < ordered.count {
+                let next = ordered[rank + 1]
+                if next.sceneID != workspace.whiteboard.beats.first(where: { $0.id == id })?.sceneID,
+                   !workspace.whiteboard.isLocked(next), !next.omitted, !workspace.whiteboard.isUnused(next),
+                   let scene = workspace.project.scenes.first(where: { $0.id == next.sceneID }), !scene.isTextLocked, scene.heading.inlineText.isEmpty {
+                    workspace.selectBoardBeat(next.id); self?.open(next.id, workspace: workspace, editingHeading: true); return
+                }
+            }
             var created: String?
             workspace.edit("New Scene After Transition") { created = try $0.insertScriptScene(afterSplitting: id, beforeHTML: first, afterHTML: second, heading: "") }
             if let created { workspace.selectBoardBeat(created); self?.open(created, workspace: workspace, editingHeading: true) }

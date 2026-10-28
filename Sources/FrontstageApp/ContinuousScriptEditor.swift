@@ -286,8 +286,7 @@ struct ContinuousScriptEditor: NSViewRepresentable {
                let nextID = source.attribute(ownerKey, at: boundary, effectiveRange: nil) as? String,
                let next = workspace.whiteboard.beats.first(where: { $0.id == nextID }), !workspace.whiteboard.isLocked(next),
                workspace.project.scenes.first(where: { $0.id == next.sceneID })?.isTextLocked == false,
-               workspace.project.scenes.first(where: { $0.id == next.sceneID })?.heading.inlineText.isEmpty == true,
-               ((try? ScreenplayTextCodec.decode(next.html).string) ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+               workspace.project.scenes.first(where: { $0.id == next.sceneID })?.heading.inlineText.isEmpty == true {
                 focus(nextID); return
             }
             let before = NSMutableAttributedString(string: ""), after = NSMutableAttributedString(string: "")
