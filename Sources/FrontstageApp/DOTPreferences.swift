@@ -44,6 +44,7 @@ struct DOTPreferences: View {
                             TextField("Size", value: Binding(get: { override?.fontSize ?? layout.fontSize }, set: { size in update { $0.elements[element.rawValue]?.fontSize = size } }), format: .number)
                             HStack { flag("Bold", \.isBold); flag("Italic", \.isItalic); flag("Underline", \.isUnderline); flag("Uppercase", \.isUppercase); flag("Tamil", \.isTamil) }
                         }
+                        if layout.isTamil(for: element) { Text("Uses an enabled Tamil input source while this element is focused. Font selection remains separate.").font(.caption).foregroundStyle(.secondary) }
                         Text(layout.isUppercase(for: element) ? "Sample text · தமிழ்".uppercased() : "Sample text · தமிழ்")
                             .font(Font(NSFont(name: layout.effectiveFontName(for: element), size: layout.effectiveFontSize(for: element)) ?? .monospacedSystemFont(ofSize: layout.effectiveFontSize(for: element), weight: .regular)))
                             .fontWeight(layout.isBold(for: element) ? .bold : .regular)

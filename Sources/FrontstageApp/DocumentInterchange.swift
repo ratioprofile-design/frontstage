@@ -9,10 +9,10 @@ enum ScreenplayDOCX {
     static func render(_ project: Project, paper: ScreenplayPaper = .letter) throws -> Data {
         _ = try ScreenplayInterchange.fdx(ScreenplayInterchangeDocument.paragraphs(project))
         let xml = OfficeArchive.xml
-        var paragraphs = ""
+        var paragraphs = project.currentRevision.map { paragraph($0.headerString, element: .action) } ?? ""
         for segment in try project.orderedScript() {
             let scene = segment.scene
-            paragraphs += paragraph("\(segment.number)  \(scene.heading.text)\(segment.isContinuation ? " (CONTINUED)" : "")", element: .sceneHeading, newPage: scene.startsNewPage)
+            paragraphs += paragraph("\(segment.number)  \(scene.heading.text)\(segment.isContinuation ? " (CONTINUED)" : "")\(project.productionSceneChanged(scene.id) ? " *" : "")", element: .sceneHeading, newPage: scene.startsNewPage)
             let text = DialoguePresentation.materialized(try ScreenplayTextCodec.decode(scene.html, settings: project.scriptLayout)), source = text.string as NSString
             var offset = 0
             var bodyParagraphs = [(xml: String, pair: String?, side: String?)]()

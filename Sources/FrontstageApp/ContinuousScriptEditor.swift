@@ -34,6 +34,8 @@ final class WritingCanvasView: NSView {
     }
 }
 final class WritingTextView: ScreenplayTextView {
+    var revisedScenes = Set<String>()
+    var revisionColor = NSColor.systemBlue
     var pageHeight: CGFloat = 842
     var revealBeat: ((String) -> Void)?
     var compositionFinished: (() -> Void)?
@@ -115,6 +117,18 @@ final class WritingTextView: ScreenplayTextView {
             NSColor.controlAccentColor.setFill()
             NSRect(x: textContainerOrigin.x - 8, y: textContainerOrigin.y + bounds.minY, width: 3, height: bounds.height).fill()
         }
+        if let manager = layoutManager, let container = textContainer {
+            let source = attributedString(); var offset = 0
+            while offset < source.length {
+                let range = (source.string as NSString).paragraphRange(for: NSRange(location: offset, length: 0))
+                if let scene = source.attribute(headingKey, at: offset, effectiveRange: nil) as? String, revisedScenes.contains(scene) {
+                    let glyphs = manager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+                    let bounds = manager.boundingRect(forGlyphRange: glyphs, in: container)
+                    ("*" as NSString).draw(at: NSPoint(x: textContainerOrigin.x - 20, y: textContainerOrigin.y + bounds.minY), withAttributes: [.font: NSFont.monospacedSystemFont(ofSize: 12, weight: .bold), .foregroundColor: revisionColor])
+                }
+                offset = NSMaxRange(range)
+            }
+        }
         guard pageHeight > 0 else { return }
         let first = max(1, Int(rect.minY / pageHeight)), last = Int(rect.maxY / pageHeight)
         if first <= last { for page in first...last {
@@ -179,7 +193,10 @@ struct ContinuousScriptEditor: NSViewRepresentable {
         guard !text.hasMarkedText() else { return }
         text.backgroundColor = theme.paper; text.textColor = theme.ink; text.insertionPointColor = theme.ink
         text.typingAttributes[.foregroundColor] = theme.ink
-        if let writing = text as? WritingTextView { DialoguePresentation.refresh(writing); writing.highlightHeading(for: workspace.selectedBoardBeatID) }
+        if let writing = text as? WritingTextView {
+            writing.revisedScenes = Set(workspace.project.scenes.filter { workspace.project.productionSceneChanged($0.id) }.map { NSDecimalNumber(decimal: $0.id).stringValue })
+            writing.revisionColor = NSColor(boardHex: workspace.project.currentRevision?.color.hexColor ?? "#4A90E2")
+            DialoguePresentation.refresh(writing); writing.highlightHeading(for: workspace.selectedBoardBeatID) }
     }
     func updateNSView(_ view: NSScrollView, context: Context) {
         guard let canvas = view.documentView as? WritingCanvasView, let text = canvas.paperView else { return }

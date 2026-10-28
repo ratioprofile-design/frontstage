@@ -10,6 +10,7 @@ struct ProductionBaselineControls: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Capture scene text for comparison. Baseline locking does not freeze pagination or production numbering.").font(.caption).foregroundStyle(.secondary)
                 if let revision {
+                    HStack { Circle().fill(revision.color.swiftUIColor).frame(width: 14, height: 14); Text(revision.color.rawValue).font(.caption) }
                     Picker("Revision color", selection: Binding(get: { revision.color }, set: { color in workspace.edit("Revision Color") { $0.setRevisionColor(color) } })) {
                         ForEach(RevisionColor.allCases, id: \.self) { color in Text(color.rawValue).tag(color) }
                     }

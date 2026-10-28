@@ -213,7 +213,7 @@ struct BeatPopupView: View {
                 if scriptExpanded {
                     scriptControls.disabled(scene?.isTextLocked == true)
                     ScreenplayEditor(html: text(\.html, label: "Snippet Text"), controller: controller, width: 532, typography: workspace.project.scriptLayout,
-                        onError: { workspace.errorMessage = $0 }, editable: scene?.isTextLocked != true && !(beat.map { workspace.whiteboard.isLocked($0) } ?? true), paper: true, paperTopInset: 16, suggestions: workspace.screenplayCompletions,
+                        onError: { workspace.errorMessage = $0 }, editable: scene?.isTextLocked != true && !workspace.whiteboard.isLocked(beat), paper: true, paperTopInset: 16, suggestions: workspace.screenplayCompletions,
                         continuationSeed: DialoguePresentation.seed(project: workspace.project, beatID: beatID), explicitCharacters: workspace.project.characters.map(\.name) + workspace.whiteboard.beats.flatMap(\.characters)).id(beatID)
                         .frame(maxWidth: .infinity, minHeight: 220).environment(\.colorScheme, .light)
                 }

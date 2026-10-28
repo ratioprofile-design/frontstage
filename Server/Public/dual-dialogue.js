@@ -52,3 +52,13 @@ export function normalizeLegacyDualHTML(html){
 }
 
 export function duplicatedPairIDs(html){const ids=new Map();return html.replace(/\bdata-dual-pair\s*=\s*(["'])([^"']+)\1/gi,(match,quote,id)=>{if(!ids.has(id))ids.set(id,crypto.randomUUID());return match.replace(id,ids.get(id));});}
+
+export function groupDualParagraphs(nodes){
+ const result=[];
+ for(let i=0;i<nodes.length;){const first=nodes[i],id=first.dataset?.dualPair;if(!id){result.push(first);i++;continue;}let end=i+1;while(end<nodes.length&&nodes[end].dataset?.dualPair===id)end++;
+  const group=document.createElement('div');group.className='sc-dual-group';group.dataset.dualPair=id;
+  for(const side of ['left','right']){const column=document.createElement('div');column.className='sc-dual-column';column.dataset.dualSide=side;for(const n of nodes.slice(i,end).filter(n=>n.classList.contains('sc-dual-'+side))){for(const property of derived)n.style.removeProperty(property);delete n.dataset.dualLayout;column.append(n);}group.append(column);}
+  result.push(group);i=end;
+ }
+ return result;
+}

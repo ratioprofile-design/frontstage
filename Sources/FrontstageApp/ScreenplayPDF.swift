@@ -52,7 +52,7 @@ enum ScreenplayPDF {
         for segment in active {
             let scene = segment.scene, number = segment.number
             let headingStart = text.length
-            text.append(NSAttributedString(string: "\(number)  \(scene.heading.text)\(segment.isContinuation ? " (CONTINUED)" : "")\n",
+            text.append(NSAttributedString(string: "\(number)  \(scene.heading.text)\(segment.isContinuation ? " (CONTINUED)" : "")\(project.productionSceneChanged(scene.id) ? " *" : "")\n",
                 attributes: ScreenplayTypography.attributes(.sceneHeading, width: paper.contentWidth, printing: true, settings: project.scriptLayout)))
             if scene.startsNewPage { text.addAttribute(explicitPageStart, value: true, range: NSRange(location: headingStart, length: 1)) }
             let body = try ScreenplayTextCodec.decode(scene.html, width: paper.contentWidth, printing: true, settings: project.scriptLayout)
@@ -63,14 +63,14 @@ enum ScreenplayPDF {
                     ScreenplayTypography.attributes(.action, width: paper.contentWidth, printing: true)))
             }
         }
-        return try renderText(text, title: project.name, paper: paper)
+        return try renderText(text, title: project.name, paper: paper, revisionHeader: project.currentRevision?.headerString)
     }
 
-    static func renderText(_ text: NSAttributedString, title: String, paper: ScreenplayPaper) throws -> RenderedScreenplay {
+    static func renderText(_ text: NSAttributedString, title: String, paper: ScreenplayPaper, revisionHeader: String? = nil) throws -> RenderedScreenplay {
         let text = DialoguePresentation.materialized(text)
         guard text.length > 0 else { throw ScreenplayPDFError.cannotLayOut }
         if text.length > 0, text.containsAttribute(.screenplayDualPair) {
-            return try renderDualText(text, title: title, paper: paper)
+            return try renderDualText(text, title: title, paper: paper, revisionHeader: revisionHeader)
         }
         let pages = try layoutPages(text, paper: paper)
         let output = CFDataCreateMutable(nil, 0)!
@@ -97,6 +97,7 @@ enum ScreenplayPDF {
                 drawMarker("(MORE)", x: paper.leftMargin + paper.contentWidth * WorkspaceDesign.characterIndent / 100,
                     y: paper.bottomMargin + 2, in: context, paper: paper)
             }
+            if let revisionHeader { drawMarker(revisionHeader, x: paper.leftMargin, y: paper.height - 42, in: context, paper: paper) }
             if index > 0 {
                 let label = NSAttributedString(string: "\(index + 1).", attributes:
                     ScreenplayTypography.attributes(.action, width: paper.contentWidth, printing: true))
@@ -143,7 +144,7 @@ enum ScreenplayPDF {
         }
         return pages
     }
-    private static func renderDualText(_ text: NSAttributedString, title: String, paper: ScreenplayPaper) throws -> RenderedScreenplay {
+    private static func renderDualText(_ text: NSAttributedString, title: String, paper: ScreenplayPaper, revisionHeader: String?) throws -> RenderedScreenplay {
         let laidOut = try dualPages(text, paper: paper)
         let output = CFDataCreateMutable(nil, 0)!
         guard let consumer = CGDataConsumer(data: output) else { throw ScreenplayPDFError.cannotCreatePDF }
@@ -156,6 +157,7 @@ enum ScreenplayPDF {
             page.manager.drawBackground(forGlyphRange: page.glyphs, at: .zero)
             page.manager.drawGlyphs(forGlyphRange: page.glyphs, at: .zero)
             NSGraphicsContext.restoreGraphicsState(); context.restoreGState()
+            if let revisionHeader { drawMarker(revisionHeader, x: paper.leftMargin, y: paper.height - 42, in: context, paper: paper) }
             if index > 0 { drawMarker("\(index + 1).", x: paper.width - paper.rightMargin - 24, y: paper.height - 42, in: context, paper: paper) }
             context.endPDFPage()
         }

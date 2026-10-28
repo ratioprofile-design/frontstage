@@ -1,3 +1,4 @@
+import {sceneChanged} from './production-revision.js';
 import {layoutDualDialogue} from './dual-dialogue.js';
 import {pullOutBeats,replaceDocument} from './script-inclusion.js';
 import * as model from './workspace-model.js';
@@ -78,6 +79,7 @@ export function mountContinuousScript(sheet, api) {
     if(composing)return;
     for(const node of sheet.querySelectorAll('[data-heading-scene]')){
       const scene=api.document().project.beats.find(s=>String(s.id)===node.dataset.headingScene);
+      if(scene&&sceneChanged(api.document(),scene.id))node.dataset.revised='true';else delete node.dataset.revised;
       if(!scene||node===editing||node.textContent===inlineHeading(scene))continue;
       const selection=getSelection(),inside=selection?.rangeCount&&node.contains(selection.anchorNode)&&node.contains(selection.focusNode);
       const offset=(container,index)=>{const r=document.createRange();r.selectNodeContents(node);r.setEnd(container,index);return r.toString().length;};

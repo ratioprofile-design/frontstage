@@ -1,3 +1,4 @@
+import {validateTypography} from './script-typography.js';
 import {eraseBoardDrawing} from './board-drawing.js';
 import {parseProjectFile,projectFilename} from './project-files.js';
 import {insertScriptScene} from './continuous-script.js';
@@ -121,7 +122,7 @@ async function recoverSharedDrafts() {
   status(copies.length?'Recovery creates a separate local project. Sign in to resume sharing; the original draft is retained.':'No shared drafts have been saved on this device.');
 }
 $('recover-shared').onclick=()=>recoverSharedDrafts().catch(e=>status(e.message));
-function emptyDocument(name) { return initializeBoard({ format: 'frontstage', version: 1, name, project: { beats: [], nextId: 1, frontstageSceneModel: 'oneBeatPerScene' } }); }
+function emptyDocument(name) { const project={beats:[],nextId:1,frontstageSceneModel:'oneBeatPerScene'};try{const saved=JSON.parse(localStorage.getItem('frontstage-default-script-layout'));if(saved)project.frontstageScriptLayout=validateTypography(saved);}catch{status('Saved typography defaults could not be loaded. Standard settings were used for this new project.');}return initializeBoard({format:'frontstage',version:1,name,project}); }
 async function createLocalProject(name, document = emptyDocument(name)) {
   const id = 'local-' + uuid(), db = await database;
   await new Promise((resolve, reject) => { const tx = db.transaction('projects', 'readwrite'); tx.objectStore('projects').put({ id, doc: document, base: clone(document), revision: 0, dirty: false, local: true, name: document.name }); tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });

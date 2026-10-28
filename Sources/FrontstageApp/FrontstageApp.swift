@@ -170,6 +170,8 @@ final class Workspace: ObservableObject {
 
     init(recoveryStore: RecoveryStore? = nil) {
         self.recoveryStore = recoveryStore
+        if let data = UserDefaults.standard.data(forKey: "default_script_layout"), let layout = try? JSONDecoder().decode(ScriptLayoutSettings.self, from: data) { try? project.setScriptLayout(layout); savedProject = project }
+        paper = UserDefaults.standard.string(forKey: "default_paper_size") == "US Letter" ? .letter : .a4
         editor.historyBoundary = { [weak self] in self?.endScriptTypingGroup() }
         editor.projectUndo = { [weak self] in self?.undoProject() }; editor.projectRedo = { [weak self] in self?.redoProject() }
     }
