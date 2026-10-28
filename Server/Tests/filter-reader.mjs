@@ -7,7 +7,7 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 const require=createRequire(import.meta.url),{chromium}=require(process.env.FRONTSTAGE_PLAYWRIGHT_MODULE||'playwright');
 const root=fileURLToPath(new URL('../../',import.meta.url)),publicDir=path.join(root,'Server/Public'),output=path.join(root,'build/parity');await mkdir(output,{recursive:true});
-const server=createServer(async(req,res)=>{try{const relative=req.url==='/'?'index.html':decodeURIComponent(req.url.slice(1));if(relative.includes('/')||relative.includes('..')){res.writeHead(404);res.end();return;}const content=await readFile(path.join(publicDir,relative));res.setHeader('Content-Type',relative.endsWith('.js')?'application/javascript':relative.endsWith('.css')?'text/css':'text/html');res.end(content);}catch{res.writeHead(404);res.end();}});
+const server=createServer(async(req,res)=>{try{const relative=req.url==='/'?'index.html':decodeURIComponent(req.url.slice(1));if((relative.includes('/')&&!relative.startsWith('brand/'))||relative.includes('..')){res.writeHead(404);res.end();return;}const content=await readFile(path.join(publicDir,relative));res.setHeader('Content-Type',relative.endsWith('.js')?'application/javascript':relative.endsWith('.css')?'text/css':relative.endsWith('.png')?'image/png':relative.endsWith('.ico')?'image/x-icon':relative.endsWith('.json')?'application/json':'text/html');res.end(content);}catch{res.writeHead(404);res.end();}});
 await new Promise(resolve=>server.listen(17845,'127.0.0.1',resolve));let browser;
 try{
  browser=await chromium.launch({executablePath:process.env.FRONTSTAGE_CHROMIUM||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':chromium.executablePath()),headless:true,args:['--no-sandbox']});
