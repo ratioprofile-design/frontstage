@@ -1,9 +1,9 @@
-import {isSceneModel,syncSceneMetadata,validateSceneModel,convertSceneCopy} from './scene-model.js';
+import {isSceneModel,syncSceneMetadata,validateSceneModel,convertSceneCopy,duplicateBeat} from './scene-model.js';
 import {pullOutBeats,validateInclusion} from './script-inclusion.js';
 import {createScriptFilter,mountScriptFilter,matchesScriptFilter,gapLabel} from './script-filter.js';
 import { timelineModel, mountTimeline, timelinePreferences } from './story-timeline.js';
 import { mountWorkspaces } from './workspaces.js';
-import { splitAtCaret, screenplayToolbar, sluglineFields, characterNames } from './screenplay-editor.js';
+import { splitAtCaret, screenplayToolbar, sluglineFields, characterNames, screenplaySelection, restoreScreenplaySelection } from './screenplay-editor.js';
 import {dialogueSeed} from './dialogue-rules.js';
 import { splitBeat, scriptSegments, heading, captureRevision, restoreRevision } from './workspace-model.js';
 import { mergeDocuments } from './merge.js';
@@ -40,6 +40,12 @@ function setServer() {
 }
 const history = [];
 const future = [];
+const historyFocus=new WeakMap();let beforeInputFocus=null;
+let lastHistoryKey=null,lastHistoryTime=0;
+function captureWriterFocus(){const root=document.activeElement;if(!root?.isContentEditable)return null;let selector;if(root.matches('.continuous-editor'))selector='.continuous-editor';else if(root.closest('[data-note-id]'))selector='[data-note-id="'+CSS.escape(root.closest('[data-note-id]').dataset.noteId)+'"] .note-content';else if(root.closest('.beat-popup[data-beat-id]'))selector='.beat-popup[data-beat-id="'+CSS.escape(root.closest('.beat-popup').dataset.beatId)+'"] [data-field="snippet-editor"]';else return null;const desk=root.closest('.continuous-desk');return {selector,bookmark:screenplaySelection(root),scroll:desk?{x:desk.scrollLeft,y:desk.scrollTop}:null};}
+function restoreWriterFocus(saved){const root=saved&&document.querySelector(saved.selector);if(!root||!restoreScreenplaySelection(root,saved.bookmark))return;const desk=root.closest('.continuous-desk');if(desk&&saved.scroll){desk.scrollLeft=saved.scroll.x;desk.scrollTop=saved.scroll.y;}}
+document.addEventListener('beforeinput',()=>{beforeInputFocus=captureWriterFocus();},true);
+document.addEventListener('keydown',event=>{if(!doc||event.isComposing||event.target.isComposing||!(event.ctrlKey||event.metaKey)||['INPUT','TEXTAREA'].includes(event.target.tagName))return;const key=event.key.toLowerCase();if(key!=='z'&&!(key==='y'&&event.ctrlKey&&!event.metaKey))return;event.preventDefault();event.stopImmediatePropagation();if(key==='y'||event.shiftKey)restoreHistory(future,history);else restoreHistory(history,future);},true);
 const status = text => { $('status').textContent = text; };
 function element(tag, text, className) { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (className) e.className = className; return e; }
 function list(value) { return [...new Set(value.split(',').map(s => s.trim()).filter(Boolean))]; }
@@ -169,17 +175,20 @@ function compileSnippets() {
     scene.characters = [...new Set(active.flatMap(b => b.characters))].sort();
   }
 }
-function edit(action) {
+function edit(action,historyKey=null) {
   if (!doc || current.access === 'reader') return false;
   const previous = clone(doc);
-  try { action(); syncSceneMetadata(doc);validateSceneModel(doc);validateInclusion(doc); validateBoard(board(), new Set(doc.project.beats.map(s => s.id))); compileSnippets(); if (equal(previous, doc)) return true; history.push(previous); future.length = 0; if (history.length > 40) history.shift(); dirty = true; saveLocal().catch(e => status(`Local save failed: ${e.message}`)); render(); clearTimeout(timer); timer = setTimeout(sync, 800); return true; }
+  historyFocus.set(previous,beforeInputFocus||captureWriterFocus());beforeInputFocus=null;
+  try { action(); syncSceneMetadata(doc);validateSceneModel(doc);validateInclusion(doc); validateBoard(board(), new Set(doc.project.beats.map(s => s.id))); compileSnippets(); if (equal(previous, doc)) return true; const now=Date.now(),key=historyKey||(document.activeElement?.matches('.note-content')?'note:'+document.activeElement.closest('[data-note-id]')?.dataset.noteId:null);if(!key||key!==lastHistoryKey||now-lastHistoryTime>=1000||future.length)history.push(previous);lastHistoryKey=key;lastHistoryTime=now;future.length = 0; if (history.length > 40) history.shift(); dirty = true; saveLocal().catch(e => status(`Local save failed: ${e.message}`)); render(); clearTimeout(timer); timer = setTimeout(sync, 800); return true; }
   catch (error) { doc = previous; render(); status(error.message); return false; }
 }
 function restoreHistory(from, to) {
   if (!doc || current.access === 'reader' || !from.length) return;
-  to.push(clone(doc)); doc = from.pop(); dirty = true;
+  lastHistoryKey=null;
+  const fallback=captureWriterFocus(),next=clone(doc);historyFocus.set(next,fallback);to.push(next); doc = from.pop(); dirty = true;
   refreshEditors(true);
   saveLocal().catch(e => status(`Local save failed: ${e.message}`)); render(); clearTimeout(timer); timer = setTimeout(sync, 800);
+  restoreWriterFocus(historyFocus.get(doc)||fallback);
 }
 async function sync() {
   if (current?.local) {
@@ -724,6 +733,7 @@ $('canvas').addEventListener('contextmenu',event=>{
   if(beat){
     if(!selectedBeats.has(beat.id)){selectedBeats=new Set([beat.id]);selected=beat.id;}
     item('Edit Beat',()=>openEditor(beat.id));item('Jump to Script',()=>{$('script').hidden=false;const text=document.querySelector(`[data-script-beat="${beat.id}"]`);if(text){text.closest('.script-beat-body').hidden=false;text.scrollIntoView({block:'start'});}});
+    item('Duplicate Beat',()=>{let id;edit(()=>{id=duplicateBeat(doc,beat.id);});if(id)choose(id);},uneditable||beat.locked);
     if(block?.containerKind==='beatGroup')item('Split Group Here',()=>edit(()=>{doc.project.frontstageWhiteboard=splitGroupAt(board(),beat.id);}),uneditable||beat.locked);
     item('Group Selected Beats',()=>edit(()=>{doc.project.frontstageWhiteboard=groupBeats(board(),selectedBeats,uuid());}),uneditable||beat.locked);
     item('Create Dependency From',()=>{source=beat.id;status('Select the effect beat');},uneditable||beat.locked);
@@ -761,6 +771,7 @@ $('logout').onclick = async () => { await saveLocal(); ++documentEpoch; clearTim
 $('back').onclick = async () => { await saveLocal(); closeEditors(); editorID = null; (localMode ? loadLocalProjects() : loadProjects()).catch(e => status(e.message)); };
 $('save').onclick = sync; $('download').onclick = download; $('export-conflict').onclick = download;
 $('undo').onclick = () => restoreHistory(history, future); $('redo').onclick = () => restoreHistory(future, history);
+for(const id of ['undo','redo'])$(id).addEventListener('pointerdown',event=>event.preventDefault());
 $('board-actions').onchange = () => {
   const action = $('board-actions').value; $('board-actions').value = '';
   if (action === 'marker') { editMarker(); return; }
@@ -803,6 +814,7 @@ setInterval(async () => {
 }, 5000);
 
 const workspaces = mountWorkspaces({
+  undo:()=>restoreHistory(history,future),redo:()=>restoreHistory(future,history),
   createConvertedCopy: document=>createLocalProject(document.name,document),
   document: () => doc, current: () => current, edit, status, cleanHTML, plain,
   selectedBeat: () => selected,

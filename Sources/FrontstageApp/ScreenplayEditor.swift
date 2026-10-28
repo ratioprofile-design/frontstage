@@ -12,6 +12,8 @@ final class ScreenplayEditorController: ObservableObject {
     var contentWidth: CGFloat = 432
     var typography = ScriptLayoutSettings()
     var completionRequest: (() -> Void)?
+    var projectUndo: (() -> Void)?
+    var projectRedo: (() -> Void)?
     func measure() {
         guard let textView, let container = textView.textContainer, let manager = textView.layoutManager else { return }
         manager.ensureLayout(for: container)
@@ -62,7 +64,7 @@ final class ScreenplayEditorController: ObservableObject {
     func format(_ element: ScreenplayElement) {
         guard let textView, textView.isEditable, !textView.hasMarkedText() else { return }
         textView.window?.makeFirstResponder(textView)
-        let selection = textView.selectedRange()
+        var selection = textView.selectedRange()
         let range = (textView.string as NSString).paragraphRange(for: selection)
         if range.length > 0, element != .sceneHeading,
            textView.attributedString().attribute(NSAttributedString.Key("FrontstageSceneHeading"), at: range.location, effectiveRange: nil) != nil {
@@ -75,6 +77,17 @@ final class ScreenplayEditorController: ObservableObject {
             let replacement = NSMutableAttributedString(attributedString: textView.attributedString().attributedSubstring(from: range))
             ScreenplayTypography.apply(element, to: replacement,
                 range: NSRange(location: 0, length: replacement.length), width: contentWidth, settings: typography)
+            if element == .parenthetical {
+                let value = replacement.string.trimmingCharacters(in: .newlines), empty = value.trimmingCharacters(in: .whitespaces).isEmpty
+                let attributes = replacement.attributes(at: 0, effectiveRange: nil)
+                if empty {
+                    replacement.replaceCharacters(in: NSRange(location: 0, length: value.utf16.count), with: NSAttributedString(string: "()", attributes: attributes))
+                    selection = NSRange(location: range.location + 1, length: 0)
+                } else {
+                    if !value.hasSuffix(")") { replacement.insert(NSAttributedString(string: ")", attributes: attributes), at: value.utf16.count) }
+                    if !value.hasPrefix("(") { replacement.insert(NSAttributedString(string: "(", attributes: attributes), at: 0); selection.location += 1 }
+                }
+            }
             // NSTextView's insertion API participates in native undo, unlike direct storage mutations.
             textView.insertText(replacement, replacementRange: range)
             textView.setSelectedRange(selection)
@@ -84,6 +97,20 @@ final class ScreenplayEditorController: ObservableObject {
         if source.length > 0, let owner = source.attribute(ScriptHeadingEditing.owner, at: min(selection.location, source.length - 1), effectiveRange: nil) { typing[ScriptHeadingEditing.owner] = owner }
         textView.typingAttributes = typing
         activeElement = element
+        if range.length == 0, element == .parenthetical { textView.insertText(NSAttributedString(string: "()", attributes: typing), replacementRange: selection); textView.setSelectedRange(NSRange(location: selection.location + 1, length: 0)) }
+    }
+
+    func handleParentheticalInput(_ value: String?, range: NSRange, in text: NSTextView) -> Bool {
+        guard text.isEditable, !text.hasMarkedText(), range.length == 0 else { return false }
+        let source = text.string as NSString, paragraph = source.paragraphRange(for: range)
+        selectionChanged()
+        if activeElement == .parenthetical, source.substring(with: paragraph).trimmingCharacters(in: .newlines) == "()", range.location == paragraph.location + 1, let value, value.hasPrefix("(") {
+            if value != "(" { let wrapped = ScreenplayParenthetical.wrapped(value); text.insertText(wrapped, replacementRange: NSRange(location: paragraph.location, length: 2)); text.setSelectedRange(NSRange(location: paragraph.location + wrapped.utf16.count - 1, length: 0)) }
+            return true
+        }
+        if value == "(", activeElement == .dialogue, source.substring(with: paragraph).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { format(.parenthetical); return true }
+        if value == ")", activeElement == .parenthetical, range.location < source.length, source.character(at: range.location) == 41 { text.setSelectedRange(NSRange(location: range.location + 1, length: 0)); return true }
+        return false
     }
 
     func insertCue(_ value: String, element: ScreenplayElement) {
@@ -108,6 +135,14 @@ final class ScreenplayEditorController: ObservableObject {
     @discardableResult
     func handleCommand(_ selector: Selector, in textView: NSTextView) -> Bool {
         guard textView.isEditable, !textView.hasMarkedText() else { return false }
+        selectionChanged()
+        if selector == #selector(NSResponder.deleteBackward(_:)), activeElement == .parenthetical {
+            let selection = textView.selectedRange(), paragraph = (textView.string as NSString).paragraphRange(for: selection)
+            if selection.length == 0, selection.location == paragraph.location + 1,
+               (textView.string as NSString).substring(with: paragraph).trimmingCharacters(in: .newlines) == "()" {
+                textView.insertText("", replacementRange: NSRange(location: paragraph.location, length: 2)); format(.dialogue); return true
+            }
+        }
         let key: String
         switch selector {
         case #selector(NSResponder.insertTab(_:)): key = "Tab"
@@ -116,14 +151,26 @@ final class ScreenplayEditorController: ObservableObject {
         default: return false
         }
         selectionChanged()
+        if key == "Enter", activeElement == .parenthetical {
+            let line = (textView.string as NSString).paragraphRange(for: textView.selectedRange())
+            let value = (textView.string as NSString).substring(with: line).trimmingCharacters(in: .newlines)
+            if !ScreenplayParenthetical.isEmpty(value), ScreenplayParenthetical.wrapped(value) != value { format(.parenthetical) }
+        }
         let selected = textView.selectedRange()
         let source = textView.attributedString(), string = source.string as NSString
         let paragraph = string.paragraphRange(for: NSRange(location: selected.location, length: 0))
-        let empty = string.substring(with: paragraph).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let value = string.substring(with: paragraph).trimmingCharacters(in: .newlines)
+        let empty = activeElement == .parenthetical ? ScreenplayParenthetical.isEmpty(value) : value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let decision = ScreenplayCommand.resolve(element: activeElement, key: key, empty: empty, selection: selected.length > 0)
         if decision.placement == .suggestions { completionRequest?(); return true }
         textView.undoManager?.beginUndoGrouping(); defer { textView.undoManager?.endUndoGrouping() }
-        if decision.placement == .inPlace { format(decision.element); return true }
+        if decision.placement == .inPlace {
+            if activeElement == .parenthetical, empty, decision.element != .parenthetical {
+                textView.insertText("", replacementRange: NSRange(location: paragraph.location, length: value.utf16.count))
+                textView.setSelectedRange(NSRange(location: paragraph.location, length: 0))
+            }
+            format(decision.element); return true
+        }
         let next = decision.element
         var attributes = ScreenplayTypography.attributes(next, width: contentWidth, settings: typography)
         let owner = source.length > 0 ? source.attribute(ScriptHeadingEditing.owner, at: min(paragraph.location, source.length - 1), effectiveRange: nil) : nil
@@ -150,6 +197,7 @@ final class ScreenplayEditorController: ObservableObject {
         }
         textView.typingAttributes = attributes
         activeElement = next
+        if next == .parenthetical { format(.parenthetical) }
         return true
     }
 }
@@ -157,6 +205,15 @@ final class ScreenplayEditorController: ObservableObject {
 class ScreenplayTextView: NSTextView {
     weak var screenplayController: ScreenplayEditorController?
     var splitScene: (() -> Void)?
+    var duplicateBeat: (() -> Void)?
+    var openBeat: (() -> Void)?
+    private func historyKey(_ event: NSEvent) -> Bool {
+        guard event.modifierFlags.contains(.command), event.charactersIgnoringModifiers?.lowercased() == "z", !hasMarkedText(), let controller = screenplayController else { return false }
+        let action = event.modifierFlags.contains(.shift) ? controller.projectRedo : controller.projectUndo
+        guard let action else { return false }; action(); return true
+    }
+    override func performKeyEquivalent(with event: NSEvent) -> Bool { historyKey(event) || super.performKeyEquivalent(with: event) }
+    override func keyDown(with event: NSEvent) { if !historyKey(event) { super.keyDown(with: event) } }
     var continuationSeed: String?
     var continuationFlags: [String: [Bool]]?
     var continuationTokens = [DialoguePresentationToken]()
@@ -169,6 +226,10 @@ class ScreenplayTextView: NSTextView {
     }
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = super.menu(for: event) ?? NSMenu()
+        if screenplayController?.projectUndo != nil {
+            let undo = NSMenuItem(title: "Undo", action: #selector(undoProjectContext), keyEquivalent: ""); undo.target = self; menu.addItem(undo)
+            let redo = NSMenuItem(title: "Redo", action: #selector(redoProjectContext), keyEquivalent: ""); redo.target = self; menu.addItem(redo)
+        }
         let styles = NSMenuItem(title: "Paragraph Style", action: nil, keyEquivalent: "")
         let submenu = NSMenu()
         for element in ScreenplayElement.editable {
@@ -180,8 +241,14 @@ class ScreenplayTextView: NSTextView {
             let split = NSMenuItem(title: "Split scene at cursor", action: #selector(splitWriteScene), keyEquivalent: "")
             split.target = self; split.isEnabled = isEditable; menu.addItem(split)
         }
+        if duplicateBeat != nil { let item = NSMenuItem(title: "Duplicate Beat", action: #selector(duplicateWriteBeat), keyEquivalent: ""); item.target = self; item.isEnabled = isEditable; menu.addItem(item) }
+        if openBeat != nil { let item = NSMenuItem(title: "Open Beat Editor", action: #selector(openWriteBeat), keyEquivalent: ""); item.target = self; menu.addItem(item) }
         return menu
     }
+    @objc private func undoProjectContext() { screenplayController?.projectUndo?() }
+    @objc private func redoProjectContext() { screenplayController?.projectRedo?() }
+    @objc private func duplicateWriteBeat() { duplicateBeat?() }
+    @objc private func openWriteBeat() { openBeat?() }
     @objc private func splitWriteScene() { if let splitCaret { setSelectedRange(splitCaret) }; splitScene?() }
     @objc private func applyParagraph(_ sender: NSMenuItem) {
         if let value = sender.representedObject as? String, let element = ScreenplayElement(rawValue: value) { screenplayController?.format(element) }
@@ -385,6 +452,7 @@ struct ScreenplayEditor: NSViewRepresentable {
 
         func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange,
                       replacementString: String?) -> Bool {
+            if !loading, controller.handleParentheticalInput(replacementString, range: affectedCharRange, in: textView) { return false }
             if !loading { pendingElement = controller.activeElement; offerCompletions = replacementString?.isEmpty == false && replacementString?.contains("\n") != true }
             return true
         }

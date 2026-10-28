@@ -17,6 +17,10 @@ struct FrontstageApp: App {
                 .onAppear { delegate.workspace = workspace; workspace.checkRecovery() }
         }
         .commands {
+            CommandGroup(replacing: .undoRedo) {
+                Button("Undo", action: workspace.undoProject).keyboardShortcut("z").disabled(!workspace.history.canUndo)
+                Button("Redo", action: workspace.redoProject).keyboardShortcut("z", modifiers: [.command, .shift]).disabled(!workspace.history.canRedo)
+            }
             CommandGroup(replacing: .newItem) {
                 Button("New Project", action: workspace.newProject).keyboardShortcut("n")
                 Button("Open or Import…", action: workspace.open).keyboardShortcut("o")
@@ -116,7 +120,14 @@ final class Workspace: ObservableObject {
     private var scriptEditors: [String: ScreenplayEditorController] = [:]
     func scriptController(_ id: String) -> ScreenplayEditorController {
         if let controller = scriptEditors[id] { return controller }
-        let controller = ScreenplayEditorController(); scriptEditors[id] = controller; return controller
+        let controller = ScreenplayEditorController()
+        controller.projectUndo = { [weak self] in self?.undoProject() }; controller.projectRedo = { [weak self] in self?.redoProject() }
+        scriptEditors[id] = controller; return controller
+    }
+    func duplicateBeat(_ id: String) {
+        var created: String?
+        edit("Duplicate Beat") { created = try $0.duplicateBoardBeat(id) }
+        if let created { selectBoardBeat(created) }
     }
     @Published var timelineDetached = false
     let timelineWindow = TimelineWindowPresenter()
@@ -129,7 +140,10 @@ final class Workspace: ObservableObject {
     private var checkedRecovery = false
     private var recoveryBlocked = false
 
-    init(recoveryStore: RecoveryStore? = nil) { self.recoveryStore = recoveryStore }
+    init(recoveryStore: RecoveryStore? = nil) {
+        self.recoveryStore = recoveryStore
+        editor.projectUndo = { [weak self] in self?.undoProject() }; editor.projectRedo = { [weak self] in self?.redoProject() }
+    }
 
     func checkRecovery() {
         guard !checkedRecovery else { return }
@@ -201,6 +215,7 @@ final class Workspace: ObservableObject {
     }
 
     func undoProject() {
+        guard sharedProjects.linked?.access != "reader" else { return }
         guard let previous = history.undo(current: project) else { return }
         project = previous
         reconcileSelection()
@@ -208,6 +223,7 @@ final class Workspace: ObservableObject {
     }
 
     func redoProject() {
+        guard sharedProjects.linked?.access != "reader" else { return }
         guard let next = history.redo(current: project) else { return }
         project = next
         reconcileSelection()
@@ -500,6 +516,8 @@ struct WorkspaceView: View {
             }
         }
         ToolbarItemGroup {
+            Button("Undo", systemImage: "arrow.uturn.backward", action: workspace.undoProject).disabled(!workspace.history.canUndo)
+            Button("Redo", systemImage: "arrow.uturn.forward", action: workspace.redoProject).disabled(!workspace.history.canRedo)
             Picker("View", selection: $workspace.mode) {
                 ForEach(Workspace.Mode.allCases, id: \.self) { mode in Text(mode.rawValue).tag(mode) }
             }.pickerStyle(.menu).frame(width: 140)

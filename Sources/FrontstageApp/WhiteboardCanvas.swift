@@ -517,12 +517,14 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
     }
     override func keyUp(with event: NSEvent) { if event.keyCode == 49 { spaceHeld = false } else { super.keyUp(with: event) } }
 
+    @objc private func duplicateContextBeat() { if let id = contextBeat { workspace?.duplicateBeat(id) } }
     override func rightMouseDown(with event: NSEvent) {
         contextPoint = world(convert(event.locationInWindow, from: nil))
         contextBeat = geometry.hitBeat(contextPoint); contextBlock = hitBlock(contextPoint)
         let menu = NSMenu()
         func item(_ name: String, _ action: Selector) { let item = NSMenuItem(title: name, action: action, keyEquivalent: ""); item.target = self; menu.addItem(item) }
         if contextBeat != nil {
+            item("Duplicate Beat", #selector(duplicateContextBeat))
             item("Group Selected Beats", #selector(groupBeatContext)); item("Edit Beat…", #selector(editContextBeat)); item("Jump To Snippet", #selector(jumpToSnippet)); item("Show In Research", #selector(showResearch))
             menu.addItem(.separator()); item("Create Cause", #selector(createCause)); item("Create Dependency From", #selector(startDependency))
             item("Must Be Caused", #selector(toggleRequired)); item("Split Beat at Cursor…", #selector(splitContext))

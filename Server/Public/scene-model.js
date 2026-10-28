@@ -2,6 +2,18 @@ import {blockLocked} from './board-operations.js';
 const clone=value=>structuredClone(value);
 export const sceneModel='oneBeatPerScene';
 export const conversionCategories={notes:['notes'],breakdown:['breakdown','breakdownData'],attachments:['attachments'],production:['productionNotes','shootingNotes']};
+export function duplicateBeat(document,id){
+ const p=document.project,b=p.frontstageWhiteboard,original=b.beats.find(beat=>beat.id===id),scene=p.beats.find(s=>s.id===original?.sceneID);
+ if(!original||!scene||original.locked||blockLocked(b,original.blockID)||scene.frontstageTextLocked)throw Error('Choose an unlocked beat to duplicate.');
+ const copy=clone(original),next=clone(scene),sceneID=Math.max(p.nextId||1,...p.beats.map(s=>s.id+1));
+ copy.id=crypto.randomUUID();copy.sceneID=sceneID;copy.title+=' copy';next.id=sceneID;next.title=copy.title;next.summary=copy.synopsis||'';next.content=copy.html;
+ for(const key of ['sceneNumber','versions','frontstageLegacySceneID'])delete next[key];
+ const newIDs=list=>Array.isArray(list)?list.map(item=>item&&typeof item==='object'&&item.id!=null?{...item,id:crypto.randomUUID()}:item):list;
+ if(next.notes)next.notes=newIDs(next.notes);for(const key of ['breakdown','breakdownData'])if(next[key]&&typeof next[key]==='object'&&!Array.isArray(next[key]))next[key]=Object.fromEntries(Object.entries(next[key]).map(([category,items])=>[category,newIDs(items)]));
+ const ordered=[...b.beats].sort((a,b)=>a.order-b.order),index=ordered.findIndex(beat=>beat.id===id);copy.order=(original.order+(ordered[index+1]?.order??original.order+2))/2;copy.start=original.start+original.duration;
+ const block=b.blocks.find(block=>block.id===copy.blockID);if(block?.standalone){const container=clone(block);container.id=crypto.randomUUID();container.position.x+=24;container.position.y+=64;b.blocks.push(container);copy.blockID=container.id;}else if(copy.position)copy.position={x:copy.position.x+24,y:copy.position.y+48};
+ p.beats.push(next);p.nextId=sceneID+1;b.beats.push(copy);syncSceneMetadata(document);validateSceneModel(document);return copy.id;
+}
 export function isSceneModel(document){return document.project.frontstageSceneModel===sceneModel;}
 export function validateSceneModel(document){
  const p=document.project;if(!isSceneModel(document))return;

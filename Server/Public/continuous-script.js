@@ -1,7 +1,7 @@
 import {pullOutBeats,replaceDocument} from './script-inclusion.js';
 import * as model from './workspace-model.js';
 import {blockLocked} from './board-operations.js';
-import {screenplayToolbar,characterNames,elements} from './screenplay-editor.js';
+import {screenplayToolbar,characterNames,elements,screenplaySelection,restoreScreenplaySelection} from './screenplay-editor.js';
 import {decorateDialogue,projectDialogue} from './dialogue-rules.js';
 export function parseHeading(text){const source=text.trim().toUpperCase(),prefix=['INT./EXT.','EXT./INT.','INT.','EXT.','I/E.'].find(p=>source.startsWith(p))||'',rest=source.slice(prefix.length).trim(),split=[...rest.matchAll(/\s+[-–—]\s*/g)].at(-1);return {prefix,location:split?rest.slice(0,split.index):rest,time:split?rest.slice(split.index+split[0].length):''};}
 export function applyScriptDocument(document,html,headings){const b=model.board(document);for(const[id,value]of Object.entries(html)){const beat=b.beats.find(b=>b.id===id);if(!beat)throw Error('A screenplay beat no longer exists.');if(beat.html!==value&&(beat.locked||beat.omitted||blockLocked(b,beat.blockID)||model.scene(document,beat.sceneID).frontstageTextLocked))throw Error('This selection contains locked or inactive text.');}for(const[id,text]of Object.entries(headings)){const s=document.project.beats.find(s=>String(s.id)===id);if(!s)throw Error('Scene no longer exists.');const heading=parseHeading(text);if(s.frontstageTextLocked&&JSON.stringify(heading)!==JSON.stringify({prefix:s.slug?.prefix||'',location:s.slug?.location||'',time:s.slug?.time||''}))throw Error('Unlock the scene heading first.');s.slug={...s.slug,...heading};}for(const[id,value]of Object.entries(html))b.beats.find(b=>b.id===id).html=value;}
@@ -22,7 +22,7 @@ export function mountContinuousScript(sheet, api) {
   const visible = new Set(), headingIDs = new Set();
   const dialogueCache=new Map();
   const refreshDialogue=()=>decorateDialogue(sheet,null,projectDialogue(api.document(),dialogueCache).flags);
-  let composing = false, committing = false, lastOwner = null, pendingPullouts = new Set(), pendingHeading = null;
+  let composing = false, committing = false, lastOwner = null, pendingPullouts = new Set(), pendingHeading = null, beforeEditSelection=null;
   const board = () => model.board(api.document());
   const beatFor = id => board().beats.find(beat => beat.id === id);
   const locked = beat => !beat || beat.locked || blockLocked(board(), beat.blockID) || model.scene(api.document(), beat.sceneID).frontstageTextLocked;
@@ -104,7 +104,15 @@ export function mountContinuousScript(sheet, api) {
     if(api.readonly()||composing||sheet.isComposing)return;event.preventDefault();document.querySelector('.write-script-menu')?.remove();
     if(contextCaret&&sheet.contains(contextCaret.startContainer)){getSelection().removeAllRanges();getSelection().addRange(contextCaret);}
     const menu=document.createElement('div');menu.className='write-script-menu';menu.setAttribute('role','menu');menu.style.left=event.clientX+'px';menu.style.top=event.clientY+'px';
-    const item=document.createElement('button');item.textContent='Split scene at cursor';item.setAttribute('role','menuitem');item.onmousedown=e=>e.preventDefault();item.onclick=()=>{menu.remove();try{splitScene();}catch(e){api.status(e.message);}};menu.append(item);document.body.append(menu);
+    const target=event.target.closest('[data-beat-id]'),id=target?.dataset.beatId||paragraph()?.dataset.beatId;
+    const item=(label,action)=>{const button=document.createElement('button');button.textContent=label;button.setAttribute('role','menuitem');button.onmousedown=e=>e.preventDefault();button.onclick=()=>{menu.remove();try{action();}catch(e){api.status(e.message);}};menu.append(button);};
+    item('Undo',()=>api.undo?.());item('Redo',()=>api.redo?.());
+    for(const command of ['cut','copy'])item(command[0].toUpperCase()+command.slice(1),()=>{if(!document.execCommand(command))api.status('Use Command/Ctrl+'+(command==='cut'?'X':'C')+'.');});
+    item('Paste',async()=>{try{const value=await navigator.clipboard.readText();sheet.focus({preventScroll:true});if(contextCaret?.startContainer.isConnected){getSelection().removeAllRanges();getSelection().addRange(contextCaret);}document.execCommand('insertText',false,value);}catch{api.status('Use Command/Ctrl+V to paste into the screenplay.');}});
+    item('Select All',()=>{sheet.focus({preventScroll:true});const range=document.createRange();range.selectNodeContents(sheet);getSelection().removeAllRanges();getSelection().addRange(range);});
+    for(const kind of elements)item(kind==='slugline'?'Scene Heading':kind[0].toUpperCase()+kind.slice(1),()=>behavior.format(kind));
+    item('Split scene at cursor',splitScene);item('Duplicate Beat',()=>{if(id)api.duplicate?.(id);});item('Open Beat Editor',()=>{if(id)api.open?.(id);});
+    document.body.append(menu);const bounds=menu.getBoundingClientRect();menu.style.top=Math.max(4,Math.min(event.clientY,innerHeight-bounds.height-4))+'px';menu.style.left=Math.max(4,Math.min(event.clientX,innerWidth-bounds.width-4))+'px';
     setTimeout(()=>document.addEventListener('click',()=>menu.remove(),{once:true}),0);
   });
   function restoreHeadingAnchors(headings) {
@@ -120,9 +128,14 @@ export function mountContinuousScript(sheet, api) {
     }
   }
   let acceptedHTML = sheet.innerHTML;
+  const headingBaseline=new WeakMap();let bodyBaseline=new Map();
+  function acceptBaseline(){bodyBaseline=new Map();for(const node of sheet.children){if(node.dataset.headingScene)headingBaseline.set(node,node.textContent);else if(node.dataset.beatId)bodyBaseline.set(node.dataset.beatId,(bodyBaseline.get(node.dataset.beatId)||'')+api.cleanHTML(node.outerHTML));}}
+  acceptBaseline();
+  function rollback(bookmark){const desk=sheet.closest('.continuous-desk'),position=desk&&{x:desk.scrollLeft,y:desk.scrollTop};sheet.innerHTML=acceptedHTML;restoreScreenplaySelection(sheet,bookmark);if(position){desk.scrollLeft=position.x;desk.scrollTop=position.y;}acceptBaseline();}
   function commit() {
     if (composing || committing) return;
     committing = true;
+    const bookmark=beforeEditSelection||screenplaySelection(sheet);
     const placements = [], newHeadings = [];
     try {
       const headings = {};
@@ -137,7 +150,7 @@ export function mountContinuousScript(sheet, api) {
           if (node.dataset.headingScene) {
             const id=node.dataset.headingScene,scene=document.project.beats.find(scene=>String(scene.id)===id);
             // The edited occurrence wins over unchanged legacy repetitions.
-            if (!(id in headings) || node===paragraph()) headings[id]=node.textContent;
+            if (node.textContent!==headingBaseline.get(node)&&(!(id in headings)||node===paragraph())) headings[id]=node.textContent;
             continue;
           }
           if (node.classList.contains('sc-slugline') && node.textContent.trim()) {
@@ -151,10 +164,11 @@ export function mountContinuousScript(sheet, api) {
             placements.push({node, id: owner});
           }
         }
-        applyScriptDocument(document, html, headings);
+        const changedHTML=Object.fromEntries(Object.entries(html).filter(([id,value])=>value!==bodyBaseline.get(id)));
+        applyScriptDocument(document, changedHTML, headings);
         if (pendingPullouts.size) replaceDocument(document, pullOutBeats(document, pendingPullouts));
       });
-      if (success === false) { sheet.innerHTML = acceptedHTML; return; }
+      if (success === false) { rollback(bookmark); return; }
       for (const {node,id} of placements) node.dataset.beatId = id;
       for (const {node,id,sceneID} of newHeadings) {
         node.dataset.beatId = id; node.dataset.headingScene = sceneID;
@@ -163,8 +177,9 @@ export function mountContinuousScript(sheet, api) {
       for (const id of pendingPullouts) visible.delete(id);
       syncHeadings(paragraph());
       acceptedHTML = sheet.innerHTML;
-    } catch (error) { sheet.innerHTML = acceptedHTML; api.status(error.message); }
-    finally { pendingPullouts.clear(); committing = false; refreshDialogue();select(); }
+      acceptBaseline();
+    } catch (error) { rollback(bookmark); api.status(error.message); }
+    finally { beforeEditSelection=null;pendingPullouts.clear(); committing = false; refreshDialogue();select(); }
   }
   const behavior = screenplayToolbar(sheet, commit, !api.readonly(), () => characterNames(api.document(),paragraph()?.dataset.beatId), () => api.document().project.beats.filter(s=>String(s.id)!==paragraph()?.dataset.headingScene).map(inlineHeading), {continuationFlags:()=>projectDialogue(api.document(),dialogueCache).flags}).editor;
   sheet.addEventListener('compositionstart', () => { composing = true; sheet.isComposing = true; });
@@ -205,6 +220,7 @@ export function mountContinuousScript(sheet, api) {
   }, true);
   sheet.addEventListener('beforeinput', event => {
     if (composing) return;
+    beforeEditSelection??=screenplaySelection(sheet);
     const selection = getSelection(); if (!selection?.rangeCount) return;
     const range = selection.getRangeAt(0), touched = [...sheet.children].filter(node => range.intersectsNode(node));
     if (touched.some(node => locked(beatFor(node.dataset.beatId)))) {

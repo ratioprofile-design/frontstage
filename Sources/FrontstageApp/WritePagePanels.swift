@@ -138,6 +138,7 @@ struct SimpleWriteBeatCard: View {
     @ViewBuilder private var actions: some View {
         Button("Edit title") { begin("title") }.disabled(locked)
         Button("Edit summary") { begin("synopsis") }.disabled(locked)
+        Button("Duplicate Beat") { workspace.duplicateBeat(beat.id) }.disabled(locked)
         Button("Pull Out Scene") { workspace.edit("Pull Out Scene") { try $0.pullOutBeats([beat.id]) } }.disabled(locked)
     }
     private func begin(_ field: String) { guard !locked else { return }; editing = field; draft = field == "title" ? beat.title : beat.synopsis; focused = true }

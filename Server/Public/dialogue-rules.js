@@ -1,5 +1,7 @@
 // Keep the pure rules in parity with FrontstageCore/ScreenplayWritingRules.swift.
 export const screenplayElements=['action','character','dialogue','parenthetical','transition','shot','lyrics','slugline'];
+export const wrappedParenthetical=source=>!source.trim()?'()':(source.startsWith('(')?'':'(')+source+(source.endsWith(')')?'':')');
+export const emptyParenthetical=source=>!source.replace(/[()]/g,'').trim();
 export const voiceExtensions=['(V.O.)','(O.S.)','(O.C.)',"(CONT'D)"];
 export const deliveryNotes=['(beat)','(quietly)','(over the phone)','(whispering)','(to himself)','(to herself)','(into phone)'];
 export const headingTimes=['DAY','NIGHT','MORNING','AFTERNOON','EVENING','DAWN','DUSK','LATER','CONTINUOUS','SAME TIME'];
@@ -45,7 +47,7 @@ export function characterCompletions(source,caret,names=[]){
  const start=source.indexOf('('),end=(start<0?source:source.slice(0,start)).trimEnd().length;
  return {start:0,end,values:matches(names.map(n=>characterCue(n).name),before)};
 }
-export function parentheticalCompletions(source){return {start:0,end:source.length,values:matches(deliveryNotes,source)};}
+export function parentheticalCompletions(source,caret=source.length){return {start:0,end:source.length,values:matches(deliveryNotes,source.slice(0,caret))};}
 export function paragraphKind(node){return screenplayElements.find(k=>node.classList?.contains('sc-'+k))||'action';}
 export function scriptParagraphs(root){
  const selector=screenplayElements.map(k=>'.sc-'+k).join(',');

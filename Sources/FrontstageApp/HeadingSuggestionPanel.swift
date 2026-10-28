@@ -34,7 +34,7 @@ final class HeadingSuggestionPanel: NSObject {
         switch kind {
         case .sceneHeading: completion = ScreenplayCompletionRules.heading(line as String, caret: offset, headings: headings)
         case .character: completion = ScreenplayCompletionRules.character(line as String, caret: offset, names: names)
-        case .parenthetical: completion = ScreenplayCompletionRules.parenthetical(line as String)
+        case .parenthetical: completion = ScreenplayCompletionRules.parenthetical(line as String, caret: offset)
         default:
             let typed = CharacterCue.normalized(line.substring(to: offset))
             completion = ScreenplayCompletion(start: 0, end: line.length, values: (supplied[kind] ?? []).filter { !typed.isEmpty && CharacterCue.normalized($0).hasPrefix(typed) && CharacterCue.normalized($0) != typed })

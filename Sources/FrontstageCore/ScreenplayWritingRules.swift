@@ -1,6 +1,13 @@
 import Foundation
 
 public enum ScreenplayCommandPlacement: String, Codable, Sendable { case inPlace, afterParagraph, split, suggestions, body }
+public enum ScreenplayParenthetical {
+    public static func wrapped(_ source: String) -> String {
+        if source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "()" }
+        return (source.hasPrefix("(") ? "" : "(") + source + (source.hasSuffix(")") ? "" : ")")
+    }
+    public static func isEmpty(_ source: String) -> Bool { source.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "(", with: "").replacingOccurrences(of: ")", with: "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+}
 public struct ScreenplayCommand: Equatable, Sendable {
     public let element: ScreenplayElement
     public let placement: ScreenplayCommandPlacement
@@ -100,7 +107,8 @@ public enum ScreenplayCompletionRules {
         while end > 0, let scalar = UnicodeScalar(text.character(at: end - 1)), CharacterSet.whitespaces.contains(scalar) { end -= 1 }
         return ScreenplayCompletion(start: 0, end: end, values: matches(names.map { CharacterCue($0).name }, before))
     }
-    public static func parenthetical(_ source: String) -> ScreenplayCompletion {
-        ScreenplayCompletion(start: 0, end: source.utf16.count, values: matches(CharacterCue.deliveryNotes, source))
+    public static func parenthetical(_ source: String, caret: Int? = nil) -> ScreenplayCompletion {
+        let text = source as NSString, prefix = text.substring(to: min(caret ?? text.length, text.length))
+        return ScreenplayCompletion(start: 0, end: source.utf16.count, values: matches(CharacterCue.deliveryNotes, prefix))
     }
 }

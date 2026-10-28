@@ -47,7 +47,8 @@ final class WriterTypingAcceptanceTests: XCTestCase {
             try Self.press(text, "\n"); XCTAssertEqual(Self.kind(text), .dialogue)
             let dialogueStart = text.selectedRange().location
             try Self.press(text, "\t"); XCTAssertEqual(Self.kind(text), .parenthetical)
-            XCTAssertEqual(text.selectedRange().location, dialogueStart)
+            XCTAssertEqual(text.selectedRange().location, dialogueStart + 1)
+            XCTAssertEqual((text.string as NSString).substring(with: NSRange(location: dialogueStart, length: 2)), "()")
             text.insertText("(custom delivery)", replacementRange: text.selectedRange())
             try Self.press(text, "\n"); XCTAssertEqual(Self.kind(text), .dialogue)
             let emptyStart = text.selectedRange().location, count = text.string.utf16.count

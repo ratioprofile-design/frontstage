@@ -47,6 +47,7 @@ final class BeatPopupPresenter: NSObject, NSWindowDelegate {
             return
         }
         let editor = ScreenplayEditorController()
+        editor.projectUndo = { [weak workspace] in workspace?.undoProject() }; editor.projectRedo = { [weak workspace] in workspace?.redoProject() }
         let panel = BeatEditorPanel(contentRect: NSRect(x: 0, y: 0, width: WorkspaceDesign.popupWidth, height: WorkspaceDesign.popupHeight),
             styleMask: [.titled, .closable, .resizable, .utilityWindow], backing: .buffered, defer: false)
         panel.title = "Edit Beat"

@@ -143,6 +143,16 @@ struct ContinuousScriptEditor: NSViewRepresentable {
         text.textContainerInset = NSSize(width: 60, height: 60); text.textContainer?.widthTracksTextView = false
         text.screenplayController = controller; text.delegate = context.coordinator; controller.textView = text
         text.splitScene = { [weak coordinator = context.coordinator, weak text] in if let text { coordinator?.splitAtCaret(text) } }
+        text.duplicateBeat = { [weak workspace, weak text] in
+            guard let workspace, let text, text.attributedString().length > 0,
+                  let id = text.attributedString().attribute(ownerKey, at: min(text.selectedRange().location, text.attributedString().length - 1), effectiveRange: nil) as? String else { return }
+            workspace.duplicateBeat(id)
+        }
+        text.openBeat = { [weak workspace, weak text] in
+            guard let workspace, let text, text.attributedString().length > 0,
+                  let id = text.attributedString().attribute(ownerKey, at: min(text.selectedRange().location, text.attributedString().length - 1), effectiveRange: nil) as? String else { return }
+            workspace.popup.open(id, workspace: workspace)
+        }
         text.revealBeat = { [weak coordinator = context.coordinator, weak text] id in if let text { coordinator?.reveal(id, in: text) } }
         controller.completionRequest = { [weak coordinator = context.coordinator, weak text] in if let text { coordinator?.showSuggestions(text) } }
         text.compositionFinished = { [weak coordinator = context.coordinator, weak text] in
@@ -449,7 +459,9 @@ struct ContinuousScriptEditor: NSViewRepresentable {
                     if owned.allSatisfy({ visible.contains($0.id) }) { pendingPullouts.formUnion(owned.map(\.id)) }
                 }
             }
-            if !allowed { workspace.errorMessage = "This selection contains locked text." }; return allowed
+            if !allowed { workspace.errorMessage = "This selection contains locked text." }
+            if allowed, controller.handleParentheticalInput(replacementString, range: range, in: textView) { return false }
+            return allowed
         }
     }
 }

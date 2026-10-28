@@ -9,6 +9,7 @@ import { blockLocked } from './board-operations.js';
 import { paginateParagraphs } from './pagination.js';
 import { screenplayToolbar, sluglineFields, characterNames, elements, splitAtCaret } from './screenplay-editor.js';
 import {decorateDialogue,dialogueSeed} from './dialogue-rules.js';
+import {duplicateBeat} from './scene-model.js';
 const el=(tag,text,className)=>{const e=document.createElement(tag);if(text!=null)e.textContent=text;if(className)e.className=className;return e;};
 const $=id=>document.getElementById(id);
 const download=(name,data,type='text/plain')=>{const url=URL.createObjectURL(new Blob([data],{type})),a=el('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
@@ -24,7 +25,7 @@ export function mountWorkspaces(api) {
 
   for(const p of design.pages){const o=el('option',p.title);o.value=p.id;selector.append(o);}
   const doc=()=>api.document(),state=()=>doc().project,scenes=()=>state().beats,currentScene=()=>scenes().find(s=>s.id===sceneID),readonly=()=>api.current()?.access==='reader';
-  const change=(action,refresh=false)=>{writing=true;let result;try{result=api.edit(()=>action(doc()));}finally{writing=false;}writePanels?.refreshMetadata?.();if(refresh)render();return result;};
+  const change=(action,refresh=false,key=null)=>{writing=true;let result;try{result=api.edit(()=>action(doc()),key);}finally{writing=false;}writePanels?.refreshMetadata?.();if(refresh)render();return result;};
   const button=(text,action,write=false)=>{const b=el('button',text);if(write)b.disabled=readonly();b.onclick=()=>{try{action();}catch(e){api.status(e.message);}};return b;};
   const field=(name,value,action,type='text')=>{const label=el('label',name,'workspace-field'),input=el(type==='textarea'?'textarea':'input');input.setAttribute('aria-label',name);input.placeholder=name;if(type==='textarea')input.rows=1;if(type!=='textarea')input.type=type;input.value=value??'';input.disabled=readonly();input.onchange=()=>change(d=>action(input.type==='number'?Number(input.value):input.value,d));label.append(input);return label;};
   const toggle=(name,value,action)=>{const l=el('label',null,'workspace-toggle'),input=el('input');input.type='checkbox';input.checked=!!value;input.disabled=readonly();input.onchange=()=>change(d=>action(input.checked,d),true);l.append(input,document.createTextNode(name));return l;};
@@ -85,7 +86,7 @@ export function mountWorkspaces(api) {
     let continuous=null;
     const elementBar=el('nav',null,'screenplay-element-bar');elementBar.setAttribute('aria-label','Screenplay elements');tools.after(elementBar);
     for(const kind of ['slugline',...elements.filter(k=>k!=='slugline')]){const b=button(kind==='slugline'?'Scene Heading':model.label(kind),()=>activeEditor?.format(kind));b.dataset.element=kind;b.onpointerdown=e=>{activeEditor?.remember();e.preventDefault();};elementBar.append(b);}
-    if(plain){continuous=mountContinuousScript(sheet,{document:doc,selection:api.selectedBeat,readonly,rebuild:render,cleanHTML:api.cleanHTML,change:action=>change(action),matches:beat=>matchesScriptFilter(beat,model.board(doc()),scenes(),scriptFilter.state),status:api.status,select:(sid,bid)=>{sceneID=sid;api.selectScene(sid,bid);writePanels?.select(sid,bid);activeEditor=continuous;enableFormatting(!readonly());},element:kind=>elementBar.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.element===kind)))});continuous.open=()=>{const id=api.selectedBeat();if(id)api.openBeat(id);};activeEditor=continuous;enableFormatting(!readonly());}
+    if(plain){continuous=mountContinuousScript(sheet,{document:doc,selection:api.selectedBeat,readonly,rebuild:render,cleanHTML:api.cleanHTML,change:action=>change(action,false,'writer:'+api.selectedBeat()),undo:api.undo,redo:api.redo,open:api.openBeat,duplicate:id=>{change(d=>duplicateBeat(d,id),true);},matches:beat=>matchesScriptFilter(beat,model.board(doc()),scenes(),scriptFilter.state),status:api.status,select:(sid,bid)=>{sceneID=sid;api.selectScene(sid,bid);writePanels?.select(sid,bid);activeEditor=continuous;enableFormatting(!readonly());},element:kind=>elementBar.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.element===kind)))});continuous.open=()=>{const id=api.selectedBeat();if(id)api.openBeat(id);};activeEditor=continuous;enableFormatting(!readonly());}
     if(scriptView.showOmitted){
       const preview=el('aside',null,'omitted-preview');preview.setAttribute('aria-label','Omitted beats preview');
       preview.append(el('h3','Omitted beats — outside the active screenplay'));
