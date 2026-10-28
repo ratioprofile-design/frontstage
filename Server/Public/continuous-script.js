@@ -99,7 +99,7 @@ export function mountContinuousScript(sheet, api) {
     if(result!==false){const beat=model.board(api.document()).beats.find(b=>b.id===created);api.select(beat.sceneID,created);api.rebuild?.();requestAnimationFrame(()=>{const node=document.querySelector('.continuous-editor>[data-beat-id="'+CSS.escape(created)+'"]');if(node){const editor=node.closest('.continuous-editor');editor.focus();const range=document.createRange();range.selectNodeContents(node);range.collapse(true);getSelection().removeAllRanges();getSelection().addRange(range);node.scrollIntoView({block:'nearest'});editor.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));}});}
   }
   let contextCaret;
-  sheet.addEventListener('pointerdown',event=>{if(event.button===2){const selection=getSelection();contextCaret=selection?.rangeCount&&selection.isCollapsed?selection.getRangeAt(0).cloneRange():null;}},true);
+  sheet.addEventListener('pointerdown',event=>{if(event.button===2){const selection=getSelection();contextCaret=selection?.rangeCount&&sheet.contains(selection.anchorNode)&&sheet.contains(selection.focusNode)?selection.getRangeAt(0).cloneRange():null;}},true);
   sheet.addEventListener('contextmenu',event=>{
     if(api.readonly()||composing||sheet.isComposing)return;event.preventDefault();document.querySelector('.write-script-menu')?.remove();
     if(contextCaret&&sheet.contains(contextCaret.startContainer)){getSelection().removeAllRanges();getSelection().addRange(contextCaret);}
@@ -113,7 +113,9 @@ export function mountContinuousScript(sheet, api) {
     for(const kind of elements)item(kind==='slugline'?'Scene Heading':kind[0].toUpperCase()+kind.slice(1),()=>behavior.format(kind));
     item('Split scene at cursor',splitScene);item('Duplicate Beat',()=>{if(id)api.duplicate?.(id);});item('Open Beat Editor',()=>{if(id)api.open?.(id);});
     document.body.append(menu);const bounds=menu.getBoundingClientRect();menu.style.top=Math.max(4,Math.min(event.clientY,innerHeight-bounds.height-4))+'px';menu.style.left=Math.max(4,Math.min(event.clientX,innerWidth-bounds.width-4))+'px';
-    setTimeout(()=>document.addEventListener('click',()=>menu.remove(),{once:true}),0);
+    const dismiss=()=>{menu.remove();document.removeEventListener('pointerdown',outside,true);document.removeEventListener('keydown',keys,true);};
+    const outside=e=>{if(!menu.contains(e.target))dismiss();},keys=e=>{if(e.key==='Escape'){e.preventDefault();dismiss();}};
+    menu.addEventListener('click',dismiss);document.addEventListener('pointerdown',outside,true);document.addEventListener('keydown',keys,true);
   });
   function restoreHeadingAnchors(headings) {
     for (const sceneID of headingIDs) {

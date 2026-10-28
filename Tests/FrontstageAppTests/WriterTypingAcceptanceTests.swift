@@ -57,6 +57,30 @@ final class WriterTypingAcceptanceTests: XCTestCase {
             XCTAssertFalse(text.string.contains("\n\n\n"))
         }
     }
+    func testHostedParentheticalPairBackspaceAndProjectHistory() async throws {
+        try await MainActor.run {
+            let (workspace, controller, window, text) = try Self.editor("<p class='sc-dialogue'><br></p>")
+            defer { window.close() }
+            let start = text.selectedRange().location
+            try Self.press(text, "\t")
+            XCTAssertEqual(Self.kind(text), .parenthetical)
+            XCTAssertEqual((text.string as NSString).substring(with: NSRange(location: start, length: 2)), "()")
+            XCTAssertEqual(text.selectedRange().location, start + 1)
+            XCTAssertTrue(controller.handleCommand(#selector(NSResponder.deleteBackward(_:)), in: text))
+            XCTAssertEqual(Self.kind(text), .dialogue)
+            XCTAssertFalse(text.string.contains("()"))
+            let originalCount = try workspace.project.whiteboard().beats.count
+            let id = try XCTUnwrap(workspace.project.whiteboard().beats.first?.id)
+            workspace.duplicateBeat(id)
+            XCTAssertEqual(try workspace.project.whiteboard().beats.count, originalCount + 1)
+            let undo = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.command], timestamp: 0, windowNumber: window.windowNumber, context: nil, characters: "z", charactersIgnoringModifiers: "z", isARepeat: false, keyCode: 6))
+            text.keyDown(with: undo)
+            XCTAssertEqual(try workspace.project.whiteboard().beats.count, originalCount)
+            let redo = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.command, .shift], timestamp: 0, windowNumber: window.windowNumber, context: nil, characters: "Z", charactersIgnoringModifiers: "z", isARepeat: false, keyCode: 6))
+            text.keyDown(with: redo)
+            XCTAssertEqual(try workspace.project.whiteboard().beats.count, originalCount + 1)
+        }
+    }
     func testFilledActionTabPreservesWholeParagraphAndSelectionFormatting() async throws {
         try await MainActor.run {
             let (_, controller, window, text) = try Self.editor("<p class='sc-action'>She walks across the room.</p>"); defer { window.close() }

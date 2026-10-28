@@ -35,6 +35,17 @@ try{
  assert.equal(await page.locator('.simple-beat-card').count(),3);
  await page.locator('#undo').click();assert.equal(await page.locator('.simple-beat-card').count(),2);
  await page.locator('#redo').click();assert.equal(await page.locator('.simple-beat-card').count(),3);
+ // The same operation is reachable from the script paper and whiteboard.
+ await body().first().click({button:'right'});
+ await page.getByRole('menuitem',{name:'Duplicate Beat',exact:true}).click();
+ assert.equal(await page.locator('.simple-beat-card').count(),4);
+ await page.locator('#undo').click();assert.equal(await page.locator('.simple-beat-card').count(),3);
+ await page.locator('#view-mode').selectOption('board');
+ await page.locator('#blocks [data-beat-id="beat-1"]').click({button:'right'});
+ await page.getByRole('menuitem',{name:'Duplicate Beat',exact:true}).click();
+ await page.locator('#undo').click();
+ await page.locator('#view-mode').selectOption('edit');
+ assert.equal(await page.locator('.simple-beat-card').count(),3);
  await page.locator('#save').click();await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('Saved on this device'));
  const records=await page.evaluate(async()=>{const db=await new Promise(resolve=>{const r=indexedDB.open('frontstage-offline',1);r.onsuccess=()=>resolve(r.result);});return new Promise(resolve=>{const r=db.transaction('projects').objectStore('projects').getAll();r.onsuccess=()=>resolve(r.result);});});
  const saved=records.find(r=>r.doc?.name===fixture.name).doc.project.frontstageWhiteboard.beats;

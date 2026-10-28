@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {webcrypto} from 'node:crypto';
-import {convertSceneCopy,validateSceneModel,syncSceneMetadata,updateBeatCard} from '../Public/scene-model.js';
+import {duplicateBeat,convertSceneCopy,validateSceneModel,syncSceneMetadata,updateBeatCard} from '../Public/scene-model.js';
 import {splitBeat} from '../Public/workspace-model.js';
 import {pullOutBeats,restorePulledOutBeats} from '../Public/script-inclusion.js';
 import {reorderTimelineBeats} from '../Public/board-operations.js';
@@ -16,3 +16,14 @@ let archive=pullOutBeats(copy,new Set([id]));validateSceneModel(archive);archive
 archive.project.frontstageWhiteboard=reorderTimelineBeats(archive.project.frontstageWhiteboard,new Set([id]),null);validateSceneModel(archive);assert.equal([...archive.project.frontstageWhiteboard.beats].sort((a,b)=>a.order-b.order).at(-1).id,id);
 const invalid=structuredClone(copy);invalid.project.frontstageWhiteboard.beats[1].sceneID=invalid.project.frontstageWhiteboard.beats[0].sceneID;assert.throws(()=>validateSceneModel(invalid));
 console.log('PASS: reviewed conversion, independent scene identities, metadata, splitting, archive and ordering');
+
+const duplication=convertSceneCopy(original),source=duplication.project.frontstageWhiteboard.beats[0];
+source.importedExtension={keep:true};source.omitted=true;
+const sourceScene=duplication.project.beats.find(s=>s.id===source.sceneID);
+sourceScene.sceneNumber='12A';sourceScene.versions=[{id:'old-history'}];sourceScene.notes=[{id:'note-original',content:'Keep note'}];
+const sourceBefore=structuredClone(source),newID=duplicateBeat(duplication,source.id),duplicated=duplication.project.frontstageWhiteboard.beats.find(b=>b.id===newID),newScene=duplication.project.beats.find(s=>s.id===duplicated.sceneID);
+assert.deepEqual(source,sourceBefore);assert.notEqual(duplicated.sceneID,source.sceneID);assert.deepEqual(duplicated.importedExtension,{keep:true});assert.equal(duplicated.omitted,true);
+assert.equal(newScene.sceneNumber,undefined);assert.equal(newScene.versions,undefined);assert.notEqual(newScene.notes[0].id,sourceScene.notes[0].id);
+duplicated.html='<p>Independent copy</p>';assert.equal(source.html,sourceBefore.html);validateSceneModel(duplication);
+source.locked=true;const lockedCopy=structuredClone(duplication);assert.throws(()=>duplicateBeat(duplication,source.id));assert.deepEqual(duplication,lockedCopy);
+console.log('PASS: independent beat duplication, metadata IDs, inclusion, unknown fields, history isolation and atomic locked rejection');
