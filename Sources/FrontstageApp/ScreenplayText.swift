@@ -196,7 +196,7 @@ enum ScreenplayTextCodec {
         var starts = [Int: Int](), ranges = [(Int, NSRange)](), removed = 0
         for match in matches { guard let id = Int(source.substring(with: match.range(at: 1))) else { continue }; let position = match.range.location - removed; if source.substring(with: match.range(at: 2)) == "START" { starts[id] = position } else if let start = starts[id] { ranges.append((id, NSRange(location: start, length: position - start))) }; removed += match.range.length }
         for match in matches.reversed() { text.deleteCharacters(in: match.range) }
-        for (id, range) in ranges where metadata.indices.contains(id) && range.length > 0 && NSMaxRange(range) <= text.length {
+        for (id, range) in ranges.sorted(by: { $0.1.length > $1.1.length }) where metadata.indices.contains(id) && range.length > 0 && NSMaxRange(range) <= text.length {
             let fields = metadata[id]
             if let value = fields["data-dot-highlight"], let hex = ScriptAnnotations.highlights[value] {
                 text.addAttribute(.screenplayHighlight, value: value, range: range)

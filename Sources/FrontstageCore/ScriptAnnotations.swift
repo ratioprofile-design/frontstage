@@ -74,11 +74,13 @@ extension Project {
             for id in ScriptAnnotations.ids(in: html) {
                 guard let entry = entries[id], entry.scene != destination else { continue }
                 let sourceID = scenes[entry.scene].object?["id"]?.decimal
-                let moving = sourceID.map { owners[id]?.contains($0) != true } ?? false
+                guard scenes[destination].object?["frontstageTextLocked"] != .bool(true) else { continue }
+                let moving = (sourceID.map { owners[id]?.contains($0) != true } ?? false) && scenes[entry.scene].object?["frontstageTextLocked"] != .bool(true)
                 var record = entry.record
                 let newID = moving ? id : UUID().uuidString
                 record["id"] = .string(newID)
                 if !moving { record["frontstageSourceID"] = .string(id) }
+                guard scenes[destination].object?[entry.storage] == nil || scenes[destination].object?[entry.storage]?.object != nil else { continue }
                 var target = scenes[destination].object!, storage = target[entry.storage]?.object ?? [:], values = storage[entry.bucket]?.array ?? []
                 values.append(.object(record)); storage[entry.bucket] = .array(values); target[entry.storage] = .object(storage); scenes[destination] = .object(target)
                 if moving { var source = scenes[entry.scene].object!, fields = source[entry.storage]?.object ?? [:]; fields[entry.bucket] = .array((fields[entry.bucket]?.array ?? []).filter { $0.object?["id"]?.string != id }); source[entry.storage] = .object(fields); scenes[entry.scene] = .object(source) }
