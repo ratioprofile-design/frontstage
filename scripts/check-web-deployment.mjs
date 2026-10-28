@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, readdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -6,7 +6,16 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const origin = 'https://frontstage-five.vercel.app';
 const digest = value => createHash('sha256').update(value).digest('hex');
-const files = ['index.html', 'app.js', 'merge.js', 'board-operations.js', 'style.css', 'workspace-design.js', 'workspace-design.css', 'workspace-model.js', 'workspaces.js', 'pagination.js', 'workspaces.css', 'screenplay-editor.js', 'bamini.js', 'continuous-script.js', 'scene-model.js', 'script-inclusion.js', 'live-markdown.js', 'write-panels.js', 'write-panel-model.js', 'script-filter.js'];
+async function deployedFiles(directory,prefix=''){
+  const output=[];
+  for(const entry of await readdir(directory,{withFileTypes:true})){
+    const file=prefix+entry.name;
+    if(entry.isDirectory())output.push(...await deployedFiles(path.join(directory,entry.name),file+'/'));
+    else if(!['config.js','sw.js'].includes(file))output.push(file);
+  }
+  return output.sort();
+}
+const files = await deployedFiles(path.join(root,'build/web'));
 const expected = new Map(await Promise.all(files.map(async file => [file, digest(await readFile(path.join(root, 'build/web', file)))])));
 let last = '';
 for (let attempt = 1; attempt <= 12; attempt++) {
