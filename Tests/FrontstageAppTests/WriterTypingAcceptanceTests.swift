@@ -34,6 +34,26 @@ final class WriterTypingAcceptanceTests: XCTestCase {
         if text.selectedRange().location == text.string.utf16.count { return (text.typingAttributes[.screenplayElement] as? String).flatMap(ScreenplayElement.init(rawValue:)) ?? .action }
         return ScreenplayTextCodec.element(in: text.attributedString(), at: text.selectedRange().location)
     }
+    func testNumberShortcutsMatchTheVisibleElementOrder() async throws {
+        try await MainActor.run {
+            _ = NSApplication.shared
+            let controller = ScreenplayEditorController(), text = ScreenplayTextView()
+            controller.textView = text; text.screenplayController = controller; text.isEditable = true
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 600), styleMask: [.titled], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false; window.contentView = text; defer { window.close() }
+            window.makeFirstResponder(text)
+            let expected: [ScreenplayElement] = [.sceneHeading, .action, .character, .dialogue, .parenthetical, .transition, .shot, .lyrics]
+            XCTAssertEqual(ScreenplayElement.editable, expected)
+            for (index, element) in expected.enumerated() {
+                text.textStorage?.setAttributedString(try ScreenplayTextCodec.decode("<p class='sc-action'>Text</p>"))
+                text.setSelectedRange(NSRange(location: 0, length: 0))
+                let event = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.command], timestamp: 0, windowNumber: window.windowNumber, context: nil, characters: String(index + 1), charactersIgnoringModifiers: String(index + 1), isARepeat: false, keyCode: 18))
+                XCTAssertTrue(text.performKeyEquivalent(with: event))
+                XCTAssertEqual(controller.activeElement, element)
+                XCTAssertTrue(text.string.contains("Text"))
+            }
+        }
+    }
     func testActualTabReturnFlowCreatesNoSpacerParagraphs() async throws {
         try await MainActor.run {
             let (_, controller, window, text) = try Self.editor("<p class='sc-action'><br></p>"); defer { window.close() }
