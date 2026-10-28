@@ -671,10 +671,10 @@ private struct ScreenplayFormatBar: View {
     var body: some View {
         HStack {
             Picker("Element", selection: Binding(get: { controller.activeElement }, set: { controller.format($0) })) {
-                ForEach(ScreenplayElement.editable, id: \.self) { element in Text(element.label).tag(element) }
+                ForEach(Array(ScreenplayElement.editable.enumerated()), id: \.element) { index, element in Text("\(index + 1) \(element.label)").tag(element) }
             }.frame(width: 210)
             Spacer()
-            Text("Tab changes element · Return continues dialogue · ⌥1–7 formats")
+            Text("Tab changes element · Cmd+1–8 formats · Cmd+Enter Action")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
