@@ -76,8 +76,8 @@ struct ScriptWritingWorkspace: View {
         VStack(spacing: 0) {
             tools
             ScrollView(.horizontal, showsIndicators: false) { HStack {
-                ForEach([ScreenplayElement.sceneHeading] + ScreenplayElement.editable.filter { $0 != .sceneHeading }, id: \.self) { element in
-                    Button(element.label) { (plain ? workspace.scriptController("write-continuous") : activeController)?.format(element) }
+                ForEach(Array(ScreenplayElement.editable.enumerated()), id: \.element) { index, element in
+                    Button("\(index + 1) \(element.label)") { (plain ? workspace.scriptController("write-continuous") : activeController)?.format(element) }.help("Cmd+\(index + 1)")
                 }
             }.padding(6) }.frame(height: 38)
             if showOmitted {

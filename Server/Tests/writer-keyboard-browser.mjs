@@ -1,0 +1,68 @@
+import {createServer} from 'node:http';
+import {createRequire} from 'node:module';
+import {readFile,mkdir} from 'node:fs/promises';
+import {existsSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+const require=createRequire(import.meta.url),{chromium}=require(process.env.FRONTSTAGE_PLAYWRIGHT_MODULE||'playwright');
+const root=fileURLToPath(new URL('../../',import.meta.url));
+const server=createServer(async(req,res)=>{try{const file=req.url==='/'?'index.html':decodeURIComponent(req.url.slice(1));if(file.includes('/')||file.includes('..'))throw Error();res.setHeader('Content-Type',file.endsWith('.js')?'application/javascript':file.endsWith('.css')?'text/css':'text/html');res.end(await readFile(path.join(root,'Server/Public',file)));}catch{res.writeHead(404);res.end();}});
+await new Promise(resolve=>server.listen(17845,'127.0.0.1',resolve));let browser;
+try{
+ browser=await chromium.launch({executablePath:process.env.FRONTSTAGE_CHROMIUM||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':chromium.executablePath()),headless:true,args:['--no-sandbox']});
+ const page=await browser.newPage({viewport:{width:1440,height:950}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ const fixture=JSON.parse(await readFile(path.join(root,'Tests/Fixtures/write-panels.frontstage'),'utf8'));
+ fixture.project.frontstageWhiteboard.beats[0].html='<p class="sc-line sc-action"><br></p>';
+ fixture.project.frontstageWhiteboard.beats[1].html='<p class="sc-line sc-character">KAMAL KUMAR (O.S.)</p><p class="sc-line sc-dialogue">Hello.</p><p class="sc-line sc-character">கமல்</p><p class="sc-line sc-dialogue">வணக்கம்.</p>';
+ for(const scene of fixture.project.beats)scene.content=fixture.project.frontstageWhiteboard.beats.filter(b=>b.sceneID===scene.id).map(b=>b.html).join('');
+ await page.goto('http://127.0.0.1:17845');await page.locator('#local-mode').click();await page.locator('#back').click();await page.waitForSelector('#projects:not([hidden])');
+ await page.locator('#import-project').setInputFiles({name:'Writer typing.frontstage',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(fixture))});await page.waitForSelector('#workspace:not([hidden])');await page.locator('#view-mode').selectOption('edit');
+ const sheet=page.locator('.continuous-editor'),body=()=>sheet.locator('[data-beat-id="beat-1"]:not([data-heading-scene])');
+ const active=()=>sheet.evaluate(()=>{let n=getSelection()?.anchorNode;if(n?.nodeType===3)n=n.parentElement;while(n&&n.parentElement&&!n.parentElement.classList.contains('continuous-editor'))n=n.parentElement;return {text:n?.textContent,kind:n?.className,caret:getSelection()?.anchorOffset};});
+ try{await body().first().click();}catch(error){throw Error('Writer fixture did not open: '+JSON.stringify(await page.evaluate(()=>({status:document.querySelector('#status')?.textContent,page:document.querySelector('#workspace-page')?.textContent?.slice(0,500),mode:document.querySelector('#view-mode')?.value})))+' errors='+JSON.stringify(errors)+' '+error.message);}
+ const count=await body().count();
+ const toolbar=page.locator('.screenplay-element-bar button');
+ assert.deepEqual(await toolbar.allTextContents(),['1 Scene Heading','2 Action','3 Character','4 Dialogue','5 Parenthetical','6 Transition','7 Shot','8 Lyrics']);
+ await page.keyboard.type('Opening action.');await page.keyboard.press('Enter');
+ assert.equal(await body().count(),count+1);assert.match((await active()).kind,/sc-action/);
+ await page.keyboard.press('Tab');assert.match((await active()).kind,/sc-character/);
+ await page.keyboard.type('kam');await page.keyboard.press('Tab');assert.equal((await active()).text,'KAMAL KUMAR');
+ await page.keyboard.press('Tab');assert.match((await active()).kind,/sc-transition/);assert.equal((await active()).text,'');
+ await page.keyboard.press('Control+z');assert.equal((await active()).text,'KAMAL KUMAR');assert.match((await active()).kind,/sc-character/);
+ await page.keyboard.press('Control+Shift+z');assert.equal((await active()).text,'');assert.match((await active()).kind,/sc-transition/);
+ await page.keyboard.press('Tab');assert.match((await active()).kind,/sc-action/);
+ await page.keyboard.press('Tab');await page.keyboard.type('custom name');await page.keyboard.press('Escape');
+ await page.keyboard.press('Tab');assert.match((await active()).kind,/sc-transition/);assert.equal((await active()).text,'CUSTOM NAME');
+ await page.keyboard.press('Control+Alt+3');assert.match((await active()).kind,/sc-character/);assert.equal((await active()).text,'CUSTOM NAME');
+ await page.keyboard.type(' (');await page.getByRole('option',{name:'(V.O.)',exact:true}).waitFor();await page.keyboard.press('Tab');assert.equal((await active()).text,'CUSTOM NAME (V.O.)');
+ await page.keyboard.press('Enter');assert.match((await active()).kind,/sc-dialogue/);
+ await page.keyboard.type('(');assert.equal((await active()).text,'()');await page.keyboard.type('quietly');await page.keyboard.press('Escape');await page.keyboard.press('Enter');assert.match((await active()).kind,/sc-dialogue/);
+ await page.keyboard.type('Hello.');await page.keyboard.press('Enter');assert.match((await active()).kind,/sc-character/);
+ await page.keyboard.press('Control+Enter');assert.match((await active()).kind,/sc-action/);assert.equal((await active()).text,'');
+ await page.keyboard.type('Closing action.');await page.keyboard.press('Control+Enter');assert.match((await active()).kind,/sc-action/);
+ await page.keyboard.press('Control+Alt+6');await page.keyboard.type('cut');assert.match((await active()).kind,/sc-transition/);assert.equal((await active()).text,'CUT');
+ await page.keyboard.press('Enter'); // accepts CUT TO: and creates one scene
+ assert.match((await active()).kind,/sc-slugline/);assert.equal(await page.locator('.simple-beat-card').count(),3);
+ assert.equal(await sheet.locator('[data-beat-id="beat-1"].sc-transition').last().textContent(),'CUT TO:');
+ await page.keyboard.type('ext. river - night');await page.keyboard.press('Escape');await page.keyboard.press('Enter');assert.match((await active()).kind,/sc-action/);
+ await page.keyboard.insertText('தமிழ் action.');await page.keyboard.press('Control+Enter');await page.keyboard.type('Later text.');
+ const sceneHeading=await sheet.locator('[data-active-heading="true"]').getAttribute('data-beat-id');
+ // A transition inserted before trailing text moves that text into the new scene.
+ const tamil=sheet.locator('[data-beat-id="'+sceneHeading+'"].sc-action').filter({hasText:'தமிழ் action.'});
+ await tamil.click();await page.keyboard.press('Control+Alt+6');await page.keyboard.press('Enter');
+ assert.equal(await page.locator('.simple-beat-card').count(),4);assert.match((await active()).kind,/sc-slugline/);
+ assert.ok((await sheet.textContent()).includes('Later text.'));
+ await page.locator('#undo').click();assert.equal(await page.locator('.simple-beat-card').count(),3);assert.ok((await sheet.textContent()).includes('Later text.'));
+ await page.locator('#redo').click();assert.equal(await page.locator('.simple-beat-card').count(),4);
+ // Popup uses the same command rules and retains the original window.
+ await page.locator('#view-mode').selectOption('board');await page.locator('#blocks [data-beat-id="beat-1"]').dblclick();
+ const originalPopup=page.locator('.beat-popup[data-beat-id="beat-1"]'),popupText=originalPopup.locator('[data-field="snippet-editor"]');
+ await popupText.locator('p').first().click();await page.keyboard.press('Control+Alt+6');await page.keyboard.press('Enter');
+ assert.equal(await page.locator('.beat-popup').count(),2);assert.equal(await originalPopup.count(),1);
+ assert.equal(await page.evaluate(()=>document.activeElement?.dataset.slugKey),'location');
+ await page.locator('.beat-popup.active [data-slug-key="location"]').fill('NEW LOCATION');
+ await page.locator('.beat-popup.active [data-slug-key="location"]').press('Tab');
+ await page.locator('#save').click();await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('Saved on this device'));
+ assert.deepEqual(errors,[]);console.log('PASS: shared screenplay keyboard cycle, suggestion-only clearing, extensions, parentheticals, numbered shortcuts, transition scene creation, trailing text, popup and undo/redo');
+}finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}

@@ -104,7 +104,7 @@ final class ScreenplayEditingTests: XCTestCase {
             XCTAssertEqual(controller.activeElement, .dialogue)
             text.insertText("Dialogue", replacementRange: text.selectedRange())
             XCTAssertTrue(controller.handleCommand(#selector(NSResponder.insertNewline(_:)), in: text))
-            XCTAssertEqual(controller.activeElement, .action)
+            XCTAssertEqual(controller.activeElement, .character)
             controller.format(.parenthetical)
             XCTAssertTrue(controller.handleCommand(#selector(NSResponder.insertNewline(_:)), in: text))
             XCTAssertEqual(controller.activeElement, .dialogue)

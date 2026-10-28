@@ -38,7 +38,7 @@ extension Project {
     @discardableResult public mutating func insertScriptScene(afterSplitting beatID: String, beforeHTML: String, afterHTML: String, heading: String) throws -> String {
         var candidate = self
         var board = try whiteboard()
-        guard let index = board.beats.firstIndex(where: { $0.id == beatID }), !board.isLocked(board.beats[index]), !board.beats[index].omitted, scenes.first(where: { $0.id == board.beats[index].sceneID })?.isTextLocked == false else { throw ProjectError.invalidProject("Select an unlocked active beat") }
+        guard let index = board.beats.firstIndex(where: { $0.id == beatID }), !board.isLocked(board.beats[index]), !board.beats[index].omitted, !board.isUnused(board.beats[index]), scenes.first(where: { $0.id == board.beats[index].sceneID })?.isTextLocked == false else { throw ProjectError.invalidProject("Select an unlocked active beat") }
         let original = board.beats[index], ordered = board.orderedBeats, rank = ordered.firstIndex { $0.id == beatID }!
         let newScene = candidate.addScene(); try candidate.updateScene(id: newScene, heading: SceneHeading(inline: heading))
         var fragment = original; fragment.id = UUID().uuidString; fragment.sceneID = newScene; fragment.html = afterHTML; fragment.title = "Untitled Beat"; fragment.synopsis = ""

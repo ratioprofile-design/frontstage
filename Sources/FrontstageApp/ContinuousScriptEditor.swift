@@ -142,6 +142,8 @@ struct ContinuousScriptEditor: NSViewRepresentable {
         text.backgroundColor = .white; text.textColor = .black; text.isVerticallyResizable = true; text.isHorizontallyResizable = false; text.autoresizingMask = []
         text.textContainerInset = NSSize(width: 60, height: 60); text.textContainer?.widthTracksTextView = false
         text.screenplayController = controller; text.delegate = context.coordinator; controller.textView = text
+        controller.newScene = { [weak coordinator = context.coordinator, weak text] _ in if let text { coordinator?.sceneAfterTransition(text) } }
+        controller.dismissCompletions = { [weak coordinator = context.coordinator] in coordinator?.headingSuggestions.close() }
         text.splitScene = { [weak coordinator = context.coordinator, weak text] in if let text { coordinator?.splitAtCaret(text) } }
         text.duplicateBeat = { [weak workspace, weak text] in
             guard let workspace, let text, text.attributedString().length > 0,
@@ -267,6 +269,36 @@ struct ContinuousScriptEditor: NSViewRepresentable {
                 text.window?.makeFirstResponder(text)
             }
         }
+        func sceneAfterTransition(_ text: NSTextView) {
+            guard text.isEditable, !text.hasMarkedText() else { return }
+            let source = text.attributedString(), caret = min(text.selectedRange().location, max(0, source.length - 1))
+            guard source.length > 0, let id = source.attribute(ownerKey, at: caret, effectiveRange: nil) as? String else { return }
+            let paragraph = (source.string as NSString).paragraphRange(for: NSRange(location: caret, length: 0)), boundary = NSMaxRange(paragraph)
+            func focus(_ id: String) {
+                workspace.selectBoardBeat(id); load(text)
+                text.attributedString().enumerateAttribute(ownerKey, in: NSRange(location: 0, length: text.attributedString().length)) { value, range, stop in
+                    if value as? String == id { text.setSelectedRange(NSRange(location: range.location, length: 0)); text.scrollRangeToVisible(range); stop.pointee = true }
+                }
+                text.window?.makeFirstResponder(text)
+            }
+            if boundary < source.length, source.attribute(headingKey, at: boundary, effectiveRange: nil) != nil,
+               let nextID = source.attribute(ownerKey, at: boundary, effectiveRange: nil) as? String,
+               let next = workspace.whiteboard.beats.first(where: { $0.id == nextID }),
+               workspace.project.scenes.first(where: { $0.id == next.sceneID })?.heading.inlineText.isEmpty == true,
+               ((try? ScreenplayTextCodec.decode(next.html).string) ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                focus(nextID); return
+            }
+            let before = NSMutableAttributedString(string: ""), after = NSMutableAttributedString(string: "")
+            source.enumerateAttributes(in: NSRange(location: 0, length: source.length)) { attributes, range, _ in
+                guard attributes[ownerKey] as? String == id, attributes[headingKey] == nil else { return }
+                let end = NSMaxRange(range)
+                if range.location < boundary { before.append(source.attributedSubstring(from: NSRange(location: range.location, length: min(end, boundary) - range.location))) }
+                if end > boundary { after.append(source.attributedSubstring(from: NSRange(location: max(range.location, boundary), length: end - max(range.location, boundary)))) }
+            }
+            var created: String?
+            workspace.edit("New Scene After Transition") { created = try $0.insertScriptScene(afterSplitting: id, beforeHTML: ScreenplayTextCodec.encode(before), afterHTML: ScreenplayTextCodec.encode(after), heading: "") }
+            if let created { focus(created) }
+        }
         func signature() -> String {
             String(describing: controller.typography) + String(describing: controller.contentWidth) + workspace.whiteboard.orderedBeats.filter { !$0.omitted && !workspace.whiteboard.isUnused($0) && workspace.reader.filters.matches($0, board: workspace.whiteboard, scenes: workspace.project.scenes) }.map { beat in beat.id + beat.html + (workspace.project.scenes.first { $0.id == beat.sceneID }?.heading.inlineText ?? "") }.joined(separator: "\u{1f}")
         }
@@ -391,7 +423,7 @@ struct ContinuousScriptEditor: NSViewRepresentable {
             }
         }
         func textDidEndEditing(_ notification: Notification) {
-            headingSuggestions.close()
+            headingSuggestions.close(); controller.clearAcceptedCue()
             if let text = notification.object as? NSTextView { synchronizeHeadings(text, excluding: nil) }
         }
         var completionChoices: [ScreenplayElement: [String]] {
@@ -460,6 +492,7 @@ struct ContinuousScriptEditor: NSViewRepresentable {
                 }
             }
             if !allowed { workspace.errorMessage = "This selection contains locked text." }
+            if allowed { controller.clearAcceptedCue() }
             if allowed, controller.handleParentheticalInput(replacementString, range: range, in: textView) { return false }
             return allowed
         }

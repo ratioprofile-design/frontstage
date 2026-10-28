@@ -42,7 +42,7 @@ struct FrontstageApp: App {
             }
             CommandMenu("Screenplay") {
                 ForEach(Array(ScreenplayElement.editable.enumerated()), id: \.element.rawValue) { index, element in
-                    Button(element.label) { workspace.focusedScreenplayController?.format(element) }
+                    Button("\(index + 1) \(element.label)") { workspace.focusedScreenplayController?.format(element) }
                         .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: [.command])
                         .disabled(workspace.selectedScene == nil || (workspace.mode != .edit && workspace.mode != .board))
                 }
@@ -121,9 +121,11 @@ final class Workspace: ObservableObject {
     func scriptController(_ id: String) -> ScreenplayEditorController {
         if let controller = scriptEditors[id] { return controller }
         let controller = ScreenplayEditorController()
+        controller.historyBoundary = { [weak self] in self?.endScriptTypingGroup() }
         controller.projectUndo = { [weak self] in self?.undoProject() }; controller.projectRedo = { [weak self] in self?.redoProject() }
         scriptEditors[id] = controller; return controller
     }
+    func endScriptTypingGroup() { history.endTypingGroup() }
     func duplicateBeat(_ id: String) {
         var created: String?
         edit("Duplicate Beat") { created = try $0.duplicateBoardBeat(id) }
@@ -142,6 +144,7 @@ final class Workspace: ObservableObject {
 
     init(recoveryStore: RecoveryStore? = nil) {
         self.recoveryStore = recoveryStore
+        editor.historyBoundary = { [weak self] in self?.endScriptTypingGroup() }
         editor.projectUndo = { [weak self] in self?.undoProject() }; editor.projectRedo = { [weak self] in self?.redoProject() }
     }
 

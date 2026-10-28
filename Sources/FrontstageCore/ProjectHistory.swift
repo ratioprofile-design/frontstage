@@ -15,6 +15,8 @@ public struct ProjectHistory: Sendable {
     public var undoLabel: String { past.last?.label ?? "Project Change" }
     public var redoLabel: String { future.last?.label ?? "Project Change" }
 
+    public mutating func endTypingGroup() { lastKey = nil; lastTime = nil }
+
     public mutating func record(_ previous: Project, label: String, key: String? = nil, now: Date = Date()) {
         let coalesce = key != nil && key == lastKey && future.isEmpty &&
             now.timeIntervalSince(lastTime ?? .distantPast) >= 0 &&

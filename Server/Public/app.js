@@ -1,3 +1,4 @@
+import {insertScriptScene} from './continuous-script.js';
 import {isSceneModel,syncSceneMetadata,validateSceneModel,convertSceneCopy,duplicateBeat} from './scene-model.js';
 import {pullOutBeats,validateInclusion} from './script-inclusion.js';
 import {createScriptFilter,mountScriptFilter,matchesScriptFilter,gapLabel} from './script-filter.js';
@@ -601,7 +602,11 @@ function openEditor(id) {
   const text = field('snippet-editor'); text.before(element('h3',heading(doc.project.beats.find(s=>s.id===sceneID)),'popup-slugline script-heading')); text.innerHTML = cleanHTML(beat.html);
   text.contentEditable = current.access === 'reader' || doc.project.beats.find(s => s.id === beat.sceneID)?.frontstageTextLocked ? 'false' : 'true';
   text.oninput = () => { const html = cleanHTML(text.innerHTML); edit(() => { const target = board().beats.find(b => b.id === id); if (target) target.html = html; }); };
-  const toolbar=screenplayToolbar(text, () => text.dispatchEvent(new Event('input')), text.contentEditable === 'true',()=>characterNames(doc,id),()=>doc.project.beats.map(heading),{continuationSeed:()=>dialogueSeed(doc,id)});field('element').parentElement.replaceWith(toolbar);panel.querySelector('.version-row').append(toolbar);const options=element('button','⋯');options.setAttribute('aria-label','Formatting options');options.onclick=()=>panel.classList.toggle('format-expanded');panel.querySelector('.version-row').append(options);refreshEditors();
+  const toolbar=screenplayToolbar(text, () => text.dispatchEvent(new Event('input')), text.contentEditable === 'true',()=>characterNames(doc,id),()=>doc.project.beats.map(heading),{continuationSeed:()=>dialogueSeed(doc,id),newScene:node=>{
+    const parts=[...text.children],index=parts.indexOf(node);if(index<0)return;
+    let next;const first=parts.slice(0,index+1).map(n=>cleanHTML(n.outerHTML)).join(''),second=parts.slice(index+1).map(n=>cleanHTML(n.outerHTML)).join('');
+    if(edit(()=>{next=insertScriptScene(doc,id,first,second,'');})){openEditor(next);const nextPanel=editors.get(next);nextPanel?.querySelector('[data-slug-key="location"]')?.focus();}
+  }});field('element').parentElement.replaceWith(toolbar);panel.querySelector('.version-row').append(toolbar);const options=element('button','⋯');options.setAttribute('aria-label','Formatting options');options.onclick=()=>panel.classList.toggle('format-expanded');panel.querySelector('.version-row').append(options);refreshEditors();
   const place = (x, y) => {
     const rect = panel.getBoundingClientRect();
     panel.style.left = `${Math.max(8, Math.min(x, innerWidth - rect.width - 8))}px`;

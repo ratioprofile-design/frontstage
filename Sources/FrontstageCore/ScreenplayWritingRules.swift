@@ -1,6 +1,6 @@
 import Foundation
 
-public enum ScreenplayCommandPlacement: String, Codable, Sendable { case inPlace, afterParagraph, split, suggestions, body }
+public enum ScreenplayCommandPlacement: String, Codable, Sendable { case inPlace, afterParagraph, split, suggestions, body, newScene }
 public enum ScreenplayParenthetical {
     public static func wrapped(_ source: String) -> String {
         if source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "()" }
@@ -13,15 +13,18 @@ public struct ScreenplayCommand: Equatable, Sendable {
     public let placement: ScreenplayCommandPlacement
     public init(element: ScreenplayElement, placement: ScreenplayCommandPlacement) { self.element = element; self.placement = placement }
     public static func resolve(element: ScreenplayElement, key: String, empty: Bool, selection: Bool = false) -> Self {
+        if key == "ForceAction" { return Self(element: .action, placement: empty ? .inPlace : .afterParagraph) }
         if key == "Backtab" { return Self(element: element.cycled(backward: true), placement: .inPlace) }
         if element == .sceneHeading { return Self(element: .action, placement: .body) }
         if key == "Tab" {
-            if element == .character { return Self(element: .character, placement: .suggestions) }
+            if element == .character { return Self(element: .transition, placement: .inPlace) }
+            if element == .transition { return Self(element: .action, placement: .inPlace) }
             let next: ScreenplayElement = element == .dialogue ? .parenthetical : element == .parenthetical ? .dialogue : .character
             return Self(element: next, placement: empty || selection ? .inPlace : .afterParagraph)
         }
-        let next: ScreenplayElement = element == .character && empty ? .action : element.afterReturn(isEmpty: empty)
-        let placement: ScreenplayCommandPlacement = empty && element != .action && element != .lyrics ? .inPlace : [.character, .parenthetical, .transition, .shot].contains(element) ? .afterParagraph : .split
+        if element == .transition { return Self(element: .sceneHeading, placement: .newScene) }
+        let next = element.afterReturn(isEmpty: empty)
+        let placement: ScreenplayCommandPlacement = empty && element != .action && element != .lyrics ? .inPlace : [.character, .parenthetical, .shot].contains(element) ? .afterParagraph : .split
         return Self(element: next, placement: placement)
     }
 }

@@ -5,7 +5,7 @@ import {screenplayToolbar,characterNames,elements,screenplaySelection,restoreScr
 import {decorateDialogue,projectDialogue} from './dialogue-rules.js';
 export function parseHeading(text){const source=text.trim().toUpperCase(),prefix=['INT./EXT.','EXT./INT.','INT.','EXT.','I/E.'].find(p=>source.startsWith(p))||'',rest=source.slice(prefix.length).trim(),split=[...rest.matchAll(/\s+[-–—]\s*/g)].at(-1);return {prefix,location:split?rest.slice(0,split.index):rest,time:split?rest.slice(split.index+split[0].length):''};}
 export function applyScriptDocument(document,html,headings){const b=model.board(document);for(const[id,value]of Object.entries(html)){const beat=b.beats.find(b=>b.id===id);if(!beat)throw Error('A screenplay beat no longer exists.');if(beat.html!==value&&(beat.locked||beat.omitted||blockLocked(b,beat.blockID)||model.scene(document,beat.sceneID).frontstageTextLocked))throw Error('This selection contains locked or inactive text.');}for(const[id,text]of Object.entries(headings)){const s=document.project.beats.find(s=>String(s.id)===id);if(!s)throw Error('Scene no longer exists.');const heading=parseHeading(text);if(s.frontstageTextLocked&&JSON.stringify(heading)!==JSON.stringify({prefix:s.slug?.prefix||'',location:s.slug?.location||'',time:s.slug?.time||''}))throw Error('Unlock the scene heading first.');s.slug={...s.slug,...heading};}for(const[id,value]of Object.entries(html))b.beats.find(b=>b.id===id).html=value;}
-export function insertScriptScene(document,id,beforeHTML,afterHTML,heading){const b=model.board(document),beat=b.beats.find(b=>b.id===id);if(!beat||beat.locked||beat.omitted||blockLocked(b,beat.blockID)||model.scene(document,beat.sceneID).frontstageTextLocked)throw Error('Select an unlocked active beat.');const ordered=[...b.beats].sort((a,b)=>a.order-b.order),index=ordered.indexOf(beat),sceneID=Math.max(document.project.nextId||1,...document.project.beats.map(s=>s.id+1));const s={id:sceneID,title:'Untitled Scene',summary:'',content:'',slug:parseHeading(heading)};document.project.beats.push(s);document.project.nextId=sceneID+1;
+export function insertScriptScene(document,id,beforeHTML,afterHTML,heading){const b=model.board(document),beat=b.beats.find(b=>b.id===id);if(!beat||beat.locked||beat.omitted||b.layers.find(l=>l.id===b.blocks.find(block=>block.id===beat.blockID)?.layerID)?.unused||blockLocked(b,beat.blockID)||model.scene(document,beat.sceneID).frontstageTextLocked)throw Error('Select an unlocked active beat.');const ordered=[...b.beats].sort((a,b)=>a.order-b.order),index=ordered.indexOf(beat),sceneID=Math.max(document.project.nextId||1,...document.project.beats.map(s=>s.id+1));const s={id:sceneID,title:'Untitled Scene',summary:'',content:'',slug:parseHeading(heading)};document.project.beats.push(s);document.project.nextId=sceneID+1;
  const fragment={...structuredClone(beat),id:crypto.randomUUID(),sceneID,title:'Untitled Beat',synopsis:'',html:afterHTML,order:(beat.order+(ordered[index+1]?.order??beat.order+2))/2,duration:Math.max(.05,beat.duration/2),start:beat.start+beat.duration/2};beat.html=beforeHTML;beat.duration=Math.max(.05,beat.duration/2);
  for(const next of ordered.slice(index+1)){if(next.sceneID!==beat.sceneID)break;if(next.locked||blockLocked(b,next.blockID))throw Error('A locked beat prevents inserting this scene.');next.sceneID=sceneID;}const owner=b.blocks.find(block=>block.id===beat.blockID);if(owner?.standalone){const container=structuredClone(owner);container.id=crypto.randomUUID();container.position.y+=60;b.blocks.push(container);fragment.blockID=container.id;}b.beats.push(fragment);return fragment.id;}
 export function centerScriptTarget(node) {
@@ -98,6 +98,19 @@ export function mountContinuousScript(sheet, api) {
     const result=api.change(d=>{created=insertScriptScene(d,id,api.cleanHTML(first.innerHTML),api.cleanHTML(second.innerHTML),inlineHeading(scene));});
     if(result!==false){const beat=model.board(api.document()).beats.find(b=>b.id===created);api.select(beat.sceneID,created);api.rebuild?.();requestAnimationFrame(()=>{const node=document.querySelector('.continuous-editor>[data-beat-id="'+CSS.escape(created)+'"]');if(node){const editor=node.closest('.continuous-editor');editor.focus();const range=document.createRange();range.selectNodeContents(node);range.collapse(true);getSelection().removeAllRanges();getSelection().addRange(range);node.scrollIntoView({block:'nearest'});editor.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));}});}
   }
+  function sceneAfterTransition(node) {
+    if(composing||sheet.isComposing||!node)return;
+    if(locked(beatFor(node.dataset.beatId))){api.status('Unlock this scene before creating a new scene.');return;}
+    if(commit()===false)return;
+    const next=node.nextElementSibling;
+    const focusHeading=id=>{api.rebuild?.();const heading=document.querySelector('.continuous-editor>[data-heading-scene][data-beat-id="'+CSS.escape(id)+'"]');if(heading){const editor=heading.closest('.continuous-editor');editor.focus({preventScroll:true});const range=document.createRange();range.selectNodeContents(heading);range.collapse(true);getSelection().removeAllRanges();getSelection().addRange(range);heading.scrollIntoView({block:'nearest'});editor.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));}};
+    if(next?.dataset.headingScene){const beat=beatFor(next.dataset.beatId),scene=api.document().project.beats.find(s=>s.id===beat?.sceneID);if(scene&&!inlineHeading(scene).trim()&&!(()=>{const body=document.createElement('div');body.innerHTML=beat.html;return body.textContent.trim();})()){api.select(scene.id,beat.id);focusHeading(beat.id);return;}}
+    const id=node.dataset.beatId,parts=[...sheet.children].filter(n=>n.dataset.beatId===id&&!n.dataset.headingScene),index=parts.indexOf(node);
+    if(index<0)return;
+    const first=parts.slice(0,index+1).map(n=>api.cleanHTML(n.outerHTML)).join(''),second=parts.slice(index+1).map(n=>api.cleanHTML(n.outerHTML)).join('');let created;
+    const result=(api.structureChange||api.change)(d=>{created=insertScriptScene(d,id,first,second,'');});
+    if(result!==false){const beat=beatFor(created);api.select(beat.sceneID,created);focusHeading(created);}
+  }
   let contextCaret;
   sheet.addEventListener('pointerdown',event=>{if(event.button===2){const selection=getSelection();contextCaret=selection?.rangeCount&&sheet.contains(selection.anchorNode)&&sheet.contains(selection.focusNode)?selection.getRangeAt(0).cloneRange():null;}},true);
   sheet.addEventListener('contextmenu',event=>{
@@ -134,7 +147,7 @@ export function mountContinuousScript(sheet, api) {
   function acceptBaseline(){bodyBaseline=new Map();for(const node of sheet.children){if(node.dataset.headingScene)headingBaseline.set(node,node.textContent);else if(node.dataset.beatId)bodyBaseline.set(node.dataset.beatId,(bodyBaseline.get(node.dataset.beatId)||'')+api.cleanHTML(node.outerHTML));}}
   acceptBaseline();
   function rollback(bookmark){const desk=sheet.closest('.continuous-desk'),position=desk&&{x:desk.scrollLeft,y:desk.scrollTop};sheet.innerHTML=acceptedHTML;restoreScreenplaySelection(sheet,bookmark);if(position){desk.scrollLeft=position.x;desk.scrollTop=position.y;}acceptBaseline();}
-  function commit() {
+  function commit(meta) {
     if (composing || committing) return;
     committing = true;
     const bookmark=beforeEditSelection||screenplaySelection(sheet);
@@ -142,7 +155,7 @@ export function mountContinuousScript(sheet, api) {
     try {
       const headings = {};
       restoreHeadingAnchors(headings);
-      const success = api.change(document => {
+      const success = (meta?.command&&api.structureChange||api.change)(document => {
         const html = Object.fromEntries([...visible].filter(id => !pendingPullouts.has(id)).map(id => [id, '']));
         const redirects = new Map(); let owner = null;
         for (const node of [...sheet.children]) {
@@ -170,7 +183,7 @@ export function mountContinuousScript(sheet, api) {
         applyScriptDocument(document, changedHTML, headings);
         if (pendingPullouts.size) replaceDocument(document, pullOutBeats(document, pendingPullouts));
       });
-      if (success === false) { rollback(bookmark); return; }
+      if (success === false) { rollback(bookmark); return false; }
       for (const {node,id} of placements) node.dataset.beatId = id;
       for (const {node,id,sceneID} of newHeadings) {
         node.dataset.beatId = id; node.dataset.headingScene = sceneID;
@@ -180,10 +193,10 @@ export function mountContinuousScript(sheet, api) {
       syncHeadings(paragraph());
       acceptedHTML = sheet.innerHTML;
       acceptBaseline();
-    } catch (error) { rollback(bookmark); api.status(error.message); }
+    } catch (error) { rollback(bookmark); api.status(error.message); return false; }
     finally { beforeEditSelection=null;pendingPullouts.clear(); committing = false; refreshDialogue();select(); }
   }
-  const behavior = screenplayToolbar(sheet, commit, !api.readonly(), () => characterNames(api.document(),paragraph()?.dataset.beatId), () => api.document().project.beats.filter(s=>String(s.id)!==paragraph()?.dataset.headingScene).map(inlineHeading), {continuationFlags:()=>projectDialogue(api.document(),dialogueCache).flags}).editor;
+  const behavior = screenplayToolbar(sheet, commit, !api.readonly(), () => characterNames(api.document(),paragraph()?.dataset.beatId), () => api.document().project.beats.filter(s=>String(s.id)!==paragraph()?.dataset.headingScene).map(inlineHeading), {continuationFlags:()=>projectDialogue(api.document(),dialogueCache).flags,newScene:sceneAfterTransition}).editor;
   sheet.addEventListener('compositionstart', () => { composing = true; sheet.isComposing = true; });
   sheet.addEventListener('compositionend', () => { composing = false; sheet.isComposing = false; commit(); });
   sheet.addEventListener('input', event => {
@@ -210,6 +223,7 @@ export function mountContinuousScript(sheet, api) {
   }
   sheet.addEventListener('keydown', event => {
     if (event.isComposing) return;
+    if(event.key==='Enter'&&(event.metaKey||event.ctrlKey)){if(paragraph()?.dataset.headingScene){event.preventDefault();event.stopImmediatePropagation();insertAfterHeading(paragraph());}return;}
     // Completion's capture handler gets first use of navigation/acceptance keys.
     if (document.querySelector('.autofill-list')) return;
     const node = paragraph();

@@ -13,14 +13,18 @@ export function characterCue(source){
  const name=normalized(remaining),hasContinuation=extensions.some(e=>normalized(e).startsWith('(CONT'));
  return {name,extensions,hasContinuation,withoutContinuation:[name,...extensions.filter(e=>!normalized(e).startsWith('(CONT'))].join(' ')};
 }
+export const elementShortcuts=['slugline','action','character','dialogue','parenthetical','transition','shot','lyrics'];
 export function screenplayCommand(element,key,empty,selection=false){
+ if(key==='ForceAction')return {element:'action',placement:empty?'inPlace':'afterParagraph'};
  if(key==='Backtab')return {element:screenplayElements[(screenplayElements.indexOf(element)+screenplayElements.length-1)%screenplayElements.length],placement:'inPlace'};
  if(element==='slugline')return {element:'action',placement:'body'};
  if(key==='Tab'){
-  if(element==='character')return {element,placement:'suggestions'};
+  if(element==='character')return {element:'transition',placement:'inPlace'};
+  if(element==='transition')return {element:'action',placement:'inPlace'};
   return {element:element==='dialogue'?'parenthetical':element==='parenthetical'?'dialogue':'character',placement:empty||selection?'inPlace':'afterParagraph'};
  }
- const next=element==='character'?(empty?'action':'dialogue'):element==='parenthetical'?'dialogue':element==='lyrics'?'lyrics':'action';
+ if(element==='transition')return {element:'slugline',placement:'newScene'};
+ const next=element==='character'||element==='parenthetical'?'dialogue':element==='dialogue'?'character':element==='lyrics'?'lyrics':'action';
  return {element:next,placement:empty&&!['action','lyrics'].includes(element)?'inPlace':['character','parenthetical','transition','shot'].includes(element)?'afterParagraph':'split'};
 }
 export class DialogueContinuation{

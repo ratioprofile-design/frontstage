@@ -25,9 +25,9 @@ final class WriterTypingAcceptanceTests: XCTestCase {
         text.setSelectedRange(NSRange(location: body, length: 0))
         return (workspace, controller, window, text)
     }
-    @MainActor private static func press(_ text: WritingTextView, _ key: String) throws {
+    @MainActor private static func press(_ text: WritingTextView, _ key: String, modifiers: NSEvent.ModifierFlags = []) throws {
         let code: UInt16 = key == "\t" ? 48 : 36
-        let event = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: text.window!.windowNumber, context: nil, characters: key, charactersIgnoringModifiers: key, isARepeat: false, keyCode: code))
+        let event = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0, windowNumber: text.window!.windowNumber, context: nil, characters: key, charactersIgnoringModifiers: key, isARepeat: false, keyCode: code))
         text.keyDown(with: event)
     }
     @MainActor private static func kind(_ text: NSTextView) -> ScreenplayElement {
@@ -52,7 +52,7 @@ final class WriterTypingAcceptanceTests: XCTestCase {
             text.insertText("(custom delivery)", replacementRange: text.selectedRange())
             try Self.press(text, "\n"); XCTAssertEqual(Self.kind(text), .dialogue)
             let emptyStart = text.selectedRange().location, count = text.string.utf16.count
-            try Self.press(text, "\n"); XCTAssertEqual(Self.kind(text), .action)
+            try Self.press(text, "\n"); XCTAssertEqual(Self.kind(text), .character)
             XCTAssertEqual(text.selectedRange().location, emptyStart); XCTAssertEqual(text.string.utf16.count, count)
             XCTAssertFalse(text.string.contains("\n\n\n"))
         }
@@ -81,6 +81,51 @@ final class WriterTypingAcceptanceTests: XCTestCase {
             XCTAssertEqual(try workspace.project.whiteboard().beats.count, originalCount + 1)
         }
     }
+    func testKeyboardCycleClearsOnlyAcceptedNameAndCreatesScene() async throws {
+        try await MainActor.run {
+            let html = "<p class='sc-character'>KAMAL KUMAR</p><p class='sc-dialogue'>First.</p><p class='sc-action'>Target</p>"
+            let (workspace, controller, window, text) = try Self.editor(html); defer { window.close() }
+            window.orderFront(nil)
+            let range = (text.string as NSString).range(of: "Target")
+            text.setSelectedRange(range); controller.format(.character)
+            text.insertText("kam", replacementRange: text.selectedRange())
+            try Self.press(text, "\t")
+            XCTAssertTrue(text.string.contains("KAMAL KUMAR"))
+            try Self.press(text, "\t"); XCTAssertEqual(Self.kind(text), .transition)
+            let line = (text.string as NSString).paragraphRange(for: text.selectedRange())
+            XCTAssertEqual((text.string as NSString).substring(with: line).trimmingCharacters(in: .whitespacesAndNewlines), "")
+            try Self.press(text, "\t"); XCTAssertEqual(Self.kind(text), .action)
+            try Self.press(text, "\t"); XCTAssertEqual(Self.kind(text), .character)
+            text.insertText("CUSTOM NAME", replacementRange: text.selectedRange())
+            try Self.press(text, "\t"); XCTAssertEqual(Self.kind(text), .transition); XCTAssertTrue(text.string.contains("CUSTOM NAME"))
+            let originalCount = workspace.whiteboard.beats.count
+            try Self.press(text, "\n")
+            XCTAssertEqual(workspace.whiteboard.beats.count, originalCount + 1)
+            XCTAssertEqual(Self.kind(text), .sceneHeading)
+            XCTAssertTrue(workspace.whiteboard.beats.contains { $0.html.contains("CUSTOM NAME") })
+            try Self.press(text, "\n"); XCTAssertEqual(Self.kind(text), .action)
+            text.insertText("தமிழ் action", replacementRange: text.selectedRange())
+            try Self.press(text, "\n", modifiers: [.command]); XCTAssertEqual(Self.kind(text), .action)
+            try Self.press(text, "\t"); text.insertText("ANOTHER", replacementRange: text.selectedRange())
+            try Self.press(text, "\n"); XCTAssertEqual(Self.kind(text), .dialogue)
+            text.insertText("Hello", replacementRange: text.selectedRange())
+            try Self.press(text, "\n"); XCTAssertEqual(Self.kind(text), .character)
+            try Self.press(text, "\n", modifiers: [.control]); XCTAssertEqual(Self.kind(text), .action)
+        }
+    }
+    func testTransitionKeepsTrailingTextAndHeadingCanBeReused() async throws {
+        try await MainActor.run {
+            let (workspace, _, window, text) = try Self.editor("<p class='sc-transition'>CUT TO:</p><p class='sc-action'>Trailing Tamil தமிழ்</p>"); defer { window.close() }
+            let oldCount = workspace.whiteboard.beats.count
+            try Self.press(text, "\n")
+            XCTAssertEqual(workspace.whiteboard.beats.count, oldCount + 1)
+            let id = try XCTUnwrap(workspace.selectedBoardBeatID)
+            XCTAssertTrue(try XCTUnwrap(workspace.whiteboard.beats.first { $0.id == id }).html.contains("Trailing Tamil தமிழ்"))
+            XCTAssertEqual(Self.kind(text), .sceneHeading)
+            try Self.press(text, "\n"); XCTAssertEqual(Self.kind(text), .action)
+            XCTAssertEqual(workspace.whiteboard.beats.count, oldCount + 1)
+        }
+    }
     func testFilledActionTabPreservesWholeParagraphAndSelectionFormatting() async throws {
         try await MainActor.run {
             let (_, controller, window, text) = try Self.editor("<p class='sc-action'>She walks across the room.</p>"); defer { window.close() }
@@ -94,6 +139,7 @@ final class WriterTypingAcceptanceTests: XCTestCase {
             let before = text.string, caret = text.selectedRange()
             try Self.press(text, "\t")
             XCTAssertEqual(text.string, before); XCTAssertEqual(text.selectedRange(), caret)
+            XCTAssertEqual(Self.kind(text), .transition)
             text.setSelectedRange(NSRange(location: start + 4, length: 5))
             controller.format(.dialogue)
             XCTAssertEqual(text.string, before); XCTAssertEqual(text.selectedRange(), NSRange(location: start + 4, length: 5))

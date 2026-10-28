@@ -30,7 +30,7 @@ try{
  await heading.evaluate(n=>{const r=document.createRange();r.setStart(n.firstChild,0);r.setEnd(n.firstChild,4);getSelection().removeAllRanges();getSelection().addRange(r);});
  await page.keyboard.type('EX');await suggestions.waitFor();await page.keyboard.press('Tab');assert.equal(await heading.innerText(),'EXT. STATION - NIGHT');
  await editor.locator('[data-heading-scene="1"]').fill('EXT. RIVER - NIGHT');await editor.locator('[data-beat-id="beat-1"]:not([data-heading-scene])').first().fill('தமிழ் — continuous screenplay.');
- await page.getByRole('navigation',{name:'Screenplay elements'}).getByRole('button',{name:'Character',exact:true}).click();assert.ok(await editor.locator('.sc-character').count()>0);
+ await page.getByRole('navigation',{name:'Screenplay elements'}).getByRole('button',{name:'3 Character',exact:true}).click();assert.ok(await editor.locator('.sc-character').count()>0);
  const right=page.locator('.write-right');await right.getByRole('button',{name:'Notes',exact:true}).click();await right.getByRole('button',{name:'Add Note',exact:true}).click();const note=right.getByRole('textbox',{name:'Note text',exact:true}).last();await note.click();await page.keyboard.type('**Hello**');assert.equal(await note.locator('strong,b').innerText(),'Hello');
  await page.locator('#view-mode').selectOption('board');await page.locator('#blocks [data-beat-id="beat-1"]').click({button:'right'});await page.getByRole('menuitem',{name:'Omit Beat',exact:true}).click();assert.equal(await page.locator('#blocks [data-beat-id="beat-1"]').evaluate(n=>getComputedStyle(n).backgroundColor),'rgb(119, 119, 119)');
  await page.locator('#view-mode').selectOption('edit');assert.equal(await page.locator('.continuous-editor [data-beat-id="beat-1"]').count(),0);

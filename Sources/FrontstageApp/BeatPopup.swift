@@ -26,16 +26,26 @@ final class BeatPopupPresenter: NSObject, NSWindowDelegate {
             return focusedWindow === window && window.firstResponder === text
         }
     }
+    func focusHeading(_ id: String) {
+        guard let panel = panels[id] else { return }
+        func field(_ view: NSView) -> NSTextField? {
+            if let text = view as? NSTextField, text.placeholderString == "Location" { return text }
+            return view.subviews.lazy.compactMap { field($0) }.first
+        }
+        panel.contentView?.layoutSubtreeIfNeeded()
+        if let content = panel.contentView, let text = field(content) { panel.makeFirstResponder(text); text.selectText(nil) }
+    }
     func refreshTitles(_ board: Whiteboard) {
         guard !panels.isEmpty else { return }
         let titles = Dictionary(uniqueKeysWithValues: board.beats.map { ($0.id, $0.title) })
         for (id, window) in panels { window.title = titles[id] == nil ? "Beat removed" : "Edit Beat" }
     }
 
-    func open(_ id: String, workspace: Workspace, near anchor: NSRect? = nil) {
+    func open(_ id: String, workspace: Workspace, near anchor: NSRect? = nil, editingHeading: Bool = false) {
         guard let beat = workspace.whiteboard.beats.first(where: { $0.id == id }) else { return }
         if let panel = panels[id] {
             panel.makeKeyAndOrderFront(nil)
+            if editingHeading { focusHeading(id); return }
             if !beat.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, beat.title != "Untitled Beat", let text = controllers[id]?.textView { panel.makeFirstResponder(text) }
             else if let content = panel.contentView {
                 @MainActor func nameField(_ view: NSView) -> NSTextField? {
@@ -47,7 +57,17 @@ final class BeatPopupPresenter: NSObject, NSWindowDelegate {
             return
         }
         let editor = ScreenplayEditorController()
+        editor.historyBoundary = { [weak workspace] in workspace?.endScriptTypingGroup() }
         editor.projectUndo = { [weak workspace] in workspace?.undoProject() }; editor.projectRedo = { [weak workspace] in workspace?.redoProject() }
+        editor.newScene = { [weak workspace, weak self] text in
+            guard let workspace, !text.hasMarkedText() else { return }
+            let source = text.attributedString(), boundary = NSMaxRange((text.string as NSString).paragraphRange(for: text.selectedRange()))
+            let first = ScreenplayTextCodec.encode(source.attributedSubstring(from: NSRange(location: 0, length: boundary)))
+            let second = ScreenplayTextCodec.encode(source.attributedSubstring(from: NSRange(location: boundary, length: source.length - boundary)))
+            var created: String?
+            workspace.edit("New Scene After Transition") { created = try $0.insertScriptScene(afterSplitting: id, beforeHTML: first, afterHTML: second, heading: "") }
+            if let created { workspace.selectBoardBeat(created); self?.open(created, workspace: workspace, editingHeading: true) }
+        }
         let panel = BeatEditorPanel(contentRect: NSRect(x: 0, y: 0, width: WorkspaceDesign.popupWidth, height: WorkspaceDesign.popupHeight),
             styleMask: [.titled, .closable, .resizable, .utilityWindow], backing: .buffered, defer: false)
         panel.title = "Edit Beat"
@@ -56,7 +76,7 @@ final class BeatPopupPresenter: NSObject, NSWindowDelegate {
         panel.isReleasedWhenClosed = false
         panel.minSize = NSSize(width: 640, height: 440)
         panel.delegate = self
-        panel.contentView = NSHostingView(rootView: BeatPopupView(workspace: workspace, beatID: id, controller: editor, dismiss: { [weak self] in self?.close(id) }).preferredColorScheme(.dark))
+        panel.contentView = NSHostingView(rootView: BeatPopupView(workspace: workspace, beatID: id, controller: editor, startAtHeading: editingHeading, dismiss: { [weak self] in self?.close(id) }).preferredColorScheme(.dark))
         let screen = NSScreen.screens.first { screen in anchor.map { screen.frame.intersects($0) } ?? false } ?? NSScreen.main
         let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1200, height: 800)
         var point = anchor.map { NSPoint(x: $0.maxX + 12, y: $0.maxY - panel.frame.height) }
@@ -68,7 +88,10 @@ final class BeatPopupPresenter: NSObject, NSWindowDelegate {
         panels[id] = panel; controllers[id] = editor
         panel.makeKeyAndOrderFront(nil)
         panel.contentView?.layoutSubtreeIfNeeded()
-        if !beat.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, beat.title != "Untitled Beat" {
+        if editingHeading {
+            focusHeading(id)
+            DispatchQueue.main.async { [weak self] in self?.focusHeading(id) }
+        } else if !beat.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, beat.title != "Untitled Beat" {
             panel.initialFirstResponder = editor.textView
             if let text = editor.textView { panel.makeFirstResponder(text) }
             DispatchQueue.main.async { [weak panel, weak editor] in
@@ -104,6 +127,7 @@ struct BeatPopupView: View {
     @ObservedObject var workspace: Workspace
     let beatID: String
     @ObservedObject var controller: ScreenplayEditorController
+    var startAtHeading = false
     let dismiss: () -> Void
     private var beat: BoardBeat? { workspace.whiteboard.beats.first { $0.id == beatID } }
 
@@ -159,7 +183,7 @@ struct BeatPopupView: View {
                     ForEach(workspace.project.revisions(for: scene.id)) { version in Text(version.label).tag(version.id) }
                 }.labelsHidden()
                 Button("Save Version") { let label = "Version \(workspace.project.revisions(for: scene.id).count + 1)"; workspace.edit("Save Scene Version") { _ = try $0.saveRevision(sceneID: scene.id, label: label) } }
-                Picker("Action", selection: Binding(get: { controller.activeElement }, set: { controller.format($0) })) { ForEach(ScreenplayElement.editable, id: \.self) { Text($0.label).tag($0) } }.labelsHidden().frame(width: 120)
+                Picker("Action", selection: Binding(get: { controller.activeElement }, set: { controller.format($0) })) { ForEach(Array(ScreenplayElement.editable.enumerated()), id: \.element) { index, element in Text("\(index + 1) \(element.label)").tag(element) } }.labelsHidden().frame(width: 120)
                 Button("⋯") { showTools.toggle() }.accessibilityLabel("Formatting options")
             }
             if showTools { HStack { InlineFormatButtons(controller: controller); ScreenplaySuggestions(workspace: workspace, controller: controller) } }
@@ -193,7 +217,7 @@ struct BeatPopupView: View {
             } else { Text("This beat was removed"); Button("Close", action: dismiss) }
         }.padding(18).textFieldStyle(.roundedBorder).background(Color(white: 0.267))
         .onAppear {
-            if beat?.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false || beat?.title == "Untitled Beat" { nameFocused = true }
+            if !startAtHeading, beat?.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false || beat?.title == "Untitled Beat" { nameFocused = true }
 
         }
         .onExitCommand(perform: dismiss)

@@ -4,22 +4,24 @@ public enum ScreenplayElement: String, CaseIterable, Codable, Sendable {
     case action, character, dialogue, parenthetical, transition, shot, lyrics
     case sceneHeading = "slugline"
 
-    public static let editable: [Self] = [.action, .character, .dialogue, .parenthetical, .transition, .shot, .lyrics, .sceneHeading]
+    public static let editable: [Self] = [.sceneHeading, .action, .character, .dialogue, .parenthetical, .transition, .shot, .lyrics]
     public var label: String { self == .sceneHeading ? "Scene Heading" : rawValue.capitalized }
     public var keepsWithNext: Bool { [.sceneHeading, .character, .parenthetical].contains(self) }
 
     public func afterReturn(isEmpty: Bool) -> Self {
         switch self {
         case .character, .parenthetical: return .dialogue
-        case .dialogue: return .action
+        case .dialogue: return .character
+        case .transition: return .sceneHeading
         case .lyrics: return .lyrics
         default: return .action
         }
     }
 
     public func cycled(backward: Bool = false) -> Self {
-        let index = Self.editable.firstIndex(of: self) ?? 0
-        return Self.editable[(index + (backward ? Self.editable.count - 1 : 1)) % Self.editable.count]
+        let cycle: [Self] = [.action, .character, .dialogue, .parenthetical, .transition, .shot, .lyrics, .sceneHeading]
+        let index = cycle.firstIndex(of: self) ?? 0
+        return cycle[(index + (backward ? cycle.count - 1 : 1)) % cycle.count]
     }
 }
 

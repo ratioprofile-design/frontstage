@@ -7,7 +7,7 @@ import * as model from './workspace-model.js';
 import { baminiPairs } from './bamini.js';
 import { blockLocked } from './board-operations.js';
 import { paginateParagraphs } from './pagination.js';
-import { screenplayToolbar, sluglineFields, characterNames, elements, splitAtCaret } from './screenplay-editor.js';
+import { screenplayToolbar, sluglineFields, characterNames, elements, elementShortcuts, splitAtCaret } from './screenplay-editor.js';
 import {decorateDialogue,dialogueSeed} from './dialogue-rules.js';
 import {duplicateBeat} from './scene-model.js';
 const el=(tag,text,className)=>{const e=document.createElement(tag);if(text!=null)e.textContent=text;if(className)e.className=className;return e;};
@@ -85,8 +85,8 @@ export function mountWorkspaces(api) {
     const plain=['Final Script','Content Only'].includes(scriptView.display);
     let continuous=null;
     const elementBar=el('nav',null,'screenplay-element-bar');elementBar.setAttribute('aria-label','Screenplay elements');tools.after(elementBar);
-    for(const kind of ['slugline',...elements.filter(k=>k!=='slugline')]){const b=button(kind==='slugline'?'Scene Heading':model.label(kind),()=>activeEditor?.format(kind));b.dataset.element=kind;b.onpointerdown=e=>{activeEditor?.remember();e.preventDefault();};elementBar.append(b);}
-    if(plain){continuous=mountContinuousScript(sheet,{document:doc,selection:api.selectedBeat,readonly,rebuild:render,cleanHTML:api.cleanHTML,change:action=>change(action,false,'writer:'+api.selectedBeat()),undo:api.undo,redo:api.redo,open:api.openBeat,duplicate:id=>{change(d=>duplicateBeat(d,id),true);},matches:beat=>matchesScriptFilter(beat,model.board(doc()),scenes(),scriptFilter.state),status:api.status,select:(sid,bid)=>{sceneID=sid;api.selectScene(sid,bid);writePanels?.select(sid,bid);activeEditor=continuous;enableFormatting(!readonly());},element:kind=>elementBar.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.element===kind)))});continuous.open=()=>{const id=api.selectedBeat();if(id)api.openBeat(id);};activeEditor=continuous;enableFormatting(!readonly());}
+    for(const [index,kind] of elementShortcuts.entries()){const b=button((index+1)+' '+(kind==='slugline'?'Scene Heading':model.label(kind)),()=>activeEditor?.format(kind));b.title='Cmd/Ctrl+'+(index+1)+' · Web fallback: Ctrl+Alt+'+(index+1);b.dataset.element=kind;b.onpointerdown=e=>{activeEditor?.remember();e.preventDefault();};elementBar.append(b);}
+    if(plain){continuous=mountContinuousScript(sheet,{document:doc,selection:api.selectedBeat,readonly,rebuild:render,cleanHTML:api.cleanHTML,change:action=>change(action,false,'writer:'+api.selectedBeat()),structureChange:action=>change(action),undo:api.undo,redo:api.redo,open:api.openBeat,duplicate:id=>{change(d=>duplicateBeat(d,id),true);},matches:beat=>matchesScriptFilter(beat,model.board(doc()),scenes(),scriptFilter.state),status:api.status,select:(sid,bid)=>{sceneID=sid;api.selectScene(sid,bid);writePanels?.select(sid,bid);activeEditor=continuous;enableFormatting(!readonly());},element:kind=>elementBar.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.element===kind)))});continuous.open=()=>{const id=api.selectedBeat();if(id)api.openBeat(id);};activeEditor=continuous;enableFormatting(!readonly());}
     if(scriptView.showOmitted){
       const preview=el('aside',null,'omitted-preview');preview.setAttribute('aria-label','Omitted beats preview');
       preview.append(el('h3','Omitted beats — outside the active screenplay'));

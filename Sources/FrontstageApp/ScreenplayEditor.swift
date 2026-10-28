@@ -12,6 +12,24 @@ final class ScreenplayEditorController: ObservableObject {
     var contentWidth: CGFloat = 432
     var typography = ScriptLayoutSettings()
     var completionRequest: (() -> Void)?
+    var historyBoundary: (() -> Void)?
+    private var commandDepth = 0
+    func command<T>(_ action: () -> T) -> T {
+        let outer = commandDepth == 0
+        if outer { historyBoundary?() }
+        commandDepth += 1
+        defer { commandDepth -= 1; if outer { historyBoundary?() } }
+        return action()
+    }
+    var newScene: ((NSTextView) -> Void)?
+    var dismissCompletions: (() -> Void)?
+    private var acceptedCue: (range: NSRange, value: String, caret: NSRange)?
+    func clearAcceptedCue() { acceptedCue = nil }
+    func acceptCharacterSuggestion(in text: NSTextView) {
+        let paragraph = (text.string as NSString).paragraphRange(for: text.selectedRange())
+        let value = (text.string as NSString).substring(with: paragraph)
+        acceptedCue = (paragraph, value, text.selectedRange())
+    }
     var projectUndo: (() -> Void)?
     var projectRedo: (() -> Void)?
     func measure() {
@@ -51,6 +69,10 @@ final class ScreenplayEditorController: ObservableObject {
 
     func selectionChanged() {
         guard let textView, !textView.hasMarkedText() else { return }
+        if let accepted = acceptedCue {
+            let source = textView.string as NSString
+            if textView.selectedRange() != accepted.caret || NSMaxRange(accepted.range) > source.length || source.substring(with: accepted.range) != accepted.value { clearAcceptedCue() }
+        }
         let element: ScreenplayElement
         if textView.selectedRange().location == textView.string.utf16.count,
            let type = textView.typingAttributes[.screenplayElement] as? String {
@@ -61,7 +83,9 @@ final class ScreenplayEditorController: ObservableObject {
         if activeElement != element { activeElement = element }
     }
 
-    func format(_ element: ScreenplayElement) {
+    func format(_ element: ScreenplayElement) { command { formatParagraph(element) } }
+    private func formatParagraph(_ element: ScreenplayElement) {
+        clearAcceptedCue()
         guard let textView, textView.isEditable, !textView.hasMarkedText() else { return }
         textView.window?.makeFirstResponder(textView)
         var selection = textView.selectedRange()
@@ -133,7 +157,10 @@ final class ScreenplayEditorController: ObservableObject {
     }
 
     @discardableResult
-    func handleCommand(_ selector: Selector, in textView: NSTextView) -> Bool {
+    func handleCommand(_ selector: Selector, in textView: NSTextView, forcedKey: String? = nil) -> Bool {
+        command { resolveCommand(selector, in: textView, forcedKey: forcedKey) }
+    }
+    private func resolveCommand(_ selector: Selector, in textView: NSTextView, forcedKey: String? = nil) -> Bool {
         guard textView.isEditable, !textView.hasMarkedText() else { return false }
         selectionChanged()
         if selector == #selector(NSResponder.deleteBackward(_:)), activeElement == .parenthetical {
@@ -144,13 +171,22 @@ final class ScreenplayEditorController: ObservableObject {
             }
         }
         let key: String
-        switch selector {
+        if let forcedKey { key = forcedKey } else { switch selector {
         case #selector(NSResponder.insertTab(_:)): key = "Tab"
         case #selector(NSResponder.insertBacktab(_:)): key = "Backtab"
         case #selector(NSResponder.insertNewline(_:)): key = "Enter"
         default: return false
-        }
+        } }
         selectionChanged()
+        if key == "Tab", activeElement == .character, acceptedCue != nil {
+            let range = (textView.string as NSString).paragraphRange(for: textView.selectedRange())
+            let value = (textView.string as NSString).substring(with: range).trimmingCharacters(in: .newlines)
+            clearAcceptedCue()
+            textView.undoManager?.beginUndoGrouping(); defer { textView.undoManager?.endUndoGrouping() }
+            textView.insertText("", replacementRange: NSRange(location: range.location, length: value.utf16.count))
+            format(.transition); return true
+        }
+        clearAcceptedCue()
         if key == "Enter", activeElement == .parenthetical {
             let line = (textView.string as NSString).paragraphRange(for: textView.selectedRange())
             let value = (textView.string as NSString).substring(with: line).trimmingCharacters(in: .newlines)
@@ -162,6 +198,7 @@ final class ScreenplayEditorController: ObservableObject {
         let value = string.substring(with: paragraph).trimmingCharacters(in: .newlines)
         let empty = activeElement == .parenthetical ? ScreenplayParenthetical.isEmpty(value) : value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let decision = ScreenplayCommand.resolve(element: activeElement, key: key, empty: empty, selection: selected.length > 0)
+        if decision.placement == .newScene { dismissCompletions?(); if let newScene { newScene(textView) } else { textView.insertText("\n", replacementRange: NSRange(location: NSMaxRange(paragraph), length: 0)); format(.sceneHeading) }; return true }
         if decision.placement == .suggestions { completionRequest?(); return true }
         textView.undoManager?.beginUndoGrouping(); defer { textView.undoManager?.endUndoGrouping() }
         if decision.placement == .inPlace {
@@ -210,10 +247,23 @@ class ScreenplayTextView: NSTextView {
     private func historyKey(_ event: NSEvent) -> Bool {
         guard event.modifierFlags.contains(.command), event.charactersIgnoringModifiers?.lowercased() == "z", !hasMarkedText(), let controller = screenplayController else { return false }
         let action = event.modifierFlags.contains(.shift) ? controller.projectRedo : controller.projectUndo
-        guard let action else { return false }; action(); return true
+        guard let action else { return false }; controller.clearAcceptedCue(); controller.dismissCompletions?(); action(); return true
     }
-    override func performKeyEquivalent(with event: NSEvent) -> Bool { historyKey(event) || super.performKeyEquivalent(with: event) }
-    override func keyDown(with event: NSEvent) { if !historyKey(event) { super.keyDown(with: event) } }
+    private func screenplayKey(_ event: NSEvent) -> Bool {
+        guard !hasMarkedText(), isEditable, let controller = screenplayController else { return false }
+        let modified = event.modifierFlags.contains(.command) || event.modifierFlags.contains(.control)
+        if modified, event.keyCode == 36, !event.modifierFlags.contains(.shift) {
+            controller.dismissCompletions?(); controller.clearAcceptedCue()
+            return controller.handleCommand(#selector(NSResponder.insertNewline(_:)), in: self, forcedKey: "ForceAction")
+        }
+        if event.modifierFlags.contains(.command), let key = event.charactersIgnoringModifiers, let index = Int(key), (1...8).contains(index) {
+            controller.dismissCompletions?(); controller.clearAcceptedCue(); controller.format(ScreenplayElement.editable[index - 1]); return true
+        }
+        if event.charactersIgnoringModifiers != "\t" { controller.clearAcceptedCue() }
+        return false
+    }
+    override func performKeyEquivalent(with event: NSEvent) -> Bool { historyKey(event) || screenplayKey(event) || super.performKeyEquivalent(with: event) }
+    override func keyDown(with event: NSEvent) { if !historyKey(event) && !screenplayKey(event) { super.keyDown(with: event) } }
     var continuationSeed: String?
     var continuationFlags: [String: [Bool]]?
     var continuationTokens = [DialoguePresentationToken]()
@@ -322,6 +372,7 @@ struct ScreenplayEditor: NSViewRepresentable {
         controller.contentWidth = width
         controller.typography = typography
         controller.completionRequest = { [weak coordinator = context.coordinator, weak text] in if let text { coordinator?.showSuggestions(text) } }
+        controller.dismissCompletions = { [weak coordinator = context.coordinator] in coordinator?.completionPanel.close() }
         context.coordinator.load(html, into: text)
         controller.measure()
         return scroll
@@ -448,10 +499,11 @@ struct ScreenplayEditor: NSViewRepresentable {
         func textViewDidChangeSelection(_ notification: Notification) {
             if !loading { completionPanel.close(); controller.selectionChanged(); if let text = notification.object as? NSTextView, text.window?.firstResponder === text { text.scrollRangeToVisible(text.selectedRange()) } }
         }
-        func textDidEndEditing(_ notification: Notification) { completionPanel.close() }
+        func textDidEndEditing(_ notification: Notification) { completionPanel.close(); controller.clearAcceptedCue() }
 
         func textView(_ textView: NSTextView, shouldChangeTextIn affectedCharRange: NSRange,
                       replacementString: String?) -> Bool {
+            if !loading { controller.clearAcceptedCue() }
             if !loading, controller.handleParentheticalInput(replacementString, range: affectedCharRange, in: textView) { return false }
             if !loading { pendingElement = controller.activeElement; offerCompletions = replacementString?.isEmpty == false && replacementString?.contains("\n") != true }
             return true
