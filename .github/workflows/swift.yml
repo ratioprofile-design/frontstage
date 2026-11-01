@@ -29,6 +29,8 @@ jobs:
             node Server/Tests/dot-branding-browser.mjs
             node Server/Tests/screenplay-writing-rules.mjs
             node Server/Tests/story-timeline.mjs
+            node Server/Tests/timeline-page-measurement.mjs
+            node Server/Tests/timeline-page-measurement-browser.mjs
             node Server/Tests/workspace-model.mjs
             node Server/Tests/scene-model.mjs
             node Server/Tests/scene-cards-browser.mjs

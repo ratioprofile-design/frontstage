@@ -25,7 +25,8 @@ This tracker supersedes stale completion claims in the older phase documents. De
 - [ ] Automatic tension policies; readability only when its reference calculation is available.
 - [x] Optional Writer mini-timeline with independent display preferences, scene reveal, detachment/docking and retained editor/caret (browser acceptance passes; Mac tests added).
 - [x] Native timeline wheel zoom around the pointer; Shift/horizontal gestures remain scrolling (native acceptance pending CI).
-- [ ] Typeset-page timing and episode title pages.
+- [x] Typeset page timing through actual browser Pages/CoreText PDF frames, including typography/paper changes and dual columns; composition-safe idle calculation and an explicit whole-map estimate fallback (shared/browser acceptance; native CI gate).
+- [ ] Episode title pages.
 
 ## 3. Production screenplay
 

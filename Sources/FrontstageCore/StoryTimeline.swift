@@ -22,17 +22,21 @@ public struct StoryTimeline: Sendable {
         public var items: [Item]
         public var group: String? = nil
     }
+    public var typesetPages = false
+    public var beatPageCounts: [String: Double] = [:]
     public var beatTimes: [String: Double] = [:]
     public var beatPages: [String: Double] = [:]
     public var tracks: [Track] = []
     public var end: Double
-    public init(project: Project, timeBase: TimelineTimeBase = .beats) throws {
+    public init(project: Project, timeBase: TimelineTimeBase = .beats, measuredPages: [String: Double]? = nil) throws {
         let board = try project.whiteboard()
         let beats = board.orderedBeats.filter { !$0.omitted && !board.isUnused($0) }
+        typesetPages = !beats.isEmpty && beats.allSatisfy { beat in measuredPages?[beat.id].map { $0.isFinite && $0 > 0 } == true }
         var items: [Item] = []
         var time = 0.0, pages = 0.0
         for (index, beat) in beats.enumerated() {
-            let pageCount = Self.estimatedPages(beat.html)
+            let pageCount = typesetPages ? measuredPages![beat.id]! : Self.estimatedPages(beat.html)
+            beatPageCounts[beat.id] = pageCount
             let duration = beat.timelineDuration ?? (pageCount * project.timelineMinutesPerPage)
             beatTimes[beat.id] = time; beatPages[beat.id] = pages
             let start = timeBase == .beats ? Double(index) : timeBase == .time ? time : pages

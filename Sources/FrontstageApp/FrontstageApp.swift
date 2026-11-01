@@ -145,6 +145,8 @@ final class Workspace: ObservableObject {
     private(set) var documentSessionID = UUID()
     @Published private(set) var whiteboardCache: Whiteboard?
     let editor = ScreenplayEditorController()
+    let timelinePageLayout = TimelinePageLayoutCache()
+    var screenplayCompositionActive: Bool { scriptEditors.values.contains { $0.textView?.hasMarkedText() == true } }
     private var scriptEditors: [String: ScreenplayEditorController] = [:]
     func scriptController(_ id: String) -> ScreenplayEditorController {
         if let controller = scriptEditors[id] { return controller }

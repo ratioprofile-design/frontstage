@@ -45,16 +45,22 @@ struct ScreenplayPageLayout {
 @MainActor
 enum ScreenplayPDF {
     private static let explicitPageStart = NSAttributedString.Key("design.ratioprofile.frontstage.pageStart")
+    private static let timingBeat = NSAttributedString.Key("design.ratioprofile.frontstage.timelineTimingBeat")
     static func render(project: Project, paper: ScreenplayPaper) throws -> RenderedScreenplay {
+        try renderText(sourceText(project: project, paper: paper), title: project.name, paper: paper, revisionHeader: project.currentRevision?.headerString)
+    }
+    private static func sourceText(project: Project, paper: ScreenplayPaper) throws -> NSMutableAttributedString {
         _ = try ScreenplayInterchange.fdx(ScreenplayInterchangeDocument.paragraphs(project))
         let active = try project.orderedScript()
         guard !active.isEmpty else { throw ScreenplayPDFError.noScenes }
         let text = NSMutableAttributedString(string: "")
+        let beatByID = Dictionary(uniqueKeysWithValues: try project.whiteboard().beats.map { ($0.id, $0) })
         for segment in active {
             let scene = segment.scene, number = segment.number
             let headingStart = text.length
             text.append(NSAttributedString(string: "\(number)  \(scene.heading.text)\(segment.isContinuation ? " (CONTINUED)" : "")\(project.productionSceneChanged(scene.id) ? " *" : "")\n",
                 attributes: ScreenplayTypography.attributes(.sceneHeading, width: paper.contentWidth, printing: true, settings: project.scriptLayout)))
+            if let id = segment.beatIDs.first { text.addAttribute(timingBeat, value: id, range: NSRange(location: headingStart, length: text.length - headingStart)) }
             if UserDefaults.standard.bool(forKey: "dot_export_highlights"), let markup = project.headingMarkup(scene.id), let decoded = try? ScreenplayTextCodec.decode(markup, printing: true, settings: project.scriptLayout) {
                 let heading = decoded.string.trimmingCharacters(in: .newlines), match = (text.string as NSString).range(of: heading, options: [], range: NSRange(location: headingStart, length: text.length - headingStart))
                 if !heading.isEmpty, match.location != NSNotFound {
@@ -64,13 +70,58 @@ enum ScreenplayPDF {
             if scene.startsNewPage { text.addAttribute(explicitPageStart, value: true, range: NSRange(location: headingStart, length: 1)) }
             let body = try ScreenplayTextCodec.decode(scene.html, width: paper.contentWidth, printing: true, settings: project.scriptLayout)
             if body.length > 0 { body.addAttribute(NSAttributedString.Key("FrontstageBeatOwner"), value: "pdf-scene-\(text.length)", range: NSRange(location: 0, length: body.length)) }
+            if segment.beatIDs.count == 1, let id = segment.beatIDs.first, body.length > 0 { body.addAttribute(timingBeat, value: id, range: NSRange(location: 0, length: body.length)) }
+            else if !segment.beatIDs.isEmpty {
+                let parts = try segment.beatIDs.map { id in (id, try ScreenplayTextCodec.decode(beatByID[id]?.html ?? "", width: paper.contentWidth, printing: true, settings: project.scriptLayout)) }
+                if parts.map({ $0.1.string }).joined() == body.string {
+                    var offset = 0
+                    for (id, part) in parts { if part.length > 0 { body.addAttribute(timingBeat, value: id, range: NSRange(location: offset, length: part.length)) }; offset += part.length }
+                }
+            }
             text.append(body)
             if !text.string.hasSuffix("\n") {
                 text.append(NSAttributedString(string: "\n", attributes:
                     ScreenplayTypography.attributes(.action, width: paper.contentWidth, printing: true)))
             }
         }
-        return try renderText(text, title: project.name, paper: paper, revisionHeader: project.currentRevision?.headerString)
+        return text
+    }
+
+    /// Measures the same CoreText frames used by PDF/Pages, including dual columns.
+    static func timelinePageCounts(project: Project, paper: ScreenplayPaper) throws -> [String: Double]? {
+        let segments = try project.orderedScript()
+        guard !segments.isEmpty, segments.allSatisfy({ !$0.beatIDs.isEmpty }) else { return nil }
+        let text = DialoguePresentation.materialized(try sourceText(project: project, paper: paper))
+        let fragments: [[(NSRange, CGRect)]]
+        if text.containsAttribute(.screenplayDualPair) {
+            let flow = try dualFlow(text, paper: paper)
+            // dualFlow applies column-specific typography to its own attributed copy.
+            return measuredPageCounts(text: flow.text, fragments: flow.pages.map { $0.fragments.map { ($0.range, $0.rect) } }, paper: paper, beatIDs: segments.flatMap(\.beatIDs))
+        } else { fragments = try layoutPages(text, paper: paper).map { [($0.range, $0.rect)] } }
+        return measuredPageCounts(text: text, fragments: fragments, paper: paper, beatIDs: segments.flatMap(\.beatIDs))
+    }
+    private static func measuredPageCounts(text: NSAttributedString, fragments: [[(NSRange, CGRect)]], paper: ScreenplayPaper, beatIDs: [String]) -> [String: Double]? {
+        let setter = CTFramesetterCreateWithAttributedString(text as CFAttributedString)
+        var spans: [String: TimelinePageSpan] = [:]
+        for (pageIndex, page) in fragments.enumerated() {
+            for (range, rect) in page {
+                let frame = CTFramesetterCreateFrame(setter, CFRange(location: range.location, length: range.length), CGPath(rect: rect, transform: nil), nil)
+                let lines = CTFrameGetLines(frame) as! [CTLine]
+                var origins = Array(repeating: CGPoint.zero, count: lines.count); CTFrameGetLineOrigins(frame, CFRange(location: 0, length: 0), &origins)
+                for (index, line) in lines.enumerated() {
+                    let source = CTLineGetStringRange(line)
+                    guard source.location < text.length, let id = text.attribute(timingBeat, at: source.location, effectiveRange: nil) as? String else { continue }
+                    var ascent: CGFloat = 0, descent: CGFloat = 0
+                    _ = CTLineGetTypographicBounds(line, &ascent, &descent, nil)
+                    let baseline = rect.minY + origins[index].y, top = paper.height - paper.topMargin
+                    let start = Double(pageIndex) + max(0, (top - baseline - ascent) / paper.contentHeight)
+                    let end = Double(pageIndex) + min(1, (top - baseline + descent) / paper.contentHeight)
+                    if let previous = spans[id] { spans[id] = .init(start: min(previous.start, start), end: max(previous.end, end)) }
+                    else { spans[id] = .init(start: start, end: end) }
+                }
+            }
+        }
+        return TimelinePageMeasurement.weights(beatIDs: beatIDs, spans: spans)
     }
 
     static func renderText(_ text: NSAttributedString, title: String, paper: ScreenplayPaper, revisionHeader: String? = nil) throws -> RenderedScreenplay {

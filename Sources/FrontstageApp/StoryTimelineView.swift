@@ -14,6 +14,7 @@ struct StoryTimelineView: View {
     @State private var preferences = TimelineDisplayPreferences(compact: true)
     @AppStorage("frontstage-timeline-mini") private var compactPreferences = ""
     @AppStorage("frontstage-timeline-full") private var fullPreferences = ""
+    @State private var measuredPages: [String: Double]?
     @State private var time = 0.0
     @State private var magnifyStart: Double?
     @State private var showingTiming = false
@@ -35,14 +36,14 @@ struct StoryTimelineView: View {
     @State private var groupName = ""
     @FocusState private var timelineFocused: Bool
     @FocusState private var focusedItemID: String?
-    private var model: StoryTimeline? { try? StoryTimeline(project: workspace.project, timeBase: preferences.primary) }
+    private var model: StoryTimeline? { try? StoryTimeline(project: workspace.project, timeBase: preferences.primary, measuredPages: measuredPages) }
     private var beatItems: [StoryTimeline.Item] { model?.tracks.first { $0.kind == "beats" }?.items ?? [] }
     private var current: StoryTimeline.Item? { beatItems.first { time >= $0.start && time < $0.start + $0.duration } }
     private func counter(_ base: TimelineTimeBase) -> String {
         guard let current else { return "–" }
         let fraction = max(0, (time - current.start) / current.duration)
         let beat = workspace.whiteboard.beats.first { $0.id == current.id }
-        let pages = StoryTimeline.estimatedPages(beat?.html ?? "")
+        let pages = model?.beatPageCounts[current.id] ?? StoryTimeline.estimatedPages(beat?.html ?? "")
         switch base {
         case .beats: return String((beatItems.firstIndex { $0.id == current.id } ?? 0) + 1)
         case .time: return StoryTimeline.clock((model?.beatTimes[current.id] ?? 0) + (beat?.timelineDuration ?? (pages * workspace.project.timelineMinutesPerPage)) * fraction)
@@ -81,6 +82,16 @@ struct StoryTimelineView: View {
         .onKeyPress(.upArrow) { preferences.scale = min(180, preferences.scale * 1.25); return .handled }
         .onKeyPress(.downArrow) { preferences.scale = max(2, preferences.scale / 1.25); return .handled }
         .onAppear { loadPreferences() }
+        .task(id: TimelinePageLayoutInput(project: workspace.project, paper: workspace.paper)) {
+            measuredPages = nil
+            do {
+                try await Task.sleep(for: .milliseconds(350))
+                while workspace.screenplayCompositionActive { try await Task.sleep(for: .milliseconds(350)) }
+                try Task.checkCancellation()
+                let value = try workspace.timelinePageLayout.pages(project: workspace.project, paper: workspace.paper)
+                try Task.checkCancellation(); measuredPages = value
+            } catch { /* Keep the explicitly labelled estimate when layout is unavailable. */ }
+        }
         .onChange(of: expanded) { _, _ in loadPreferences() }
         .onChange(of: preferences) { _, value in
             guard value.isValid, let data = try? JSONEncoder().encode(value), let text = String(data: data, encoding: .utf8) else { return }
@@ -105,6 +116,7 @@ struct StoryTimelineView: View {
             HStack(spacing: 8) {
                 counterView(primary: true)
                 counterView(primary: false)
+                Text(model?.typesetPages == true ? "Typeset pages" : "Estimated pages").foregroundStyle(.secondary).accessibilityLabel("Timeline page measurement")
                 if detached { Button("Dock Timeline") { workspace.timelineWindow.close() } }
                 else {
                     if !writer { Button(expanded ? "Restore Board" : "Expand Timeline") { expanded.toggle() } }

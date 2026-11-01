@@ -1,0 +1,6 @@
+{"cases":[
+ {"name":"Measured gaps and partial last page","ids":["a","b","c"],"spans":{"a":{"start":0.02,"end":0.4},"b":{"start":0.6,"end":1.2},"c":{"start":2,"end":2.3}},"expected":{"a":0.6,"b":1.4,"c":0.3}},
+ {"name":"Missing ownership","ids":["a","b"],"spans":{"a":{"start":0,"end":1}},"expected":null},
+ {"name":"Overlapping starts are ambiguous","ids":["a","b"],"spans":{"a":{"start":0,"end":0.2},"b":{"start":0,"end":0.5}},"expected":null},
+ {"name":"No active beats","ids":[],"spans":{},"expected":null}
+]}

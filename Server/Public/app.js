@@ -1,3 +1,4 @@
+import {measureTimelinePages} from './timeline-page-measurement.js';
 import {reconcileScriptAnnotations,highlightColors} from './script-annotations.js';
 import {requiredWriteFeatures,validateServerFeatures} from './feature-compatibility.js';
 import {validateTypography,applyTypography,popupTypography} from './script-typography.js';
@@ -547,10 +548,24 @@ function timelineActions(state,refresh,select,mutate=edit,writer=false){return {
     emotion:(id,tag)=>{if(current.access==='reader')return;const b=board().beats.find(b=>b.id===id);if(!b||locked(b))return;const raw=prompt('Emotion change (-100 to 100); prefix = for an absolute 0–100 checkpoint',String(b.emotionChanges?.[tag]??0));if(raw===null)return;const tension=prompt('Momentary beat tension (-5 to +5)',String(b.tensions?.[tag]??0));if(tension===null)return;mutate(()=>{const absolute=raw.startsWith('='),value=Number(absolute?raw.slice(1):raw),t=Number(tension);if(!Number.isFinite(value)||value<(absolute?0:-100)||value>100||!Number.isFinite(t)||Math.abs(t)>5)throw Error('Emotion and tension values are outside their allowed range.');b.emotionChanges??={};b.emotionChanges[tag]=value;b.emotionAbsoluteTags=(b.emotionAbsoluteTags??[]).filter(x=>x!==tag);if(absolute)b.emotionAbsoluteTags.push(tag);b.tensions??={};b.tensions[tag]=t;});}
 };}
 function chooseTimelineBeat(id){if(workspaces.isWriter())workspaces.revealBeat(id);else choose(id);}
+let timelineLayoutKey=null,timelineLayoutCounts=null,timelineLayoutTimer=null,timelineCompositionTarget=null;
+function timelinePageMetrics(){
+ if(!doc)return null;
+ const segments=scriptSegments(doc),paper=$('paper-mode').value,key=JSON.stringify([documentEpoch,paper,doc.project.frontstageScriptLayout,doc.project.productionRevision,segments.map(s=>[s.beatIDs,s.number,s.scene.slug,s.html,s.scene.frontstagePageStart,s.continuation])]);
+ if(key===timelineLayoutKey)return timelineLayoutCounts;
+ clearTimeout(timelineLayoutTimer);timelineLayoutKey=key;timelineLayoutCounts=null;
+ const measure=()=>{if(key!==timelineLayoutKey||!doc)return;if(timelineCompositionTarget?.isConnected){timelineLayoutTimer=setTimeout(measure,350);return;}try{timelineLayoutCounts=measureTimelinePages(doc,{paper,cleanHTML});}catch{timelineLayoutCounts=null;}if(key===timelineLayoutKey)renderTimeline();};
+ timelineLayoutTimer=setTimeout(measure,350);return null;
+}
+document.addEventListener('compositionstart',event=>{timelineCompositionTarget=event.target;},true);
+document.addEventListener('compositionend',()=>{timelineCompositionTarget=null;},true);
+$('paper-mode').addEventListener('change',()=>renderTimeline());
+document.fonts?.addEventListener('loadingdone',()=>{timelineLayoutKey=null;renderTimeline();});
 function renderTimeline() {
+  if(!doc)return;
   saveTimelinePreferences();
   $('board-area').classList.toggle('timeline-expanded',timelineState.expanded&&!timelineWindowRoot);$('workspace').classList.toggle('timeline-focus',timelineState.expanded&&!timelineWindowRoot);$('timeline').style.display=timelineWindowRoot?'none':'';
-  mountTimeline(timelineWindowRoot??$('timeline'),timelineModel(board(),doc.project.beats,storyMarkers(),timelineState.timeBase,doc.project.frontstageTimelineOptions?.minutesPerPage,doc.project.frontstageTimelineOptions?.trackGroups),timelineState,timelineActions(timelineState,renderTimeline,chooseTimelineBeat));
+  mountTimeline(timelineWindowRoot??$('timeline'),timelineModel(board(),doc.project.beats,storyMarkers(),timelineState.timeBase,doc.project.frontstageTimelineOptions?.minutesPerPage,doc.project.frontstageTimelineOptions?.trackGroups,timelinePageMetrics()),timelineState,timelineActions(timelineState,renderTimeline,chooseTimelineBeat));
   workspaces.refreshWriterTimeline?.();
 }
 
@@ -920,7 +935,7 @@ const workspaces = mountWorkspaces({
   undo:()=>restoreHistory(history,future),redo:()=>restoreHistory(future,history),
   createConvertedCopy: document=>createLocalProject(document.name,document),
   document: () => doc, current: () => current, edit, status, cleanHTML, plain,
-  mountWriterTimeline:(root,state,refresh,select,mutate)=>mountTimeline(root,timelineModel(board(),doc.project.beats,storyMarkers(),state.timeBase,doc.project.frontstageTimelineOptions?.minutesPerPage,doc.project.frontstageTimelineOptions?.trackGroups),state,timelineActions(state,refresh,select,mutate,true)),
+  mountWriterTimeline:(root,state,refresh,select,mutate)=>mountTimeline(root,timelineModel(board(),doc.project.beats,storyMarkers(),state.timeBase,doc.project.frontstageTimelineOptions?.minutesPerPage,doc.project.frontstageTimelineOptions?.trackGroups,timelinePageMetrics()),state,timelineActions(state,refresh,select,mutate,true)),
   timelineDetached:()=>!!timelineWindowRoot,
   selectedBeat: () => selected,
   selectedScene: () => board().beats.find(b => b.id === selected)?.sceneID,
@@ -943,7 +958,7 @@ const workspaces = mountWorkspaces({
 });
 
 // Re-measure cards if a fallback/web font finishes loading after the first render.
-document.fonts?.addEventListener('loadingdone', () => { if (doc) render(); });
+document.fonts?.addEventListener('loadingdone', () => { if (!doc)return;if(workspaces.isWriter())paintBoardProjection(board());else render(); });
 
 document.addEventListener('keydown',event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='l'&&selectedBeats.size&&(event.target===$('canvas')||$('script').contains(event.target))&&!event.target.isContentEditable&&!['INPUT','TEXTAREA'].includes(event.target.tagName)){event.preventDefault();scriptFilter.set({...scriptFilter.state,facets:{...scriptFilter.state.facets,Beats:{values:[...selectedBeats],hide:false,all:false}}});render();}});
 
