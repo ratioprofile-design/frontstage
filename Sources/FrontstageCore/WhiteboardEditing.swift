@@ -1,6 +1,19 @@
 import Foundation
 
 extension Project {
+    public mutating func editBoardDependency(_ id: String, reason: String? = nil, reference: Bool? = nil, remove: Bool = false) throws {
+        try editWhiteboard { board in
+            guard let index = board.dependencies.firstIndex(where: { $0.id == id }) else { throw ProjectError.invalidProject("This connection no longer exists") }
+            let edge = board.dependencies[index]
+            guard let cause = board.beats.first(where: { $0.id == edge.cause }), let effect = board.beats.first(where: { $0.id == edge.effect }), !board.isLocked(cause), !board.isLocked(effect) else { throw ProjectError.invalidProject("Unlock both endpoints before changing this connection") }
+            if remove { board.dependencies.remove(at: index) }
+            else {
+                if let reason { board.dependencies[index].reason = reason }
+                if let reference { board.dependencies[index].reference = reference }
+                _ = try board.causalOrder()
+            }
+        }
+    }
     public mutating func splitBoardGroup(at beatID: String) throws {
         try editWhiteboard { board in
             guard let beat = board.beats.first(where: { $0.id == beatID }), let group = board.blocks.first(where: { $0.id == beat.blockID && $0.containerKind == "beatGroup" }), !board.isBlockLocked(group.id) else { throw ProjectError.invalidProject("Choose an unlocked group member") }

@@ -301,3 +301,15 @@ export function reorderTimelineBeats(source,ids,targetID){
 }
 
 export function previewBoardPush(source,x,distance){const candidate=pushBoard(source,x,distance);return candidate.blocks.some((b,i)=>b.position.x!==source.blocks[i].position.x||b.position.y!==source.blocks[i].position.y)?spatialOrder(candidate):copy(source);}
+
+export function dependencyRoute(cause,effect){
+ const start={x:cause.x+cause.width,y:cause.y+cause.height/2},end={x:effect.x,y:effect.y+effect.height/2},bend=Math.max(35,Math.abs(end.x-start.x)*.45),control1={x:start.x+bend,y:start.y},control2={x:end.x-bend,y:end.y};
+ const point=t=>{const u=1-t;return {x:u*u*u*start.x+3*u*u*t*control1.x+3*u*t*t*control2.x+t*t*t*end.x,y:u*u*u*start.y+3*u*u*t*control1.y+3*u*t*t*control2.y+t*t*t*end.y};};
+ return {start,control1,control2,end,point,path:`M${start.x},${start.y} C${control1.x},${control1.y} ${control2.x},${control2.y} ${end.x},${end.y}`,contains(p,tolerance){if(![p.x,p.y,tolerance].every(Number.isFinite)||tolerance<0)return false;const length=Math.hypot(control1.x-start.x,control1.y-start.y)+Math.hypot(control2.x-control1.x,control2.y-control1.y)+Math.hypot(end.x-control2.x,end.y-control2.y),steps=Math.min(4096,Math.max(32,Math.ceil(length/Math.max(1,tolerance))));let a=start;for(let i=1;i<=steps;i++){const b=point(i/steps),dx=b.x-a.x,dy=b.y-a.y,t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/Math.max(.000001,dx*dx+dy*dy)));if(Math.hypot(p.x-a.x-t*dx,p.y-a.y-t*dy)<=tolerance)return true;a=b;}return false;}};
+}
+export function editDependency(board,id,{reason,reference,remove=false}={}){
+ const next=copy(board),index=next.dependencies.findIndex(e=>e.id===id);if(index<0)throw Error('This connection no longer exists.');const edge=next.dependencies[index],endpoints=next.beats.filter(b=>[edge.cause,edge.effect].includes(b.id)),locked=lockedBlockIDs(next);
+ if(endpoints.length!==2||endpoints.some(b=>b.locked||locked.has(b.blockID)))throw Error('Unlock both endpoints before changing this connection.');
+ if(remove)next.dependencies.splice(index,1);else{if(reason!==undefined){if(typeof reason!=='string')throw Error('Choose a text reason.');edge.reason=reason;}if(reference!==undefined){if(typeof reference!=='boolean')throw Error('Choose a valid connection type.');edge.reference=reference;}causalOrder(next);}
+ return next;
+}

@@ -85,3 +85,7 @@ Script editing projections include disabled and unused-lane beats with status la
 Browser popup editors scroll the caret into their scroll containers after typing, navigation and IME completion. Native editors reveal the selected text range after editing and selection changes. Tests cover a 100-paragraph popup, omitted/unused visibility, filter combinations/history, and export preservation.
 
 Deletion cleanup removes only affected loose-beat containers and groups that become empty, including nested empty groups. Explicit blocks and unrelated empty groups are retained. Browser Delete/Backspace and context deletion share the same lock-aware operation, with undo/redo and persistence regression coverage. Native beat deletion performs the corresponding cleanup atomically.
+
+## Completion branch follow-up
+
+The integration branch adds detached live Push previews with Escape cancellation, exact negative packing gaps, and one history transaction on release. Write has an optional independent mini-timeline that retains the active editor and caret when toggled or detached. Native plain-wheel zoom is implemented with Shift/horizontal gestures reserved for scrolling. Dependency-line context menus navigate to either endpoint and edit reason/type or remove the connection through lock-aware transactions. These features have portable/browser regressions and hosted native tests; native CI and physical-device acceptance remain separate gates. Container endpoints, reference scoring and the other gaps above are not implied complete.

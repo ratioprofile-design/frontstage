@@ -10,6 +10,37 @@ public struct BoardRect: Equatable, Sendable {
     public func intersects(_ r: BoardRect) -> Bool { maxX >= r.x && x <= r.maxX && maxY >= r.y && y <= r.maxY }
 }
 
+/// The same cubic drives dependency drawing and zoom-independent line picking.
+public struct BoardDependencyRoute: Sendable {
+    public var start: BoardPoint
+    public var control1: BoardPoint
+    public var control2: BoardPoint
+    public var end: BoardPoint
+    public init(cause: BoardRect, effect: BoardRect) {
+        start = .init(x: cause.maxX, y: cause.center.y); end = .init(x: effect.x, y: effect.center.y)
+        let bend = max(35, abs(end.x - start.x) * 0.45)
+        control1 = .init(x: start.x + bend, y: start.y); control2 = .init(x: end.x - bend, y: end.y)
+    }
+    public func point(at t: Double) -> BoardPoint {
+        let u = 1 - t
+        return .init(x: u*u*u*start.x + 3*u*u*t*control1.x + 3*u*t*t*control2.x + t*t*t*end.x,
+                     y: u*u*u*start.y + 3*u*u*t*control1.y + 3*u*t*t*control2.y + t*t*t*end.y)
+    }
+    public func contains(_ point: BoardPoint, tolerance: Double) -> Bool {
+        guard tolerance.isFinite, tolerance >= 0, point.x.isFinite, point.y.isFinite else { return false }
+        let length = hypot(control1.x-start.x, control1.y-start.y) + hypot(control2.x-control1.x, control2.y-control1.y) + hypot(end.x-control2.x, end.y-control2.y)
+        let steps = min(4096, max(32, Int(ceil(length / max(1, tolerance)))))
+        var a = start
+        for index in 1...steps {
+            let b = self.point(at: Double(index) / Double(steps)), dx = b.x-a.x, dy = b.y-a.y
+            let fraction = max(0, min(1, ((point.x-a.x)*dx + (point.y-a.y)*dy) / max(0.000001, dx*dx+dy*dy)))
+            if hypot(point.x-a.x-fraction*dx, point.y-a.y-fraction*dy) <= tolerance { return true }
+            a = b
+        }
+        return false
+    }
+}
+
 /// One geometry source drives drawing, hit-testing, marquee selection and viewport culling.
 public struct WhiteboardLayout: Sendable {
     public let layerRects: [String: BoardRect]

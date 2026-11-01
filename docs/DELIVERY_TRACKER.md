@@ -18,7 +18,8 @@ This tracker supersedes stale completion claims in the older phase documents. De
 ## 2. Whiteboard and timeline
 
 - [x] Live, cancellable Push preview with the same validated result on release (shared/model and browser acceptance pass; hosted Mac acceptance added to CI).
-- [ ] Collision packing/preview; container endpoint dependencies and line navigation.
+- [x] Dependency-line navigation and reason/type/removal menus, with endpoint locks, cycle rollback and undo/redo (core/browser acceptance passes; hosted Mac test added).
+- [ ] Advanced collision packing and container endpoint dependencies.
 - [ ] FlowLines and character/tag coloring.
 - [ ] Nested research ordering and category composite curves.
 - [ ] Automatic tension policies; readability only when its reference calculation is available.

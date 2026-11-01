@@ -14,7 +14,7 @@ import {dialogueSeed} from './dialogue-rules.js';
 import { splitBeat, scriptSegments, heading, captureRevision, restoreRevision } from './workspace-model.js';
 import { mergeDocuments } from './merge.js';
 import { apiOrigin as configuredOrigin } from './config.js';
-import { causalOrder as orderCauses, compactCausalTime, groupBlocks, ungroupBlocks, moveBlocks, moveStandaloneBeats, descendantBlocks, deleteBlocks, deleteBeats, validateBoard, groupBeats, beatSize, moveBeatsToLayer, spatialOrder, dropBeats, pruneEmptyBeatContainers, usesBlocks, nestGroups, splitGroupAt, mergeContainers, pushBoard, previewBoardPush, splitBlockAt, reorderTimelineBeats } from './board-operations.js';
+import { causalOrder as orderCauses, compactCausalTime, groupBlocks, ungroupBlocks, moveBlocks, moveStandaloneBeats, descendantBlocks, deleteBlocks, deleteBeats, validateBoard, groupBeats, beatSize, moveBeatsToLayer, spatialOrder, dropBeats, pruneEmptyBeatContainers, usesBlocks, nestGroups, splitGroupAt, mergeContainers, pushBoard, previewBoardPush, dependencyRoute, editDependency, splitBlockAt, reorderTimelineBeats } from './board-operations.js';
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
 
@@ -411,8 +411,8 @@ function render() {
   $('links').setAttribute('width', g.width); $('links').setAttribute('height', g.height);
   for (const edge of board().dependencies) {
     const a = g.beats.get(edge.cause), b = g.beats.get(edge.effect); if (!a || !b) continue;
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path'), bend = Math.max(35, Math.abs(b.x - a.x - a.width) * .45);
-    path.setAttribute('d', `M${a.x + a.width},${a.y + a.height / 2} C${a.x + a.width + bend},${a.y + a.height / 2} ${b.x - bend},${b.y + b.height / 2} ${b.x},${b.y + b.height / 2}`);
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d',dependencyRoute(a,b).path);
     path.dataset.edgeId=edge.id;path.setAttribute('stroke', edge.cause === selected || edge.effect === selected ? '#8be8f2' : '#d1d1d3'); path.setAttribute('fill', 'none'); if (edge.reference) path.setAttribute('stroke-dasharray', '4 4'); $('links').append(path);
   }
   for(const stroke of board().strokes||[])$('links').append(drawingPath(stroke.points,stroke.color,stroke.width));
@@ -781,7 +781,7 @@ function paintBoardProjection(projection){
  for(const node of $('layers').children){const r=g.layers.get(node.dataset.layerId);if(r)position(node,{x:0,y:r.y,width:g.width,height:r.height});}
  for(const node of $('blocks').children){const r=g.blocks.get(node.dataset.blockId);if(r)position(node,r);}
  for(const node of $('blocks').querySelectorAll('[data-beat-id]')){const beat=projection.beats.find(b=>b.id===node.dataset.beatId),r=g.beats.get(beat?.id),owner=g.blocks.get(beat?.blockID);if(r&&owner)position(node,{...r,x:r.x-owner.x,y:r.y-owner.y});}
- for(const edge of projection.dependencies){const a=g.beats.get(edge.cause),b=g.beats.get(edge.effect),path=[...$('links').querySelectorAll('[data-edge-id]')].find(n=>n.dataset.edgeId===edge.id);if(a&&b&&path){const bend=Math.max(35,Math.abs(b.x-a.x-a.width)*.45);path.setAttribute('d',`M${a.x+a.width},${a.y+a.height/2} C${a.x+a.width+bend},${a.y+a.height/2} ${b.x-bend},${b.y+b.height/2} ${b.x},${b.y+b.height/2}`);}}
+ for(const edge of projection.dependencies){const a=g.beats.get(edge.cause),b=g.beats.get(edge.effect),path=[...$('links').querySelectorAll('[data-edge-id]')].find(n=>n.dataset.edgeId===edge.id);if(a&&b&&path)path.setAttribute('d',dependencyRoute(a,b).path);}
  $('links').setAttribute('width',g.width);$('links').setAttribute('height',g.height);
 }
 $('canvas').addEventListener('pointerdown',e=>{
@@ -805,7 +805,15 @@ $('canvas').addEventListener('contextmenu',event=>{
   const menu=element('div',undefined,'board-context-menu');boardMenu=menu;menu.setAttribute('role','menu');menu.setAttribute('aria-label','Whiteboard actions');
   const item=(label,run,disabled=false)=>{const button=element('button',label);button.setAttribute('role','menuitem');button.disabled=disabled;button.onclick=()=>{closeBoardMenu();run();};menu.append(button);};
   const readOnly=current.access==='reader',uneditable=readOnly||layer.locked||(block&&locked({blockID:block.id}));
-  if(beat){
+  const connection=!beat?[...board().dependencies].reverse().find(edge=>{const a=g.beats.get(edge.cause),b=g.beats.get(edge.effect);return a&&b&&dependencyRoute(a,b).contains({x,y},6/boardZoom);}):null;
+  if(connection){
+    const endpoint=id=>board().beats.find(b=>b.id===id),cannotEdit=readOnly||[connection.cause,connection.effect].some(id=>!endpoint(id)||locked(endpoint(id)));
+    item('Go to Cause: '+endpoint(connection.cause).title,()=>revealBoardBeat(connection.cause));
+    item('Go to Effect: '+endpoint(connection.effect).title,()=>revealBoardBeat(connection.effect));
+    item('Edit Connection Reason…',()=>{const reason=prompt('Connection reason',connection.reason);if(reason!==null)edit(()=>{doc.project.frontstageWhiteboard=editDependency(board(),connection.id,{reason});});},cannotEdit);
+    item(connection.reference?'Make Causal Dependency':'Make Reference Connection',()=>edit(()=>{doc.project.frontstageWhiteboard=editDependency(board(),connection.id,{reference:!connection.reference});}),cannotEdit);
+    item('Remove Connection',()=>edit(()=>{doc.project.frontstageWhiteboard=editDependency(board(),connection.id,{remove:true});}),cannotEdit);
+  }else if(beat){
     if(!selectedBeats.has(beat.id)){selectedBeats=new Set([beat.id]);selected=beat.id;}
     item('Edit Beat',()=>openEditor(beat.id));item('Jump to Script',()=>{$('script').hidden=false;const text=document.querySelector(`[data-script-beat="${beat.id}"]`);if(text){text.closest('.script-beat-body').hidden=false;text.scrollIntoView({block:'start'});}});
     item('Duplicate Beat',()=>{let id;edit(()=>{id=duplicateBeat(doc,beat.id);});if(id)choose(id);},uneditable||beat.locked);
@@ -815,7 +823,7 @@ $('canvas').addEventListener('contextmenu',event=>{
     item(selectedBeats.size>1?'Pull Out Selected Beats':'Pull Out Beat',()=>edit(()=>{doc=pullOutBeats(doc,selectedBeats);}),uneditable||[...selectedBeats].some(id=>locked(board().beats.find(b=>b.id===id))));
     item(beat.omitted?'Include Beat':'Omit Beat',()=>edit(()=>{beat.omitted=!beat.omitted;}),uneditable||beat.locked);
   }
-  if(block&&!block.standalone){
+  if(!connection&&block&&!block.standalone){
     item('Rename '+(block.containerKind==='beatGroup'?'Group':'Block'),()=>{const name=prompt('Container name',block.name);if(name?.trim())edit(()=>{block.name=name.trim();});},uneditable);
     item(block.collapsed?'Expand Container':'Collapse Container',()=>edit(()=>{block.collapsed=!block.collapsed;}),readOnly);
     item('Container Synopsis…',()=>{const value=prompt('Synopsis',block.synopsis??'');if(value!==null)edit(()=>{block.synopsis=value;});},uneditable);
@@ -825,8 +833,8 @@ $('canvas').addEventListener('contextmenu',event=>{
     item('Pull Out Container Contents',()=>edit(()=>{const containers=descendantBlocks(board(),new Set([block.id]));doc=pullOutBeats(doc,new Set(board().beats.filter(b=>containers.has(b.blockID)).map(b=>b.id)));}),uneditable);
   }
   const position={x:Math.max(0,x-110),y:Math.max(32,y-g.layers.get(layer.id).y)},parent=block&&!block.standalone?block.id:null;
-  for(const kind of ['beat','group','block','lane'])item('Add '+kind[0].toUpperCase()+kind.slice(1)+' Here',()=>createPalette(kind,layer.id,position,['beat','group'].includes(kind)?parent:null),uneditable||(kind==='block'&&!usesBlocks(board(),layer.id))||(['beat','group'].includes(kind)&&usesBlocks(board(),layer.id)&&!parent));
-  item(usesBlocks(board(),layer.id)?'Disable Use Blocks':'Enable Use Blocks',()=>edit(()=>{layer.useBlocks=!usesBlocks(board(),layer.id);}),readOnly||layer.locked);
+  if(!connection)for(const kind of ['beat','group','block','lane'])item('Add '+kind[0].toUpperCase()+kind.slice(1)+' Here',()=>createPalette(kind,layer.id,position,['beat','group'].includes(kind)?parent:null),uneditable||(kind==='block'&&!usesBlocks(board(),layer.id))||(['beat','group'].includes(kind)&&usesBlocks(board(),layer.id)&&!parent));
+  if(!connection)item(usesBlocks(board(),layer.id)?'Disable Use Blocks':'Enable Use Blocks',()=>edit(()=>{layer.useBlocks=!usesBlocks(board(),layer.id);}),readOnly||layer.locked);
   item('Undo',()=>restoreHistory(history,future),readOnly||!history.length);
   menu.style.left=Math.max(4,Math.min(event.clientX,window.innerWidth-260))+'px';menu.style.top=Math.max(4,Math.min(event.clientY,window.innerHeight-440))+'px';document.body.append(menu);menu.querySelector('button:not(:disabled)')?.focus();
   menu.onkeydown=e=>{const buttons=[...menu.querySelectorAll('button:not(:disabled)')],index=buttons.indexOf(document.activeElement);if(e.key==='Escape'){closeBoardMenu();$('canvas').focus();}if(['ArrowDown','ArrowUp'].includes(e.key)){e.preventDefault();buttons[(index+(e.key==='ArrowDown'?1:buttons.length-1))%buttons.length]?.focus();}};

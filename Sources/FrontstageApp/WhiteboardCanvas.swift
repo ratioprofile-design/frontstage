@@ -76,6 +76,7 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
     private var marquee: BoardRect?
     private var stroke: [BoardPoint] = []
     private var spaceHeld = false
+    private var contextDependency: String?
     private var contextBeat: String?
     private var contextBlock: String?
     private var contextPoint = BoardPoint()
@@ -205,10 +206,10 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
             guard let a = geometry.beatRects[edge.cause], let b = geometry.beatRects[edge.effect] else { continue }
             let extent = BoardRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(a.x - b.x) + max(a.width, b.width), height: abs(a.y - b.y) + max(a.height, b.height))
             guard extent.intersects(viewport) else { continue }
-            let start = NSPoint(x: a.maxX, y: a.center.y), end = NSPoint(x: b.x, y: b.center.y)
+            let route = BoardDependencyRoute(cause: a, effect: b)
+            let start = NSPoint(x: route.start.x, y: route.start.y), end = NSPoint(x: route.end.x, y: route.end.y)
             let path = NSBezierPath(); path.move(to: start)
-            let bend = max(30, abs(end.x - start.x) * 0.45)
-            path.curve(to: end, controlPoint1: NSPoint(x: start.x + bend, y: start.y), controlPoint2: NSPoint(x: end.x - bend, y: end.y))
+            path.curve(to: end, controlPoint1: NSPoint(x: route.control1.x, y: route.control1.y), controlPoint2: NSPoint(x: route.control2.x, y: route.control2.y))
             let invalid = !edge.reference && (byID[edge.effect]?.start ?? 0) < (byID[edge.cause]?.start ?? 0) + (byID[edge.cause]?.duration ?? 0)
             (invalid ? NSColor.systemRed : selection.contains(edge.cause) || selection.contains(edge.effect) ? NSColor.systemCyan : NSColor(calibratedWhite: 0.82, alpha: 0.65)).setStroke()
             path.lineWidth = 1.3 / max(0.6, zoom)
@@ -570,6 +571,7 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
     override func rightMouseDown(with event: NSEvent) {
         contextPoint = world(convert(event.locationInWindow, from: nil))
         contextBeat = geometry.hitBeat(contextPoint); contextBlock = hitBlock(contextPoint)
+        if contextBeat == nil, let menu = dependencyMenu(at: contextPoint) { NSMenu.popUpContextMenu(menu, with: event, for: self); return }
         let menu = NSMenu()
         func item(_ name: String, _ action: Selector) { let item = NSMenuItem(title: name, action: action, keyEquivalent: ""); item.target = self; menu.addItem(item) }
         if contextBeat != nil {
@@ -594,6 +596,46 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
         if blockSelection.count > 1 { item("Group Selected Blocks", #selector(groupContext)); item("Merge Groups / Blocks", #selector(mergeContext)) }
         NSMenu.popUpContextMenu(menu, with: event, for: self)
     }
+    func dependencyMenu(at point: BoardPoint) -> NSMenu? {
+        guard let edge = board.dependencies.reversed().first(where: { edge in
+            guard let a = geometry.beatRects[edge.cause], let b = geometry.beatRects[edge.effect] else { return false }
+            return BoardDependencyRoute(cause: a, effect: b).contains(point, tolerance: 6 / zoom)
+        }) else { return nil }
+        contextDependency = edge.id
+        let menu = NSMenu(); menu.autoenablesItems = false
+        let locked = [edge.cause, edge.effect].contains { id in board.beats.first(where: { $0.id == id }).map { board.isLocked($0) } ?? true } || workspace?.sharedProjects.linked?.access == "reader"
+        func item(_ title: String, _ action: Selector, editing: Bool = false) {
+            let row = NSMenuItem(title: title, action: action, keyEquivalent: ""); row.target = self; row.isEnabled = !editing || !locked; menu.addItem(row)
+        }
+        item("Go to Cause: " + (board.beats.first { $0.id == edge.cause }?.title ?? "Beat"), #selector(goToDependencyCause))
+        item("Go to Effect: " + (board.beats.first { $0.id == edge.effect }?.title ?? "Beat"), #selector(goToDependencyEffect))
+        menu.addItem(.separator())
+        item("Edit Connection Reason…", #selector(editDependencyReason), editing: true)
+        item(edge.reference ? "Make Causal Dependency" : "Make Reference Connection", #selector(toggleDependencyReference), editing: true)
+        item("Remove Connection", #selector(removeDependency), editing: true)
+        return menu
+    }
+    private func navigateDependency(cause: Bool) {
+        guard let edge = board.dependencies.first(where: { $0.id == contextDependency }) else { return }
+        let id = cause ? edge.cause : edge.effect
+        guard let rect = geometry.beatRects[id] else { return }
+        selection = [id]; blockSelection = []; selected?(selection, []); workspace?.pendingBoardCauseID = nil; workspace?.selectBoardBeat(id)
+        board.viewport.origin = .init(x: rect.center.x - bounds.width / zoom / 2, y: rect.center.y - bounds.height / zoom / 2)
+        persistViewport(); needsDisplay = true
+    }
+    @objc private func goToDependencyCause() { navigateDependency(cause: true) }
+    @objc private func goToDependencyEffect() { navigateDependency(cause: false) }
+    @objc private func removeDependency() { if let id = contextDependency { workspace?.edit("Remove Connection") { try $0.editBoardDependency(id, remove: true) } } }
+    @objc private func toggleDependencyReference() {
+        if let edge = board.dependencies.first(where: { $0.id == contextDependency }) { workspace?.edit("Connection Type") { try $0.editBoardDependency(edge.id, reference: !edge.reference) } }
+    }
+    @objc private func editDependencyReason() {
+        guard let edge = board.dependencies.first(where: { $0.id == contextDependency }) else { return }
+        let alert = NSAlert(); alert.messageText = "Connection Reason"; alert.addButton(withTitle: "Save"); alert.addButton(withTitle: "Cancel")
+        let field = NSTextField(string: edge.reason); field.frame = NSRect(x: 0, y: 0, width: 360, height: 70); alert.accessoryView = field
+        if alert.runModal() == .alertFirstButtonReturn { workspace?.edit("Connection Reason") { try $0.editBoardDependency(edge.id, reason: field.stringValue) } }
+    }
+
     @objc private func splitBlockContext() { if let id = contextBlock { workspace?.edit("Split Block") { try $0.splitBoardBlock(id, at: contextPoint.x - 110) } } }
     @objc private func synopsisContext() {
         guard let id = contextBlock, let block = board.blocks.first(where: { $0.id == id }), !board.isBlockLocked(id) else { return }
