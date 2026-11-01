@@ -21,20 +21,21 @@ final class TimelineWheelView: NSView {
         super.viewDidMoveToWindow(); stop()
         guard window != nil else { return }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-            MainActor.assumeIsolated { self?.handle(event) ?? event }
+            let consumed = MainActor.assumeIsolated { self?.handle(event) ?? false }
+            return consumed ? nil : event
         }
     }
     func stop() { if let monitor { NSEvent.removeMonitor(monitor) }; monitor = nil }
-    private func handle(_ event: NSEvent) -> NSEvent? {
-        guard event.window === window, !event.modifierFlags.contains(.shift), abs(event.scrollingDeltaY) >= abs(event.scrollingDeltaX), event.scrollingDeltaY != 0 else { return event }
+    private func handle(_ event: NSEvent) -> Bool {
+        guard event.window === window, !event.modifierFlags.contains(.shift), abs(event.scrollingDeltaY) >= abs(event.scrollingDeltaX), event.scrollingDeltaY != 0 else { return false }
         let point = convert(event.locationInWindow, from: nil)
-        guard bounds.contains(point), point.y > 42 else { return event }
+        guard bounds.contains(point), point.y > 42 else { return false }
         var hit = window?.contentView.flatMap { content in content.hitTest(content.convert(event.locationInWindow, from: nil)) }
         while hit != nil && !(hit is NSScrollView) { hit = hit?.superview }
         let scroll = hit as? NSScrollView
         let local = scroll.map { $0.contentView.convert(event.locationInWindow, from: nil).x - $0.contentView.bounds.minX } ?? point.x
         applyZoom(deltaY: event.scrollingDeltaY, localX: local, scroll: scroll)
-        return nil
+        return true
     }
     func applyZoom(deltaY: CGFloat, localX: CGFloat, scroll: NSScrollView?) {
         guard deltaY.isFinite, localX.isFinite else { return }

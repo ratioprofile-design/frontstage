@@ -73,7 +73,7 @@ export function mountWorkspaces(api) {
     if(selectedBeat){sceneID=selectedBeat.sceneID;api.selectScene(sceneID,selectedBeat.id);}
     const outer=el('div',null,'writing-panels-host'),wrap=el('div',null,'writing-workspace');root.append(outer);outer.append(wrap);
     const tools=el('nav',null,'dedicated-script-tools');tools.setAttribute('aria-label','Script toolbar');wrap.append(tools);
-    const mini=el('section',null,'writer-mini-timeline');mini.dataset.writerTimeline='true';mini.setAttribute('aria-label','Writer timeline');wrap.append(mini);let timelineFrame;
+    const mini=el('section',null,'writer-mini-timeline');mini.dataset.writerTimeline='true';mini.hidden=!scriptView.miniTimeline||api.timelineDetached();mini.setAttribute('aria-label','Writer timeline');wrap.append(mini);let timelineFrame;
     const selectTimeline=id=>{const beat=model.board(doc()).beats.find(b=>b.id===id);if(beat)writePanels?.reveal(beat.sceneID,id);};
     const drawTimeline=()=>{mini.hidden=!scriptView.miniTimeline||api.timelineDetached();if(mini.hidden||!mini.isConnected)return;localStorage.setItem('frontstage-timeline-writer',JSON.stringify({...writerTimelineState,collapsed:[...writerTimelineState.collapsed],hidden:[...writerTimelineState.hidden]}));api.mountWriterTimeline(mini,writerTimelineState,drawTimeline,selectTimeline,action=>change(()=>action()));};
     refreshWriterTimeline=()=>{cancelAnimationFrame(timelineFrame);timelineFrame=requestAnimationFrame(drawTimeline);};
