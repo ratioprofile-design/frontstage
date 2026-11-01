@@ -26,18 +26,18 @@ final class TimelineInteractionTests: XCTestCase {
     func testWriterTimelineToggleKeepsHostedEditorAndSelection() async throws {
         try await MainActor.run {
             _ = NSApplication.shared
-            let defaults = UserDefaults.standard, key = "frontstage-write-mini-timeline"
-            let saved = defaults.object(forKey: key)
-            defer { if let saved { defaults.set(saved, forKey: key) } else { defaults.removeObject(forKey: key) } }
+            let suite = "dot-timeline-acceptance-" + UUID().uuidString, key = "frontstage-write-mini-timeline"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
             defaults.set(false, forKey: key)
             let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Fixtures/write-panels.frontstage")
             let workspace = Workspace(recoveryStore: nil)
             workspace.loadCopy(try Project(data: Data(contentsOf: fixture))); workspace.mode = .edit
-            let host = NSHostingView(rootView: ScriptWritingWorkspace(workspace: workspace))
+            let host = NSHostingView(rootView: ScriptWritingWorkspace(workspace: workspace).defaultAppStorage(defaults))
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1440, height: 950), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
             window.contentView = host; window.orderFront(nil)
             defer { window.close() }
-            func settle() { host.layoutSubtreeIfNeeded(); RunLoop.current.run(until: Date().addingTimeInterval(0.1)); host.layoutSubtreeIfNeeded() }
+            @MainActor func settle() { host.layoutSubtreeIfNeeded(); RunLoop.current.run(until: Date().addingTimeInterval(0.1)); host.layoutSubtreeIfNeeded() }
             settle()
             let controller = workspace.scriptController("write-continuous")
             let text = try XCTUnwrap(controller.textView)

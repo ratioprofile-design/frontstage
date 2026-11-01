@@ -13,7 +13,7 @@ try{
  browser=await chromium.launch({executablePath:process.env.FRONTSTAGE_CHROMIUM||(existsSync('/usr/bin/chromium')?'/usr/bin/chromium':chromium.executablePath()),headless:true,args:['--no-sandbox']});
  const page=await browser.newPage({viewport:{width:1440,height:950}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
  const fixture=JSON.parse(await readFile(path.join(root,'Tests/Fixtures/write-panels.frontstage'),'utf8'));fixture.project.frontstageWhiteboard.dependencies=[];fixture.project.frontstageWhiteboard.blocks.forEach((b,i)=>{b.position={x:60+i*300,y:60};b.collapsed=false;});
- await page.goto('http://127.0.0.1:17845');await page.locator('#local-mode').click();await page.locator('#back').click();await page.locator('#import-project').setInputFiles({name:'Push.dot',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(fixture))});await page.waitForSelector('#workspace:not([hidden])');
+ await page.goto('http://127.0.0.1:17845');await page.locator('#local-mode').click();await page.locator('#back').click();await page.locator('#import-project').setInputFiles({name:'Push.dot',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(fixture))});await page.waitForSelector('#workspace:not([hidden])');await page.locator('#blocks [data-beat-id="beat-2"]').waitFor();
  const canvas=page.locator('#canvas'),target=page.locator('#blocks [data-block-id="'+fixture.project.frontstageWhiteboard.blocks[1].id+'"]');
  const download=async()=>{const event=page.waitForEvent('download');await page.locator('#download').evaluate(n=>n.click());const file=await event;return JSON.parse(await readFile(await file.path(),'utf8'));};
  const before=await download(),bounds=await canvas.boundingBox(),original=await target.boundingBox();
