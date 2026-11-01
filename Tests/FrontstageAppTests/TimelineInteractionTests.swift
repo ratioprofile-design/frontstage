@@ -35,7 +35,7 @@ final class TimelineInteractionTests: XCTestCase {
             workspace.loadCopy(try Project(data: Data(contentsOf: fixture))); workspace.mode = .edit
             let host = NSHostingView(rootView: ScriptWritingWorkspace(workspace: workspace).defaultAppStorage(defaults))
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1440, height: 950), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
-            window.contentView = host; window.orderFront(nil)
+            window.isReleasedWhenClosed = false; window.contentView = host; window.orderFront(nil)
             defer { window.close() }
             @MainActor func settle() { host.layoutSubtreeIfNeeded(); RunLoop.current.run(until: Date().addingTimeInterval(0.1)); host.layoutSubtreeIfNeeded() }
             settle()

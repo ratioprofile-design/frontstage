@@ -17,9 +17,10 @@ final class WhiteboardPresentationAcceptanceTests: XCTestCase {
             let workspace = Workspace(recoveryStore: nil); workspace.loadCopy(project)
             let view = NativeWhiteboard(frame: NSRect(x: 0, y: 0, width: 900, height: 600))
             let window = NSWindow(contentRect: view.frame, styleMask: [.titled], backing: .buffered, defer: false)
-            window.contentView = view; defer { window.close() }
+            window.isReleasedWhenClosed = false; window.contentView = view; defer { window.close() }
             view.workspace = workspace; view.acceptModel(workspace)
             @MainActor func render() throws -> Data {
+                view.needsDisplay = true
                 let image = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
                 view.cacheDisplay(in: view.bounds, to: image)
                 return try XCTUnwrap(image.representation(using: .png, properties: [:]))

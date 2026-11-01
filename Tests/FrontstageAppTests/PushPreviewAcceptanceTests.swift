@@ -12,7 +12,7 @@ final class PushPreviewAcceptanceTests: XCTestCase {
             try project.editWhiteboard { board in for i in board.blocks.indices { board.blocks[i].position = .init(x: i == 0 ? 50 : 300, y: 60); board.blocks[i].width = 140 } }
             let workspace = Workspace(recoveryStore: nil); workspace.loadCopy(project)
             let view = NativeWhiteboard(frame: NSRect(x: 0, y: 0, width: 900, height: 600)), window = NSWindow(contentRect: view.frame, styleMask: [.titled], backing: .buffered, defer: false)
-            window.contentView = view; window.makeFirstResponder(view); defer { window.close() }
+            window.isReleasedWhenClosed = false; window.contentView = view; window.makeFirstResponder(view); defer { window.close() }
             view.workspace = workspace; view.acceptModel(workspace); view.pushingMode = true
             @MainActor func mouse(_ type: NSEvent.EventType, x: CGFloat) -> NSEvent { NSEvent.mouseEvent(with: type, location: NSPoint(x: x, y: 400), modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1)! }
             view.mouseDown(with: mouse(.leftMouseDown, x: 310)); view.mouseDragged(with: mouse(.leftMouseDragged, x: 360))
