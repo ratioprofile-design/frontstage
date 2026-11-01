@@ -276,9 +276,10 @@ export function mergeContainers(source,ids){
  target.width=Math.min(2000,Math.max(...items.map(b=>b.position.x+b.width-target.position.x)));target.synopsis=items.map(b=>b.synopsis).filter(Boolean).join('\n');board.blocks=board.blocks.filter(b=>!ids.has(b.id)||b.id===target.id);return board;
 }
 export function pushBoard(source,x,distance){
- const roots=source.blocks.filter(b=>!b.parentID&&b.position.x>=x);if(!roots.length)return copy(source);let delta=distance;
+ if(!Number.isFinite(x)||!Number.isFinite(distance))throw Error('Push coordinates must be finite.');
+ const roots=source.blocks.filter(b=>!b.parentID&&b.position.x>=x);if(!roots.length)return copy(source);let delta=Math.sign(distance)*Math.round(Math.abs(distance)/10)*10;
  if(delta<0)for(const root of roots){const edge=Math.max(0,...source.blocks.filter(b=>!b.parentID&&b.layerID===root.layerID&&b.position.x<x).map(b=>b.position.x+b.width+12));delta=Math.max(delta,Math.min(0,edge-root.position.x));}
- return moveBlocks(source,new Set(roots.map(b=>b.id)),delta,0,{ripple:false});
+ const board=copy(source);if(delta===0)return board;const moving=descendantBlocks(board,new Set(roots.map(b=>b.id))),locked=lockedBlockIDs(board);if([...moving].some(id=>locked.has(id))||board.beats.some(b=>moving.has(b.blockID)&&b.locked))throw Error('Unlock the content before pushing.');for(const block of board.blocks)if(moving.has(block.id)){const x=block.position.x+delta;if(!Number.isFinite(x)||Math.abs(x)>1000000)throw Error('Push position is out of range.');block.position.x=x;}return board;
 }
 export function splitBlockAt(source,id,x){
  const board=copy(source),block=board.blocks.find(b=>b.id===id),locked=lockedBlockIDs(board);
@@ -298,3 +299,5 @@ export function reorderTimelineBeats(source,ids,targetID){
  for(const b of board.beats.filter(b=>b.blockID===block.id)){if(block.containerKind==='beatGroup')delete b.position;else if(!block.standalone)b.position={x:6+(b.order-first)*60,y:b.position?.y??24};}}
  return board;
 }
+
+export function previewBoardPush(source,x,distance){const candidate=pushBoard(source,x,distance);return candidate.blocks.some((b,i)=>b.position.x!==source.blocks[i].position.x||b.position.y!==source.blocks[i].position.y)?spatialOrder(candidate):copy(source);}

@@ -34,18 +34,39 @@ extension Project {
             }
         }
     }
+    /// Preview is a detached candidate: no user project or history changes until committed.
+    public func previewWhiteboardPush(from x: Double, by distance: Double) throws -> Project {
+        var candidate = self
+        let before = try whiteboard()
+        try candidate.pushWhiteboard(from: x, by: distance)
+        let after = try candidate.whiteboard()
+        guard zip(before.blocks, after.blocks).contains(where: { pair in pair.0.position != pair.1.position }) else { return self }
+        try candidate.applyWhiteboardSpatialOrder()
+        return candidate
+    }
     public mutating func pushWhiteboard(from x: Double, by distance: Double) throws {
+        guard x.isFinite, distance.isFinite else { throw ProjectError.invalidProject("Push coordinates must be finite") }
         let board = try whiteboard()
         let roots = board.blocks.filter { $0.parentID == nil && $0.position.x >= x }
         guard !roots.isEmpty else { return }
-        var delta = distance
+        var delta = (distance / 10).rounded() * 10
         if delta < 0 {
             for root in roots {
                 let edge = board.blocks.filter { $0.parentID == nil && $0.layerID == root.layerID && $0.position.x < x }.map { $0.position.x + $0.width + 12 }.max() ?? 0
                 delta = max(delta, min(0, edge - root.position.x))
             }
         }
-        try moveBoardBlocks(Set(roots.map(\.id)), delta: .init(x: delta, y: 0), ripple: false)
+        guard delta != 0 else { return }
+        var moving = Set(roots.map(\.id))
+        while true { let next = moving.union(board.blocks.filter { $0.parentID.map(moving.contains) == true }.map(\.id)); if next == moving { break }; moving = next }
+        guard moving.isDisjoint(with: board.lockedBlockIDs), !board.beats.contains(where: { moving.contains($0.blockID) && $0.locked }) else { throw ProjectError.invalidProject("Unlock the content before pushing") }
+        try editWhiteboard { board in
+            for index in board.blocks.indices where moving.contains(board.blocks[index].id) {
+                let x = board.blocks[index].position.x + delta
+                guard x.isFinite, abs(x) <= 1_000_000 else { throw ProjectError.invalidProject("Push position is out of range") }
+                board.blocks[index].position.x = x
+            }
+        }
     }
 }
 

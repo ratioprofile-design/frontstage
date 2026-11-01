@@ -14,7 +14,7 @@ import {dialogueSeed} from './dialogue-rules.js';
 import { splitBeat, scriptSegments, heading, captureRevision, restoreRevision } from './workspace-model.js';
 import { mergeDocuments } from './merge.js';
 import { apiOrigin as configuredOrigin } from './config.js';
-import { causalOrder as orderCauses, compactCausalTime, groupBlocks, ungroupBlocks, moveBlocks, moveStandaloneBeats, descendantBlocks, deleteBlocks, deleteBeats, validateBoard, groupBeats, beatSize, moveBeatsToLayer, spatialOrder, dropBeats, pruneEmptyBeatContainers, usesBlocks, nestGroups, splitGroupAt, mergeContainers, pushBoard, splitBlockAt, reorderTimelineBeats } from './board-operations.js';
+import { causalOrder as orderCauses, compactCausalTime, groupBlocks, ungroupBlocks, moveBlocks, moveStandaloneBeats, descendantBlocks, deleteBlocks, deleteBeats, validateBoard, groupBeats, beatSize, moveBeatsToLayer, spatialOrder, dropBeats, pruneEmptyBeatContainers, usesBlocks, nestGroups, splitGroupAt, mergeContainers, pushBoard, previewBoardPush, splitBlockAt, reorderTimelineBeats } from './board-operations.js';
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
 
@@ -25,6 +25,7 @@ const uuid = () => crypto.randomUUID();
 let token = '', current = null, doc = null, base = null, selected = null, editorID = null, source = null;
 let dirty = false, syncing = false, timer = null, pendingConflict = null;
 let documentEpoch = 0;
+let projectMutation = 0;
 let revealedBoardEpoch = -1;
 const revealedBoardContainers = new Set();
 const boardCollapsed = item => !!item.collapsed && !(revealedBoardEpoch === documentEpoch && revealedBoardContainers.has(item.id));
@@ -196,13 +197,13 @@ function edit(action,historyKey=null) {
   if (!doc || current.access === 'reader') return false;
   const previous = clone(doc);
   historyFocus.set(previous,beforeInputFocus||captureWriterFocus());beforeInputFocus=null;
-  try { action(); reconcileScriptAnnotations(doc); syncSceneMetadata(doc);validateSceneModel(doc);validateInclusion(doc); validateBoard(board(), new Set(doc.project.beats.map(s => s.id))); compileSnippets(); if (equal(previous, doc)) return true; const now=Date.now(),key=historyKey||(document.activeElement?.matches('.note-content')?'note:'+document.activeElement.closest('[data-note-id]')?.dataset.noteId:null);if(!key||key!==lastHistoryKey||now-lastHistoryTime>=1000||future.length)history.push(previous);lastHistoryKey=key;lastHistoryTime=now;future.length = 0; if (history.length > 40) history.shift(); dirty = true; saveLocal().catch(e => status(`Local save failed: ${e.message}`)); render(); clearTimeout(timer); timer = setTimeout(sync, 800); return true; }
+  try { action(); reconcileScriptAnnotations(doc); syncSceneMetadata(doc);validateSceneModel(doc);validateInclusion(doc); validateBoard(board(), new Set(doc.project.beats.map(s => s.id))); compileSnippets(); if (equal(previous, doc)) return true; projectMutation++; const now=Date.now(),key=historyKey||(document.activeElement?.matches('.note-content')?'note:'+document.activeElement.closest('[data-note-id]')?.dataset.noteId:null);if(!key||key!==lastHistoryKey||now-lastHistoryTime>=1000||future.length)history.push(previous);lastHistoryKey=key;lastHistoryTime=now;future.length = 0; if (history.length > 40) history.shift(); dirty = true; saveLocal().catch(e => status(`Local save failed: ${e.message}`)); render(); clearTimeout(timer); timer = setTimeout(sync, 800); return true; }
   catch (error) { doc = previous; render(); status(error.message); return false; }
 }
 function restoreHistory(from, to) {
   if (!doc || current.access === 'reader' || !from.length) return;
   lastHistoryKey=null;
-  const fallback=captureWriterFocus(),next=clone(doc);historyFocus.set(next,fallback);to.push(next); doc = from.pop(); dirty = true;
+  const fallback=captureWriterFocus(),next=clone(doc);historyFocus.set(next,fallback);to.push(next); doc = from.pop(); projectMutation++; dirty = true;
   refreshEditors(true);
   saveLocal().catch(e => status(`Local save failed: ${e.message}`)); render(); clearTimeout(timer); timer = setTimeout(sync, 800);
   restoreWriterFocus(historyFocus.get(doc)||fallback);
@@ -308,16 +309,16 @@ function zoomBoard(value,anchor=null){
 $('board-zoom-in').onclick=()=>zoomBoard(boardZoom*1.25);$('board-zoom-out').onclick=()=>zoomBoard(boardZoom/1.25);$('board-zoom-reset').onclick=()=>zoomBoard(1);
 $('canvas').addEventListener('wheel',e=>{if(!e.ctrlKey&&!e.metaKey)return;e.preventDefault();const frame=$('canvas').getBoundingClientRect();zoomBoard(boardZoom*Math.exp(-e.deltaY*.005),{x:e.clientX-frame.left,y:e.clientY-frame.top});},{passive:false});
 $('canvas').addEventListener('keydown',e=>{if(e.target!==$('canvas')||!(e.ctrlKey||e.metaKey))return;if(['+','=','-','0'].includes(e.key)){e.preventDefault();zoomBoard(e.key==='0'?1:boardZoom*(e.key==='-'?.8:1.25));}});
-function geometry() {
+function geometry(viewBoard = board()) {
   const blocks = new Map(), beats = new Map(), layers = new Map(); let y = 0, maxX = 1500;
-  for (const layer of board().layers) {
-    const members = board().blocks.filter(b => b.layerID === layer.id), height = boardCollapsed(layer) ? 38 : Math.max(layer.height, ...members.map(b => b.position.y + board().beats.filter(t => t.blockID === b.id).reduce((h,t)=>h+beatSize(t.title,b.width-12).height+4,80)));
+  for (const layer of viewBoard.layers) {
+    const members = viewBoard.blocks.filter(b => b.layerID === layer.id), height = boardCollapsed(layer) ? 38 : Math.max(layer.height, ...members.map(b => b.position.y + viewBoard.beats.filter(t => t.blockID === b.id).reduce((h,t)=>h+beatSize(t.title,b.width-12).height+4,80)));
     layers.set(layer.id, { y, height });
     if (!boardCollapsed(layer)) for (const block of members) {
-      let parent = board().blocks.find(b => b.id === block.parentID), hidden = false; const seen = new Set();
-      while (parent && !seen.has(parent.id)) { if (boardCollapsed(parent)) hidden = true; seen.add(parent.id); parent = board().blocks.find(b => b.id === parent.parentID); }
+      let parent = viewBoard.blocks.find(b => b.id === block.parentID), hidden = false; const seen = new Set();
+      while (parent && !seen.has(parent.id)) { if (boardCollapsed(parent)) hidden = true; seen.add(parent.id); parent = viewBoard.blocks.find(b => b.id === parent.parentID); }
       if (hidden) continue;
-      const children = board().beats.filter(b => b.blockID === block.id).sort((a, b) => a.order - b.order);
+      const children = viewBoard.beats.filter(b => b.blockID === block.id).sort((a, b) => a.order - b.order);
       const rect = { x: block.position.x + 110, y: block.position.y + y, width: block.width, height: boardCollapsed(block) ? 28 : Math.max(layer.useBlocks===true&&!block.standalone&&block.containerKind!=='beatGroup'?180:60, children.reduce((h,b)=>h+beatSize(b.title,block.width-12).height+4,32)) };
       blocks.set(block.id, rect); maxX = Math.max(maxX, rect.x + rect.width + 120);
       if (!boardCollapsed(block)) { let top=rect.y+24;for(const beat of children){const size=beatSize(beat.title,block.width-12);beats.set(beat.id,{x:rect.x+(beat.position?.x??6),y:beat.position?rect.y+beat.position.y:top,...size});rect.width=Math.max(rect.width,(beat.position?.x??6)+size.width+12);rect.height=Math.max(rect.height,(beat.position?.y??top-rect.y)+size.height+12);top+=size.height+4;} }
@@ -325,8 +326,8 @@ function geometry() {
     const expanded=Math.max(height,...[...blocks.values()].filter(r=>r.y>=y).map(r=>r.y+r.height-y+45));layers.get(layer.id).height=expanded;
     y += expanded;
   }
-  const byID = new Map(board().blocks.map(b => [b.id, b])), remaining = new Map([...blocks.keys()].map(id => [id, 0]));
-  for (const block of board().blocks) if (blocks.has(block.id) && blocks.has(block.parentID)) remaining.set(block.parentID, remaining.get(block.parentID) + 1);
+  const byID = new Map(viewBoard.blocks.map(b => [b.id, b])), remaining = new Map([...blocks.keys()].map(id => [id, 0]));
+  for (const block of viewBoard.blocks) if (blocks.has(block.id) && blocks.has(block.parentID)) remaining.set(block.parentID, remaining.get(block.parentID) + 1);
   const ready = [...remaining].filter(([, count]) => count === 0).map(([id]) => id);
   for (let i = 0; i < ready.length; i++) {
     const id = ready[i], parent = byID.get(id)?.parentID, c = blocks.get(id), r = blocks.get(parent);
@@ -350,7 +351,7 @@ function render() {
   sizeBoardSurface(g);
   $('layers').replaceChildren(); $('blocks').replaceChildren(); $('links').replaceChildren(); if(!editingSide)$('snippet-list').replaceChildren(); $('issues').replaceChildren();
   for (const layer of board().layers) {
-    const rect = g.layers.get(layer.id), node = element('div', undefined, 'layer'); position(node, { x: 0, y: rect.y, width: g.width, height: rect.height });
+    const rect = g.layers.get(layer.id), node = element('div', undefined, 'layer'); position(node, { x: 0, y: rect.y, width: g.width, height: rect.height });node.dataset.layerId=layer.id;
     const label = element('button', `${boardCollapsed(layer) ? '▸' : '▾'} ${layer.name}`, 'layer-label'); label.onclick = () => edit(() => { const collapsed=boardCollapsed(layer);revealedBoardContainers.delete(layer.id);layer.collapsed=!collapsed; }); node.append(label);const policy=element('button',usesBlocks(board(),layer.id)?'Blocks: On':layer.useBlocks==null&&board().blocks.some(b=>b.layerID===layer.id&&!b.standalone&&b.containerKind!=='beatGroup')?'Blocks: Legacy':'Blocks: Off','layer-block-policy');policy.setAttribute('aria-label',layer.name+' Use Blocks');policy.onclick=()=>edit(()=>{if(layer.locked)throw Error('Unlock the layer first.');layer.useBlocks=!usesBlocks(board(),layer.id);});node.append(policy); $('layers').append(node);
   }
   const blockOrder = [...board().blocks].sort((a, b) => { const x = g.blocks.get(a.id), y = g.blocks.get(b.id); return (y ? y.width * y.height : 0) - (x ? x.width * x.height : 0); });
@@ -412,7 +413,7 @@ function render() {
     const a = g.beats.get(edge.cause), b = g.beats.get(edge.effect); if (!a || !b) continue;
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path'), bend = Math.max(35, Math.abs(b.x - a.x - a.width) * .45);
     path.setAttribute('d', `M${a.x + a.width},${a.y + a.height / 2} C${a.x + a.width + bend},${a.y + a.height / 2} ${b.x - bend},${b.y + b.height / 2} ${b.x},${b.y + b.height / 2}`);
-    path.setAttribute('stroke', edge.cause === selected || edge.effect === selected ? '#8be8f2' : '#d1d1d3'); path.setAttribute('fill', 'none'); if (edge.reference) path.setAttribute('stroke-dasharray', '4 4'); $('links').append(path);
+    path.dataset.edgeId=edge.id;path.setAttribute('stroke', edge.cause === selected || edge.effect === selected ? '#8be8f2' : '#d1d1d3'); path.setAttribute('fill', 'none'); if (edge.reference) path.setAttribute('stroke-dasharray', '4 4'); $('links').append(path);
   }
   for(const stroke of board().strokes||[])$('links').append(drawingPath(stroke.points,stroke.color,stroke.width));
   for (const marker of storyMarkers()) {
@@ -519,38 +520,43 @@ function detachTimeline(){
   for(const sheet of document.querySelectorAll('link[rel="stylesheet"]')){const link=target.document.createElement('link');link.rel='stylesheet';link.href=sheet.href;target.document.head.append(link);}
   const style=target.document.createElement('style');style.textContent='html,body{margin:0;height:100%;display:block!important}#detached-timeline{height:100vh!important;width:100vw;display:flex;flex-direction:column}.story-timeline-scroll{flex:1}';target.document.head.append(style);
   timelineWindowRoot=target.document.createElement('div');timelineWindowRoot.id='detached-timeline';target.document.body.append(timelineWindowRoot);
-  target.addEventListener('beforeunload',()=>{timelineWindow=null;timelineWindowRoot=null;saveTimelinePreferences();Object.assign(timelineState,loadTimelinePreferences(false),{expanded:false,lastSelected:null});renderTimeline();},{once:true});
+  const dock=()=>{clearInterval(closedTimer);if(timelineWindow!==target)return;timelineWindow=null;timelineWindowRoot=null;saveTimelinePreferences();Object.assign(timelineState,loadTimelinePreferences(false),{expanded:false,lastSelected:null});renderTimeline();};
+  const closedTimer=setInterval(()=>{if(target.closed)dock();},500);
+  target.addEventListener('beforeunload',dock,{once:true});
   renderTimeline();
 }
 window.addEventListener('beforeunload',()=>timelineWindow?.close());
+function timelineActions(state,refresh,select,mutate=edit,writer=false){return {
+    selected,choose:select,open:openEditor,render:refresh,detached:!!timelineWindowRoot,detach:detachTimeline,dock:()=>timelineWindow?.close(),
+    group:(kind,name,previous)=>{if(current.access==='reader')return;const group=prompt(kind==='tags'?'Tag category':'Character group',previous);if(group===null)return;mutate(()=>{if(!group.trim()||group.trim().length>120)throw Error('Choose a name between 1 and 120 characters.');doc.project.frontstageTimelineOptions??={};doc.project.frontstageTimelineOptions.trackGroups??={};doc.project.frontstageTimelineOptions.trackGroups[kind]??={};doc.project.frontstageTimelineOptions.trackGroups[kind][name]=group.trim();});},
+    expand:expanded=>{if(writer){detachTimeline();return;}saveTimelinePreferences();Object.assign(state,loadTimelinePreferences(expanded),{expanded,lastSelected:null});refresh();},
+    addMarker:type=>editMarker(null,type,mutate),
+    markerType:id=>{if(current.access==='reader')return;const marker=storyMarkers().find(m=>m.id===id);if(!marker)return;const type=prompt('Break type: episode, act, chapter, section',marker.type==='custom'?'act':marker.type??'act');if(type===null)return;mutate(()=>{if(!['episode','act','chapter','section'].includes(type))throw Error('Choose episode, act, chapter or section.');doc.project.sectionBreaks.find(m=>m.id===id).type=type;});},
+    timing:()=>{if(current.access==='reader')return;const raw=prompt('Estimated minutes per screenplay page (0.1–10). Explicit beat durations stay unchanged.',String(doc.project.frontstageTimelineOptions?.minutesPerPage??1));if(raw===null)return;mutate(()=>{const value=Number(raw);if(!Number.isFinite(value)||value<.1||value>10)throw Error('Choose 0.1 to 10 minutes per page.');doc.project.frontstageTimelineOptions??={};doc.project.frontstageTimelineOptions.minutesPerPage=value;});},
+    reorder:(ids,target)=>mutate(()=>{doc.project.frontstageWhiteboard=reorderTimelineBeats(board(),new Set(ids),target);}),
+    moveMarker:(id,unit)=>mutate(()=>{const marker=doc.project.sectionBreaks.find(m=>m.id===id);if(marker)marker.unit=Math.max(0,unit);}),
+    marker:id=>editMarker(storyMarkers().find(m=>m.id===id),'act',mutate),
+    duration:id=>{if(current.access==='reader')return;const b=board().beats.find(b=>b.id===id);if(!b||locked(b))return;const raw=prompt('Duration override in minutes (blank = estimate from screenplay)',b.timelineDuration??'');if(raw===null)return;mutate(()=>{const value=Number(raw);if(raw.trim()&&(!Number.isFinite(value)||value<=0||value>1000))throw Error('Use a duration between 0 and 1000 minutes.');if(raw.trim())b.timelineDuration=value;else delete b.timelineDuration;});},
+    emotion:(id,tag)=>{if(current.access==='reader')return;const b=board().beats.find(b=>b.id===id);if(!b||locked(b))return;const raw=prompt('Emotion change (-100 to 100); prefix = for an absolute 0–100 checkpoint',String(b.emotionChanges?.[tag]??0));if(raw===null)return;const tension=prompt('Momentary beat tension (-5 to +5)',String(b.tensions?.[tag]??0));if(tension===null)return;mutate(()=>{const absolute=raw.startsWith('='),value=Number(absolute?raw.slice(1):raw),t=Number(tension);if(!Number.isFinite(value)||value<(absolute?0:-100)||value>100||!Number.isFinite(t)||Math.abs(t)>5)throw Error('Emotion and tension values are outside their allowed range.');b.emotionChanges??={};b.emotionChanges[tag]=value;b.emotionAbsoluteTags=(b.emotionAbsoluteTags??[]).filter(x=>x!==tag);if(absolute)b.emotionAbsoluteTags.push(tag);b.tensions??={};b.tensions[tag]=t;});}
+};}
+function chooseTimelineBeat(id){if(workspaces.isWriter())workspaces.revealBeat(id);else choose(id);}
 function renderTimeline() {
   saveTimelinePreferences();
   $('board-area').classList.toggle('timeline-expanded',timelineState.expanded&&!timelineWindowRoot);$('workspace').classList.toggle('timeline-focus',timelineState.expanded&&!timelineWindowRoot);$('timeline').style.display=timelineWindowRoot?'none':'';
-  mountTimeline(timelineWindowRoot??$('timeline'),timelineModel(board(),doc.project.beats,storyMarkers(),timelineState.timeBase,doc.project.frontstageTimelineOptions?.minutesPerPage,doc.project.frontstageTimelineOptions?.trackGroups),timelineState,{
-    selected,choose,open:openEditor,render:renderTimeline,detached:!!timelineWindowRoot,detach:detachTimeline,dock:()=>timelineWindow?.close(),
-    group:(kind,name,previous)=>{if(current.access==='reader')return;const group=prompt(kind==='tags'?'Tag category':'Character group',previous);if(group===null)return;edit(()=>{if(!group.trim()||group.trim().length>120)throw Error('Choose a name between 1 and 120 characters.');doc.project.frontstageTimelineOptions??={};doc.project.frontstageTimelineOptions.trackGroups??={};doc.project.frontstageTimelineOptions.trackGroups[kind]??={};doc.project.frontstageTimelineOptions.trackGroups[kind][name]=group.trim();});},
-    expand:expanded=>{saveTimelinePreferences();Object.assign(timelineState,loadTimelinePreferences(expanded),{expanded,lastSelected:null});renderTimeline();},
-    addMarker:type=>editMarker(null,type),
-    markerType:id=>{if(current.access==='reader')return;const marker=storyMarkers().find(m=>m.id===id);if(!marker)return;const type=prompt('Break type: episode, act, chapter, section',marker.type==='custom'?'act':marker.type??'act');if(type===null)return;edit(()=>{if(!['episode','act','chapter','section'].includes(type))throw Error('Choose episode, act, chapter or section.');doc.project.sectionBreaks.find(m=>m.id===id).type=type;});},
-    timing:()=>{if(current.access==='reader')return;const raw=prompt('Estimated minutes per screenplay page (0.1–10). Explicit beat durations stay unchanged.',String(doc.project.frontstageTimelineOptions?.minutesPerPage??1));if(raw===null)return;edit(()=>{const value=Number(raw);if(!Number.isFinite(value)||value<.1||value>10)throw Error('Choose 0.1 to 10 minutes per page.');doc.project.frontstageTimelineOptions??={};doc.project.frontstageTimelineOptions.minutesPerPage=value;});},
-    reorder:(ids,target)=>edit(()=>{doc.project.frontstageWhiteboard=reorderTimelineBeats(board(),new Set(ids),target);}),
-    moveMarker:(id,unit)=>edit(()=>{const marker=doc.project.sectionBreaks.find(m=>m.id===id);if(marker)marker.unit=Math.max(0,unit);}),
-    marker:id=>editMarker(storyMarkers().find(m=>m.id===id)),
-    duration:id=>{if(current.access==='reader')return;const b=board().beats.find(b=>b.id===id);if(!b||locked(b))return;const raw=prompt('Duration override in minutes (blank = estimate from screenplay)',b.timelineDuration??'');if(raw===null)return;edit(()=>{const value=Number(raw);if(raw.trim()&&(!Number.isFinite(value)||value<=0||value>1000))throw Error('Use a duration between 0 and 1000 minutes.');if(raw.trim())b.timelineDuration=value;else delete b.timelineDuration;});},
-    emotion:(id,tag)=>{if(current.access==='reader')return;const b=board().beats.find(b=>b.id===id);if(!b||locked(b))return;const raw=prompt('Emotion change (-100 to 100); prefix = for an absolute 0–100 checkpoint',String(b.emotionChanges?.[tag]??0));if(raw===null)return;const tension=prompt('Momentary beat tension (-5 to +5)',String(b.tensions?.[tag]??0));if(tension===null)return;edit(()=>{const absolute=raw.startsWith('='),value=Number(absolute?raw.slice(1):raw),t=Number(tension);if(!Number.isFinite(value)||value<(absolute?0:-100)||value>100||!Number.isFinite(t)||Math.abs(t)>5)throw Error('Emotion and tension values are outside their allowed range.');b.emotionChanges??={};b.emotionChanges[tag]=value;b.emotionAbsoluteTags=(b.emotionAbsoluteTags??[]).filter(x=>x!==tag);if(absolute)b.emotionAbsoluteTags.push(tag);b.tensions??={};b.tensions[tag]=t;});}
-  });
+  mountTimeline(timelineWindowRoot??$('timeline'),timelineModel(board(),doc.project.beats,storyMarkers(),timelineState.timeBase,doc.project.frontstageTimelineOptions?.minutesPerPage,doc.project.frontstageTimelineOptions?.trackGroups),timelineState,timelineActions(timelineState,renderTimeline,chooseTimelineBeat));
+  workspaces.refreshWriterTimeline?.();
 }
 
 function storyMarkers() {
   const seen = new Set();
   return (Array.isArray(doc.project.sectionBreaks) ? doc.project.sectionBreaks : []).filter(m => m && typeof m.id === 'string' && Number.isFinite(m.unit) && m.unit >= 0 && m.unit <= 1000000 / 120 && !seen.has(m.id) && seen.add(m.id)).sort((a, b) => a.unit - b.unit || a.id.localeCompare(b.id));
 }
-function editMarker(marker = null, kind = 'act') {
+function editMarker(marker = null, kind = 'act', mutate=edit) {
   if (current.access === 'reader') return;
   const title = prompt('Structural break name', marker?.title || `${kind[0].toUpperCase()+kind.slice(1)} ${storyMarkers().length + 1}`); if (!title?.trim()) return;
   const raw = prompt('Estimated story time', String(marker?.unit ?? board().beats.find(b => b.id === selected)?.start ?? 0)); if (raw === null) return;
   const unit = Number(raw);
-  edit(() => {
+  mutate(() => {
     if (!Number.isFinite(unit) || unit < 0 || unit > 1000000 / 120) throw Error('Choose a valid estimated story time.');
     if (doc.project.sectionBreaks !== undefined && !Array.isArray(doc.project.sectionBreaks)) throw Error('Existing marker data has an unsupported format.');
     doc.project.sectionBreaks ||= [];
@@ -770,11 +776,26 @@ $('canvas').addEventListener('pointerdown',e=>{
 document.addEventListener('keydown',e=>{if(e.target!==$('canvas')||!(e.ctrlKey||e.metaKey)||!selected)return;if(e.key.toLowerCase()==='i'){e.preventDefault();source=selected;status('Select the effect, then press Command/Ctrl+O');}if(e.key.toLowerCase()==='o'&&source){e.preventDefault();const cause=source;edit(()=>{board().dependencies.push({id:uuid(),cause,effect:selected,reason:'',reference:false});});source=null;}});
 let pushEnabled=false;
 const pushButton=element('button','Push');pushButton.setAttribute('aria-pressed','false');pushButton.onclick=()=>{pushEnabled=!pushEnabled;pushButton.setAttribute('aria-pressed',String(pushEnabled));};$('fit').after(pushButton);
+function paintBoardProjection(projection){
+ const g=geometry(projection);sizeBoardSurface(g);
+ for(const node of $('layers').children){const r=g.layers.get(node.dataset.layerId);if(r)position(node,{x:0,y:r.y,width:g.width,height:r.height});}
+ for(const node of $('blocks').children){const r=g.blocks.get(node.dataset.blockId);if(r)position(node,r);}
+ for(const node of $('blocks').querySelectorAll('[data-beat-id]')){const beat=projection.beats.find(b=>b.id===node.dataset.beatId),r=g.beats.get(beat?.id),owner=g.blocks.get(beat?.blockID);if(r&&owner)position(node,{...r,x:r.x-owner.x,y:r.y-owner.y});}
+ for(const edge of projection.dependencies){const a=g.beats.get(edge.cause),b=g.beats.get(edge.effect),path=[...$('links').querySelectorAll('[data-edge-id]')].find(n=>n.dataset.edgeId===edge.id);if(a&&b&&path){const bend=Math.max(35,Math.abs(b.x-a.x-a.width)*.45);path.setAttribute('d',`M${a.x+a.width},${a.y+a.height/2} C${a.x+a.width+bend},${a.y+a.height/2} ${b.x-bend},${b.y+b.height/2} ${b.x},${b.y+b.height/2}`);}}
+ $('links').setAttribute('width',g.width);$('links').setAttribute('height',g.height);
+}
 $('canvas').addEventListener('pointerdown',e=>{
  if(!(pushEnabled||e.ctrlKey||e.metaKey)||e.button!==0||current.access==='reader')return;e.preventDefault();e.stopImmediatePropagation();
- const canvas=$('canvas'),frame=canvas.getBoundingClientRect(),start=e.clientX,pivot=boardPoint(e).x-110;canvas.setPointerCapture(e.pointerId);canvas.style.cursor='ew-resize';
- const finish=event=>{canvas.removeEventListener('pointerup',finish);canvas.removeEventListener('pointercancel',cancel);canvas.style.cursor='';const distance=(event.clientX-start)/boardZoom;if(Math.abs(distance)>3)edit(()=>{doc.project.frontstageWhiteboard=spatialOrder(pushBoard(board(),pivot,distance));});};
- const cancel=()=>{canvas.removeEventListener('pointerup',finish);canvas.style.cursor='';};canvas.addEventListener('pointerup',finish,{once:true});canvas.addEventListener('pointercancel',cancel,{once:true});
+ const canvas=$('canvas'),start=e.clientX,pivot=boardPoint(e).x-110,original=doc,baseline=clone(board()),mutation=projectMutation,epoch=documentEpoch,zoom=boardZoom;
+ let candidate=null,failure=null,lastDistance=null,finished=false;
+ canvas.setPointerCapture(e.pointerId);canvas.style.cursor='ew-resize';canvas.dataset.pushPreview='true';
+ const currentGesture=()=>doc===original&&epoch===documentEpoch&&mutation===projectMutation&&boardZoom===zoom&&current?.access!=='reader';
+ const update=event=>{if(!currentGesture()){cancel();status('The project or zoom changed; Push was cancelled.');return;}const distance=(event.clientX-start)/zoom,quantized=Math.sign(distance)*Math.round(Math.abs(distance)/10)*10;if(quantized===lastDistance)return;lastDistance=quantized;try{candidate=previewBoardPush(baseline,pivot,distance);failure=null;paintBoardProjection(candidate);status('Push preview · release to commit, Escape to cancel');}catch(error){candidate=null;failure=error.message;paintBoardProjection(baseline);status(error.message);}};
+ const cleanup=()=>{finished=true;for(const [type,handler]of [['pointermove',update],['pointerup',finish],['pointercancel',cancel],['lostpointercapture',cancel]])canvas.removeEventListener(type,handler);document.removeEventListener('keydown',keys,true);window.removeEventListener('blur',cancel);canvas.style.cursor='';delete canvas.dataset.pushPreview;if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);};
+ const finish=event=>{if(finished)return;update(event);if(finished)return;const valid=currentGesture(),result=candidate,error=failure,distance=(event.clientX-start)/zoom;cleanup();if(valid&&result&&!error&&Math.abs(distance)>3)edit(()=>{doc.project.frontstageWhiteboard=result;});else{render();if(error)status(error);}};
+ const cancel=()=>{if(finished)return;cleanup();render();status('Push cancelled.');};
+ const keys=event=>{if(event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();cancel();}};
+ canvas.addEventListener('pointermove',update);canvas.addEventListener('pointerup',finish);canvas.addEventListener('pointercancel',cancel);canvas.addEventListener('lostpointercapture',cancel);document.addEventListener('keydown',keys,true);window.addEventListener('blur',cancel);
 },true);
 let boardMenu=null;
 function closeBoardMenu(){boardMenu?.remove();boardMenu=null;}
@@ -871,9 +892,11 @@ const workspaces = mountWorkspaces({
   undo:()=>restoreHistory(history,future),redo:()=>restoreHistory(future,history),
   createConvertedCopy: document=>createLocalProject(document.name,document),
   document: () => doc, current: () => current, edit, status, cleanHTML, plain,
+  mountWriterTimeline:(root,state,refresh,select,mutate)=>mountTimeline(root,timelineModel(board(),doc.project.beats,storyMarkers(),state.timeBase,doc.project.frontstageTimelineOptions?.minutesPerPage,doc.project.frontstageTimelineOptions?.trackGroups),state,timelineActions(state,refresh,select,mutate,true)),
+  timelineDetached:()=>!!timelineWindowRoot,
   selectedBeat: () => selected,
   selectedScene: () => board().beats.find(b => b.id === selected)?.sceneID,
-  selectScene: (id, beatID) => { const beat = board().beats.find(b => b.id === beatID) || board().beats.find(b => b.sceneID === id); if (beat) { selected = beat.id; selectedBeats = new Set([selected]); } },
+  selectScene: (id, beatID) => { const beat = board().beats.find(b => b.id === beatID) || board().beats.find(b => b.sceneID === id); if (beat) { selected = beat.id; selectedBeats = new Set([selected]); workspaces.refreshWriterTimeline?.(); } },
   selectBeat: id => choose(id), revealBeat: revealBoardBeat, openBeat: openEditor,
   addScene: () => { selected = null; addBeat(true); if (selected) closeEditor(selected); },
   projects: () => $('back').click(), sync, download,

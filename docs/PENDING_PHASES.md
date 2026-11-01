@@ -1,14 +1,15 @@
 # Remaining phases
 
-Updated 25 October 2026. These are remaining completion gates, not a claim that previously implemented features are absent. Whiteboard remains the highest priority. See CAUSALITY_MANUAL_IMPLEMENTATION.md for the detailed manual comparison.
+The current execution checklist is [DELIVERY_TRACKER.md](DELIVERY_TRACKER.md). Deployment is the final step, as requested.
 
-Recent fixes awaiting final Mac build/acceptance: category filters and history; inactive-beat editing visibility without changing export; popup caret tracking; deletion cleanup for loose beat containers and emptied groups. Fresh browser deletion checks include undo/redo and project reload.
+Completed recent work includes dual dialogue, typography Preferences, Tamil/English element settings, revision baselines/marks, FDX/Fountain exports, drawing/eraser improvements, grouped screenplay menus, persistent highlights/breakdown links and safe whiteboard navigation. These must not be counted as missing features.
 
-1. **Whiteboard and timeline completion.** Live Push preview and collision packing; container endpoint dependencies and dependency navigation; FlowLines and character/tag coloring; nested research folder ordering and composite curves; automatic tension rules and readability; actual typeset-page timing; script-workspace mini-timeline and complete episode title-page semantics.
-2. **Screenplay and production completion.** Dual dialogue, frozen production pagination and revision marks; full typography/printing and Office fidelity; advanced scheduling, production and drawing tools. Verify multilingual input and screenplay suggestions on an installed Mac.
-3. **Mac/browser acceptance.** Compare the same project and interactions across both editions; check small and multiple screens, keyboard/accessibility, trackpad gestures, popup focus and printing. Automated tests support this gate but do not replace hands-on acceptance.
-4. **Shared projects in production.** Provision a persistent backend and HTTPS hostname; finish authenticated offline session restoration and account lifecycle; add rate limits and monitoring; perform multi-device sync, conflict and backup/restore acceptance. The Vercel browser frontend alone does not complete this phase.
-5. **Windows parity.** Bring rich screenplay editing, sync, workspaces and gestures to parity with Mac/browser; validate Windows installation and UI behavior.
-6. **Release.** Configure the owner's Mac signing identity and notarization profile in the release environment; produce signed/notarized builds and verify clean-machine installation. Development CI artifacts are previews.
+1. Real-device acceptance and remaining usability defects.
+2. Whiteboard/timeline interaction and analytical gaps.
+3. Frozen production pagination, A/B pages and locked numbering.
+4. Advanced production, media/drawing and interchange fidelity.
+5. Production sharing, authenticated offline operation and operational safeguards.
+6. Windows rich screenplay/workspace/sync parity and packaging.
+7. Final deployment, signing/notarization and clean-machine distribution.
 
-Recommended order: finish the whiteboard/timeline interaction work first, then screenplay and cross-platform acceptance, followed by production sharing, Windows parity and release certification.
+Automated native/browser/core checks are release evidence; they do not certify physical-device acceptance, a deployed backend or notarized distribution. Consult the tracker for precise outstanding tasks and external dependencies.

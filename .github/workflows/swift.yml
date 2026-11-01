@@ -35,6 +35,9 @@ jobs:
             node Server/Tests/script-inclusion.mjs
             node Server/Tests/antigravity-adoption.mjs
             node Server/Tests/script-annotations.mjs
+            node Server/Tests/push-preview.mjs
+            node Server/Tests/push-preview-browser.mjs
+            node Server/Tests/writer-timeline-browser.mjs
             node Server/Tests/antigravity-browser.mjs
             node Server/Tests/continuous-inclusion-browser.mjs
             node Server/Tests/write-panel-model.mjs

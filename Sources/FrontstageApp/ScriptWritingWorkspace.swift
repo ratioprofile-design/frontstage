@@ -13,6 +13,7 @@ struct ScriptWritingWorkspace: View {
     @AppStorage("frontstage-script-dedicated-synopsis") private var showSynopsis = false
     @AppStorage("frontstage-script-dedicated-boundaries") private var showBoundaries = false
     @AppStorage("frontstage-script-show-omitted") private var showOmitted = false
+    @AppStorage("frontstage-write-mini-timeline") private var miniTimeline = false
     @AppStorage("frontstage-write-paper-theme") private var paperTheme = "White"
     @State private var filter = ""
     @State private var activeController: ScreenplayEditorController?
@@ -59,6 +60,7 @@ struct ScriptWritingWorkspace: View {
                 Button("Zoom in", systemImage: "plus.magnifyingglass") { zoom = min(2, zoom + 0.1) }.labelStyle(.iconOnly)
                 Picker("Paper theme", selection: $paperTheme) { ForEach(WritingPaperTheme.allCases, id: \.rawValue) { Text($0.rawValue).tag($0.rawValue) } }.labelsHidden().frame(width: 85)
                 Spacer()
+                Toggle("Timeline", isOn: $miniTimeline).toggleStyle(.button)
                 Button("Toggle inspector", systemImage: "sidebar.right") { workspace.writeInspectorToggle += 1 }.labelStyle(.iconOnly)
             }.font(.caption).padding(10).fixedSize()
         }.frame(height: 40).background(Color(white: 0.2)).accessibilityIdentifier("dedicated-script-tools")
@@ -75,6 +77,14 @@ struct ScriptWritingWorkspace: View {
         }) {
         VStack(spacing: 0) {
             tools
+            if miniTimeline && !workspace.timelineDetached {
+                StoryTimelineView(workspace: workspace, expanded: .constant(false), writer: true, onSelect: { id in
+                    guard let beat = workspace.whiteboard.beats.first(where: { $0.id == id }) else { return }
+                    if !matches(beat) { hiddenTarget = id; return }
+                    if plain, let text = workspace.scriptController("write-continuous").textView as? WritingTextView { text.revealBeat?(id) }
+                    else { proxy.scrollTo(id, anchor: .center) }
+                }).frame(height: 210)
+            }
             ScrollView(.horizontal, showsIndicators: false) { HStack {
                 ForEach(Array(ScreenplayElement.editable.enumerated()), id: \.element) { index, element in
                     Button("\(index + 1) \(element.label)") { (plain ? workspace.scriptController("write-continuous") : activeController)?.format(element) }.help("Cmd+\(index + 1)")

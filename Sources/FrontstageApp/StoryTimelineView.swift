@@ -8,6 +8,9 @@ struct StoryTimelineView: View {
     @ObservedObject var workspace: Workspace
     @Binding var expanded: Bool
     var detached = false
+    var writer = false
+    var onSelect: ((String) -> Void)?
+    @AppStorage("frontstage-timeline-writer") private var writerPreferences = ""
     @State private var preferences = TimelineDisplayPreferences(compact: true)
     @AppStorage("frontstage-timeline-mini") private var compactPreferences = ""
     @AppStorage("frontstage-timeline-full") private var fullPreferences = ""
@@ -63,7 +66,7 @@ struct StoryTimelineView: View {
                     }
                 }.coordinateSpace(name: "timelineViewport")
             }
-        }.background(Color(white: 0.20))
+        }.background(Color(white: 0.20)).background(TimelineWheelZoom(scale: $preferences.scale))
         .overlay(alignment: .bottomLeading) {
             if let id = focusedItemID, let item = model?.tracks.flatMap(\.items).first(where: { $0.id == id }) {
                 Text(item.title).font(.system(size: 12)).foregroundStyle(.white).padding(10)
@@ -81,7 +84,7 @@ struct StoryTimelineView: View {
         .onChange(of: expanded) { _, _ in loadPreferences() }
         .onChange(of: preferences) { _, value in
             guard value.isValid, let data = try? JSONEncoder().encode(value), let text = String(data: data, encoding: .utf8) else { return }
-            if expanded { fullPreferences = text } else { compactPreferences = text }
+            if writer { writerPreferences = text } else if expanded { fullPreferences = text } else { compactPreferences = text }
         }
         .onChange(of: workspace.selectedBoardBeatID) { _, id in if current?.id != id, let item = beatItems.first(where: { $0.id == id }) { time = item.start } }
         .onChange(of: preferences.primary) { old, value in if preferences.secondary == value { preferences.secondary = old }; time = beatItems.first { $0.id == workspace.selectedBoardBeatID }?.start ?? 0 }
@@ -91,8 +94,9 @@ struct StoryTimelineView: View {
         .sheet(isPresented: $showingMarker) { structuralEditor }
         .sheet(isPresented: Binding(get: { editingBeat != nil }, set: { if !$0 { editingBeat = nil } })) { valueEditor }
     }
+    private func selectBeat(_ id: String) { workspace.selectBoardBeat(id); onSelect?(id) }
     private func loadPreferences() {
-        let text = expanded ? fullPreferences : compactPreferences
+        let text = writer ? writerPreferences : expanded ? fullPreferences : compactPreferences
         if let data = text.data(using: .utf8), let saved = try? JSONDecoder().decode(TimelineDisplayPreferences.self, from: data), saved.isValid { preferences = saved }
         else { preferences = TimelineDisplayPreferences(compact: !expanded) }
     }
@@ -103,7 +107,7 @@ struct StoryTimelineView: View {
                 counterView(primary: false)
                 if detached { Button("Dock Timeline") { workspace.timelineWindow.close() } }
                 else {
-                    Button(expanded ? "Restore Board" : "Expand Timeline") { expanded.toggle() }
+                    if !writer { Button(expanded ? "Restore Board" : "Expand Timeline") { expanded.toggle() } }
                     Button("Detach Timeline") { workspace.timelineWindow.open(workspace) }
                 }
                 Button("−") { preferences.scale = max(2, preferences.scale / 1.25) }.accessibilityLabel("Zoom timeline out").help("Zoom timeline out")
@@ -151,7 +155,7 @@ struct StoryTimelineView: View {
                     Text(String(format: "%.0f", value)).font(.system(size: 10, design: .monospaced)).offset(x: value * preferences.scale, y: 6)
                 }
             }.frame(width: end * preferences.scale, height: 36).contentShape(Rectangle())
-                .gesture(DragGesture(minimumDistance: 0).onChanged { time = min(end, max(0, $0.location.x / preferences.scale)) }.onEnded { _ in if let current { workspace.selectBoardBeat(current.id) } })
+                .gesture(DragGesture(minimumDistance: 0).onChanged { time = min(end, max(0, $0.location.x / preferences.scale)) }.onEnded { _ in if let current { selectBeat(current.id) } })
                 .accessibilityLabel("Timeline playhead").accessibilityValue(StoryTimeline.clock(time))
                 .accessibilityAdjustableAction { direction in time = min(end, max(0, time + (direction == .increment ? 0.1 : -0.1))) }
         }
@@ -294,9 +298,9 @@ struct StoryTimelineView: View {
             .overlay(Rectangle().stroke((workspace.selectedBoardBeatID == item.beatID || item.memberBeatIDs.contains(workspace.selectedBoardBeatID ?? "")) ? .white : .clear))
             .contentShape(Rectangle()).help(item.title).accessibilityLabel(item.title)
             .focusable(titled).focused($focusedItemID, equals: item.id)
-            .onKeyPress(.return) { if !item.beatID.isEmpty { workspace.selectBoardBeat(item.beatID) }; return .handled }
+            .onKeyPress(.return) { if !item.beatID.isEmpty { selectBeat(item.beatID) }; return .handled }
             .onTapGesture(count: 2) { if !item.beatID.isEmpty { workspace.popup.open(item.beatID, workspace: workspace) } }
-            .onTapGesture { time = item.start; if isStructural(kind) { openMarker(item.id) }; if !item.beatID.isEmpty { workspace.selectBoardBeat(item.beatID) } }
+            .onTapGesture { time = item.start; if isStructural(kind) { openMarker(item.id) }; if !item.beatID.isEmpty { selectBeat(item.beatID) } }
     }
     private var groupEditor: some View {
         VStack(alignment: .leading, spacing: 12) {

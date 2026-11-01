@@ -19,7 +19,7 @@ struct WhiteboardCanvas: NSViewRepresentable {
         return view
     }
     func updateNSView(_ view: NativeWhiteboard, context: Context) {
-        view.workspace = workspace; view.board = workspace.whiteboard
+        view.workspace = workspace; view.acceptModel(workspace)
         view.selection = selection; view.blockSelection = blockSelection; view.drawingMode = drawing; view.erasingMode = erasing; view.pushingMode = pushing
         view.selected = { ids, blocks in selection = ids; blockSelection = blocks }
         if view.fitRequest != fitRequest { view.fitRequest = fitRequest; view.fitSelection() }
@@ -39,6 +39,29 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
     var drawingMode = false
     var pushingMode = false
     private var pushOrigin: BoardPoint?
+    private var pushBaseline: Project?
+    private var pushCandidate: Project?
+    private var pushFailure: String?
+    private var lastPushDistance: Double?
+    func acceptModel(_ workspace: Workspace) {
+        if let baseline = pushBaseline, baseline != workspace.project { cancelPushPreview() }
+        if pushOrigin == nil { board = workspace.whiteboard }
+    }
+    private func cancelPushPreview() {
+        pushOrigin = nil; pushBaseline = nil; pushCandidate = nil; pushFailure = nil; lastPushDistance = nil
+        if let workspace { board = workspace.whiteboard }; NSCursor.arrow.set(); needsDisplay = true
+    }
+    private func updatePushPreview(_ distance: Double) {
+        guard let origin = pushOrigin, let baseline = pushBaseline, let workspace else { return }
+        guard baseline == workspace.project else { cancelPushPreview(); return }
+        let quantized = (distance / 10).rounded() * 10
+        guard quantized != lastPushDistance else { return }; lastPushDistance = quantized
+        do {
+            let candidate = try baseline.previewWhiteboardPush(from: origin.x - 110, by: distance)
+            pushCandidate = candidate; pushFailure = nil; board = try candidate.whiteboard()
+        } catch { pushCandidate = nil; pushFailure = error.localizedDescription; board = workspace.whiteboard }
+        needsDisplay = true
+    }
     private var dependencyOrigin: String?
     var fitRequest = 0
     private var dragStart: BoardPoint?
@@ -117,6 +140,7 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
+    override func resignFirstResponder() -> Bool { let result = super.resignFirstResponder(); if result && pushOrigin != nil { cancelPushPreview() }; return result }
 
     override func isAccessibilityElement() -> Bool { false }
     override func accessibilityRole() -> NSAccessibility.Role? { .group }
@@ -257,7 +281,10 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
         let point = convert(event.locationInWindow, from: nil), worldPoint = world(point)
         viewStart = point; dragStart = worldPoint; dragDelta = .init()
         if event.modifierFlags.contains(.option), let beat = geometry.hitBeat(worldPoint) { dependencyOrigin = beat; return }
-        if pushingMode || event.modifierFlags.contains(.command) { pushOrigin = worldPoint; return }
+        if pushingMode || event.modifierFlags.contains(.command) {
+            guard let workspace, workspace.sharedProjects.linked?.access != "reader" else { return }
+            pushOrigin = worldPoint; pushBaseline = workspace.project; pushCandidate = nil; pushFailure = nil; lastPushDistance = nil; return
+        }
         if spaceHeld || event.modifierFlags.contains(.option) { panStart = board.viewport.origin; return }
         if drawingMode || erasingMode { stroke = [worldPoint]; return }
         if event.clickCount == 2, geometry.hitBeat(worldPoint) == nil {
@@ -329,7 +356,7 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
 
     override func mouseDragged(with event: NSEvent) {
         if dependencyOrigin != nil { return }
-        if pushOrigin != nil { NSCursor.resizeLeftRight.set(); return }
+        if let origin = pushOrigin { NSCursor.resizeLeftRight.set(); updatePushPreview(world(convert(event.locationInWindow, from: nil)).x - origin.x); return }
         let point = convert(event.locationInWindow, from: nil), current = world(point)
         if let panStart {
             board.viewport.origin = BoardPoint(x: panStart.x - (point.x - viewStart.x) / zoom, y: panStart.y - (point.y - viewStart.y) / zoom)
@@ -354,10 +381,13 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
             return
         }
         if let origin = pushOrigin {
-            pushOrigin = nil; NSCursor.arrow.set()
-            let delta = world(convert(event.locationInWindow, from: nil)).x - origin.x
-            workspace?.edit("Push Whiteboard") { try $0.pushWhiteboard(from: origin.x - 110, by: delta); try $0.applyWhiteboardSpatialOrder() }
-            dragStart = nil; return
+            let distance = world(convert(event.locationInWindow, from: nil)).x - origin.x
+            updatePushPreview(distance)
+            let candidate = pushCandidate, failure = pushFailure, baseline = pushBaseline
+            cancelPushPreview(); dragStart = nil
+            if let failure { workspace?.errorMessage = failure }
+            else if abs(distance) > 3, let candidate, let baseline, workspace?.project == baseline { workspace?.edit("Push Whiteboard") { $0 = candidate } }
+            return
         }
         defer { dragStart = nil; panStart = nil; movingBlocks = false; movingBeat = nil; resizingBlock = nil; marquee = nil; dragDelta = .init(); stroke = []; needsDisplay = true }
         if panStart != nil { persistViewport(); return }
@@ -478,6 +508,7 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
     }
 
     override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53, pushOrigin != nil { cancelPushPreview(); dragStart = nil; return }
         if event.modifierFlags.contains(.command), let id = selection.first {
             if event.charactersIgnoringModifiers == "i" { workspace?.pendingBoardCauseID = id; return }
             if event.charactersIgnoringModifiers == "o", let cause = workspace?.pendingBoardCauseID { workspace?.edit("Create Dependency") { try $0.connectBoardBeats(cause: cause, effect: id) }; workspace?.pendingBoardCauseID = nil; return }
