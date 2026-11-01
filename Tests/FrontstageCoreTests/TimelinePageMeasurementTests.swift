@@ -20,6 +20,8 @@ final class TimelinePageMeasurementTests: XCTestCase {
         let pages = try StoryTimeline(project: project, timeBase: .pages, measuredPages: counts)
         XCTAssertTrue(pages.typesetPages); XCTAssertEqual(pages.beatPages["beat-2"], 0.5)
         XCTAssertEqual(pages.beatPageCounts, counts); XCTAssertEqual(project, before)
+        let oldItems = [StoryTimeline.Item(id: "beat-1", title: "", start: 0, duration: 1, color: "", beatID: "beat-1"), StoryTimeline.Item(id: "beat-2", title: "", start: 1, duration: 1, color: "", beatID: "beat-2")]
+        XCTAssertEqual(StoryTimeline.remappedPosition(1.4, from: oldItems, to: pages.tracks.first { $0.kind == "beats" }!.items) ?? -1, 1, accuracy: 0.0001)
         let incomplete = try StoryTimeline(project: project, timeBase: .pages, measuredPages: ["beat-1": 10])
         XCTAssertFalse(incomplete.typesetPages); XCTAssertNotEqual(incomplete.beatPages["beat-2"], 10)
         try project.updateBoardBeat("beat-1") { $0.timelineDuration = 3 }

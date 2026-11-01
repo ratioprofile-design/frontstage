@@ -103,6 +103,11 @@ public struct StoryTimeline: Sendable {
         }
         tracks.append(.init(id: "heat", title: "Heat Map · Tension", kind: "heat", items: heat))
     }
+    public static func remappedPosition(_ time: Double, from previous: [Item], to next: [Item]) -> Double? {
+        guard time.isFinite, let old = previous.first(where: { time >= $0.start && time < $0.start + $0.duration }), old.duration > 0,
+              let new = next.first(where: { $0.id == old.id }) else { return nil }
+        return new.start + max(0, min(1, (time - old.start) / old.duration)) * new.duration
+    }
     public static func estimatedPages(_ html: String) -> Double {
         let text = html.replacingOccurrences(of: "<[^>]*>", with: " ", options: .regularExpression)
         return max(1.0 / 55, Double(text.count) / 60 / 55)

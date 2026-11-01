@@ -38,6 +38,8 @@ struct StoryTimelineView: View {
     @FocusState private var focusedItemID: String?
     private var model: StoryTimeline? { try? StoryTimeline(project: workspace.project, timeBase: preferences.primary, measuredPages: measuredPages) }
     private var beatItems: [StoryTimeline.Item] { model?.tracks.first { $0.kind == "beats" }?.items ?? [] }
+    private struct CursorProjection: Equatable { var base: TimelineTimeBase; var items: [StoryTimeline.Item] }
+    private var cursorProjection: CursorProjection { .init(base: preferences.primary, items: beatItems) }
     private var current: StoryTimeline.Item? { beatItems.first { time >= $0.start && time < $0.start + $0.duration } }
     private func counter(_ base: TimelineTimeBase) -> String {
         guard let current else { return "–" }
@@ -92,6 +94,10 @@ struct StoryTimelineView: View {
                 try Task.checkCancellation(); measuredPages = value
             } catch { /* Keep the explicitly labelled estimate when layout is unavailable. */ }
         }
+        .onChange(of: cursorProjection) { old, next in
+            guard old.base == next.base else { return }
+            time = StoryTimeline.remappedPosition(time, from: old.items, to: next.items) ?? max(0, min(time, model?.end ?? 0))
+        }
         .onChange(of: expanded) { _, _ in loadPreferences() }
         .onChange(of: preferences) { _, value in
             guard value.isValid, let data = try? JSONEncoder().encode(value), let text = String(data: data, encoding: .utf8) else { return }
@@ -110,6 +116,7 @@ struct StoryTimelineView: View {
         let text = writer ? writerPreferences : expanded ? fullPreferences : compactPreferences
         if let data = text.data(using: .utf8), let saved = try? JSONDecoder().decode(TimelineDisplayPreferences.self, from: data), saved.isValid { preferences = saved }
         else { preferences = TimelineDisplayPreferences(compact: !expanded) }
+        time = beatItems.first { $0.id == workspace.selectedBoardBeatID }?.start ?? 0
     }
     private var controls: some View {
         ScrollView(.horizontal, showsIndicators: false) {

@@ -40,6 +40,8 @@ export function timelineModel(board, scenes, markers = [], timeBase = 'beats', m
 }
 export function timelineColor(name){const colors=['#11106b','#5de5bb','#a30e3f','#d6ae1c','#467e96'];return colors[[...name].reduce((sum,c)=>sum+c.codePointAt(0),0)%colors.length];}
 export function timelineClock(time){const s=Math.max(0,Math.round(time*60));return [Math.floor(s/3600),Math.floor(s/60)%60,s%60].map(x=>String(x).padStart(2,'0')).join(':');}
+export function remapTimelinePosition(time,previous,next){if(!Number.isFinite(time))return null;const old=previous.find(b=>time>=b.start&&time<b.start+b.duration),current=old&&next.find(b=>b.id===old.id);return old&&old.duration>0&&current?current.start+Math.max(0,Math.min(1,(time-old.start)/old.duration))*current.duration:null;}
+const timelineProjections=new WeakMap();
 export function mountTimeline(root,model,state,actions){
   const document=root.ownerDocument,view=document.defaultView;
   root._closeTimelineMenu?.();root._closeTimelineLabel?.();
@@ -55,6 +57,8 @@ export function mountTimeline(root,model,state,actions){
   const setBase=(key,value)=>{const old=state[key];state[key]=value;const other=key==='timeBase'?'secondary':'timeBase';if(state[other]===value)state[other]=old;state.lastSelected=null;actions.render();};
   const old=root.querySelector('.story-timeline-scroll'),scroll={x:old?.scrollLeft??0,y:old?.scrollTop??0};
   const el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
+  const previous=timelineProjections.get(state);if(previous?.base===state.timeBase){const mapped=remapTimelinePosition(state.time,previous.beats,model.beats);if(mapped!=null)state.time=mapped;}
+  timelineProjections.set(state,{base:state.timeBase,beats:model.beats.map(b=>({id:b.id,start:b.start,duration:b.duration}))});
   if(state.lastSelected!==actions.selected){const beat=model.beats.find(b=>b.id===actions.selected);if(beat)state.time=beat.start;state.lastSelected=actions.selected;}
   const scale=state.scale,width=model.end*scale,labelWidth=174;
   // Measure with the same font, line height and wrapping as the visible label.
