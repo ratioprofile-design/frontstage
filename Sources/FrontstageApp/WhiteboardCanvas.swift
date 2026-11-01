@@ -11,6 +11,9 @@ struct WhiteboardCanvas: NSViewRepresentable {
     var erasing: Bool = false
     var drawing: Bool
     var fitRequest: Int
+    var colorMode = "authored"
+    var flowKind = ""
+    var flowName = ""
 
     func makeNSView(context: Context) -> NativeWhiteboard {
         let view = NativeWhiteboard()
@@ -20,6 +23,7 @@ struct WhiteboardCanvas: NSViewRepresentable {
     }
     func updateNSView(_ view: NativeWhiteboard, context: Context) {
         view.workspace = workspace; view.acceptModel(workspace)
+        view.colorMode = BoardColorMode(rawValue: colorMode) ?? .authored; view.flowKind = flowKind; view.flowName = flowName
         view.selection = selection; view.blockSelection = blockSelection; view.drawingMode = drawing; view.erasingMode = erasing; view.pushingMode = pushing
         view.selected = { ids, blocks in selection = ids; blockSelection = blocks }
         if view.fitRequest != fitRequest { view.fitRequest = fitRequest; view.fitSelection() }
@@ -38,6 +42,9 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
     var erasingMode = false
     var drawingMode = false
     var pushingMode = false
+    var colorMode = BoardColorMode.authored
+    var flowKind = ""
+    var flowName = ""
     private var pushOrigin: BoardPoint?
     private var pushBaseline: Project?
     private var pushCandidate: Project?
@@ -202,6 +209,14 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
         }
         let byID = Dictionary(uniqueKeysWithValues: board.beats.map { ($0.id, $0) })
         let issueBeats = Set(board.issues.flatMap(\.beatIDs))
+        for edge in board.flowLines(kind: flowKind, name: flowName) {
+            guard let a = geometry.beatRects[edge.cause], let b = geometry.beatRects[edge.effect] else { continue }
+            let route = BoardDependencyRoute(cause: a, effect: b), path = NSBezierPath()
+            path.move(to: NSPoint(x: route.start.x, y: route.start.y))
+            path.curve(to: NSPoint(x: route.end.x, y: route.end.y), controlPoint1: NSPoint(x: route.control1.x, y: route.control1.y), controlPoint2: NSPoint(x: route.control2.x, y: route.control2.y))
+            NSColor(boardHex: StoryTimeline.color(flowName)).withAlphaComponent(0.85).setStroke()
+            path.lineWidth = 3 / zoom; path.setLineDash([7 / zoom, 4 / zoom], count: 2, phase: 0); path.stroke()
+        }
         for edge in board.dependencies {
             guard let a = geometry.beatRects[edge.cause], let b = geometry.beatRects[edge.effect] else { continue }
             let extent = BoardRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(a.x - b.x) + max(a.width, b.width), height: abs(a.y - b.y) + max(a.height, b.height))
@@ -244,9 +259,16 @@ final class NativeWhiteboard: NSView, NSTextFieldDelegate {
             if movingBlocks && expandedDragBlocks.contains(beat.blockID) { rect.x += dragDelta.x; rect.y += dragDelta.y }
             if movingBeat != nil && selection.contains(id) { rect.x += dragDelta.x; rect.y += dragDelta.y }
             let frame = NSRect(x: rect.x, y: rect.y, width: rect.width, height: rect.height)
-            let color = NSColor(boardHex: beat.color)
-            (beat.omitted ? NSColor.gray : board.isUnused(beat) ? color.withAlphaComponent(0.25) : color).setFill()
-            let path = NSBezierPath(roundedRect: frame, xRadius: 4, yRadius: 4); path.fill()
+            let colors = board.displayColors(for: beat, mode: colorMode)
+            let named = colorMode != .authored && !board.trackNames(for: beat, kind: colorMode.rawValue).isEmpty
+            let path = NSBezierPath(roundedRect: frame, xRadius: 4, yRadius: 4)
+            NSGraphicsContext.saveGraphicsState(); path.addClip()
+            for (index, value) in colors.enumerated() {
+                let original = NSColor(boardHex: value), color = named ? original.blended(withFraction: 0.45, of: .black) ?? original : original
+                (beat.omitted ? NSColor.gray : board.isUnused(beat) ? color.withAlphaComponent(0.25) : color).setFill()
+                NSRect(x: frame.minX + frame.width * Double(index) / Double(colors.count), y: frame.minY, width: frame.width / Double(colors.count) + 1, height: frame.height).fill()
+            }
+            NSGraphicsContext.restoreGraphicsState()
             (selection.contains(id) ? NSColor.white : NSColor(calibratedWhite: 1, alpha: 0.3)).setStroke()
             path.lineWidth = selection.contains(id) ? 2 / zoom : 1; path.stroke()
             (beat.title as NSString).draw(with: frame.insetBy(dx: 7, dy: 5), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: WhiteboardBeatText.attributes, context: nil)

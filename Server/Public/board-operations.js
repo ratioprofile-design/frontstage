@@ -313,3 +313,10 @@ export function editDependency(board,id,{reason,reference,remove=false}={}){
  if(remove)next.dependencies.splice(index,1);else{if(reason!==undefined){if(typeof reason!=='string')throw Error('Choose a text reason.');edge.reason=reason;}if(reference!==undefined){if(typeof reference!=='boolean')throw Error('Choose a valid connection type.');edge.reference=reference;}causalOrder(next);}
  return next;
 }
+
+export function boardTrackNames(beat,kind){return [...new Set((kind==='characters'?beat.characters:kind==='tags'?beat.tags:[]).map(name=>name.trim().normalize('NFC')).filter(Boolean))].sort();}
+export function boardFlowLines(board,kind,name){
+ if(!['characters','tags'].includes(kind)||!name)return [];name=name.trim().normalize('NFC');
+ const blocks=new Map(board.blocks.map(b=>[b.id,b])),unused=new Set(board.layers.filter(l=>l.unused).map(l=>l.id)),matching=[...board.beats].sort((a,b)=>a.order-b.order||(a.id<b.id?-1:a.id>b.id?1:0)).filter(b=>!b.omitted&&!unused.has(blocks.get(b.blockID)?.layerID)&&boardTrackNames(b,kind).includes(name));
+ return matching.slice(1).map((b,i)=>({cause:matching[i].id,effect:b.id}));
+}

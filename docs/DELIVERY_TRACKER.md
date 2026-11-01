@@ -20,7 +20,7 @@ This tracker supersedes stale completion claims in the older phase documents. De
 - [x] Live, cancellable Push preview with the same validated result on release (shared/model and browser acceptance pass; hosted Mac acceptance added to CI).
 - [x] Dependency-line navigation and reason/type/removal menus, with endpoint locks, cycle rollback and undo/redo (core/browser acceptance passes; hosted Mac test added).
 - [ ] Advanced collision packing and container endpoint dependencies.
-- [ ] FlowLines and character/tag coloring.
+- [x] Optional chronological FlowLines and character/tag stripe coloring, stored per device without changing authored colors/dependencies (shared fixture and browser acceptance pass; native rendering test added).
 - [ ] Nested research ordering and category composite curves.
 - [ ] Automatic tension policies; readability only when its reference calculation is available.
 - [x] Optional Writer mini-timeline with independent display preferences, scene reveal, detachment/docking and retained editor/caret (browser acceptance passes; Mac tests added).

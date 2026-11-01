@@ -1,0 +1,255 @@
+{
+  "board": {
+    "version": 1,
+    "viewport": {
+      "origin": {
+        "x": 0,
+        "y": 0
+      },
+      "zoom": 1
+    },
+    "layers": [
+      {
+        "id": "main",
+        "name": "Main Layer",
+        "height": 300,
+        "collapsed": false,
+        "locked": false,
+        "unused": false
+      },
+      {
+        "id": "unused",
+        "name": "Unused",
+        "height": 300,
+        "collapsed": false,
+        "locked": false,
+        "unused": true
+      }
+    ],
+    "blocks": [
+      {
+        "id": "block-1",
+        "name": "The Invitation",
+        "layerID": "main",
+        "position": {
+          "x": 70,
+          "y": 70
+        },
+        "width": 224,
+        "collapsed": false,
+        "locked": false,
+        "standalone": false
+      },
+      {
+        "id": "block-2",
+        "name": "The Decision",
+        "layerID": "main",
+        "position": {
+          "x": 360,
+          "y": 70
+        },
+        "width": 224,
+        "collapsed": false,
+        "locked": false,
+        "standalone": true
+      },
+      {
+        "id": "omitted",
+        "name": "The Decision",
+        "layerID": "main",
+        "position": {
+          "x": 360,
+          "y": 70
+        },
+        "width": 224,
+        "collapsed": false,
+        "locked": false,
+        "standalone": true
+      },
+      {
+        "id": "research",
+        "name": "The Decision",
+        "layerID": "unused",
+        "position": {
+          "x": 360,
+          "y": 70
+        },
+        "width": 224,
+        "collapsed": false,
+        "locked": false,
+        "standalone": true
+      },
+      {
+        "id": "return",
+        "name": "The Decision",
+        "layerID": "main",
+        "position": {
+          "x": 360,
+          "y": 70
+        },
+        "width": 224,
+        "collapsed": false,
+        "locked": false,
+        "standalone": true
+      }
+    ],
+    "beats": [
+      {
+        "id": "beat-1",
+        "sceneID": 1,
+        "blockID": "block-1",
+        "title": "The Invitation",
+        "synopsis": "The story begins",
+        "html": "<p class=\"sc-action\">தமிழ் — an invitation arrives.</p>",
+        "kind": "story",
+        "color": "#39798c",
+        "characters": [
+          "MAYA",
+          "DARA",
+          "MAYA"
+        ],
+        "tags": [
+          "Hope",
+          "Hope",
+          " "
+        ],
+        "mustBeCaused": false,
+        "omitted": false,
+        "locked": false,
+        "order": 0,
+        "start": 0,
+        "duration": 2
+      },
+      {
+        "id": "beat-2",
+        "sceneID": 2,
+        "blockID": "block-2",
+        "title": "The Decision",
+        "synopsis": "",
+        "html": "<p class=\"sc-character\">MAYA</p><p class=\"sc-dialogue\">I will go.</p>",
+        "kind": "story",
+        "color": "#a34eae",
+        "characters": [
+          "MAYA"
+        ],
+        "tags": [
+          "Hope"
+        ],
+        "mustBeCaused": true,
+        "omitted": false,
+        "locked": false,
+        "order": 1,
+        "start": 3,
+        "duration": 2
+      },
+      {
+        "id": "omitted",
+        "sceneID": 1,
+        "blockID": "omitted",
+        "title": "The Invitation",
+        "synopsis": "The story begins",
+        "html": "<p class=\"sc-action\">தமிழ் — an invitation arrives.</p>",
+        "kind": "story",
+        "color": "#39798c",
+        "characters": [
+          "MAYA",
+          "DARA",
+          "MAYA"
+        ],
+        "tags": [
+          "Hope",
+          "Hope",
+          " "
+        ],
+        "mustBeCaused": false,
+        "omitted": true,
+        "locked": false,
+        "order": 0.25,
+        "start": 0,
+        "duration": 2
+      },
+      {
+        "id": "research",
+        "sceneID": 1,
+        "blockID": "research",
+        "title": "The Invitation",
+        "synopsis": "The story begins",
+        "html": "<p class=\"sc-action\">தமிழ் — an invitation arrives.</p>",
+        "kind": "story",
+        "color": "#39798c",
+        "characters": [
+          "MAYA",
+          "DARA",
+          "MAYA"
+        ],
+        "tags": [
+          "Hope",
+          "Hope",
+          " "
+        ],
+        "mustBeCaused": false,
+        "omitted": false,
+        "locked": false,
+        "order": 0.5,
+        "start": 0,
+        "duration": 2
+      },
+      {
+        "id": "return",
+        "sceneID": 1,
+        "blockID": "return",
+        "title": "The Invitation",
+        "synopsis": "The story begins",
+        "html": "<p class=\"sc-action\">தமிழ் — an invitation arrives.</p>",
+        "kind": "story",
+        "color": "#39798c",
+        "characters": [
+          "MAYA",
+          "DARA",
+          "MAYA"
+        ],
+        "tags": [
+          "Hope",
+          "Hope",
+          " "
+        ],
+        "mustBeCaused": false,
+        "omitted": false,
+        "locked": false,
+        "order": 2,
+        "start": 0,
+        "duration": 2
+      }
+    ],
+    "dependencies": [
+      {
+        "id": "cause-1",
+        "cause": "beat-1",
+        "effect": "beat-2",
+        "reason": "The invitation forces a decision",
+        "reference": false
+      }
+    ],
+    "strokes": []
+  },
+  "expected": {
+    "names": [
+      "DARA",
+      "MAYA"
+    ],
+    "colors": [
+      "#11106b",
+      "#5de5bb"
+    ],
+    "lines": [
+      [
+        "beat-1",
+        "beat-2"
+      ],
+      [
+        "beat-2",
+        "return"
+      ]
+    ]
+  }
+}

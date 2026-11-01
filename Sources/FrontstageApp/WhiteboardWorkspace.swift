@@ -5,6 +5,9 @@ import FrontstageCore
 
 struct WhiteboardWorkspace: View {
     @ObservedObject var workspace: Workspace
+    @AppStorage("dot-whiteboard-color-mode") private var colorMode = "authored"
+    @AppStorage("dot-whiteboard-flow-kind") private var flowKind = ""
+    @AppStorage("dot-whiteboard-flow-name") private var flowName = ""
     @State private var selection = Set<String>()
     @State private var blockSelection = Set<String>()
     @State private var showProperties = true
@@ -48,7 +51,7 @@ struct WhiteboardWorkspace: View {
                             Spacer(); Button("Cancel") { workspace.pendingBoardCauseID = nil }
                         }.font(.caption).padding(6).background(.cyan.opacity(0.18))
                     }
-                    if !expandedTimeline || workspace.timelineDetached { WhiteboardCanvas(workspace: workspace, selection: $selection, blockSelection: $blockSelection, pushing: pushing, erasing: erasing, drawing: drawing, fitRequest: fitRequest)
+                    if !expandedTimeline || workspace.timelineDetached { WhiteboardCanvas(workspace: workspace, selection: $selection, blockSelection: $blockSelection, pushing: pushing, erasing: erasing, drawing: drawing, fitRequest: fitRequest, colorMode: colorMode, flowKind: flowKind, flowName: flowName)
                         .frame(minHeight: 100, maxHeight: .infinity) }
                 }.frame(minWidth: 240, maxWidth: .infinity, maxHeight: .infinity)
                     .safeAreaInset(edge: .bottom, spacing: 0) { if !expandedTimeline || workspace.timelineDetached { bottomTools } }
@@ -84,6 +87,19 @@ struct WhiteboardWorkspace: View {
             Button { erasing.toggle(); drawing = false } label: { Image(systemName: "eraser") }.tint(erasing ? DOTTheme.accent : .gray).help("Erase drawn strokes")
             Button { fitRequest += 1 } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }.help("Fit selection or board")
             Toggle("Push", isOn: $pushing).toggleStyle(.button).help("Push space open or closed; also Command-drag on the board")
+            Menu("Appearance") {
+                Picker("Beat colors", selection: $colorMode) { Text("Authored Colors").tag("authored"); Text("Characters").tag("characters"); Text("Tags").tag("tags") }
+                Menu("FlowLines") {
+                    Button(flowName.isEmpty ? "✓ Off" : "Off") { flowKind = ""; flowName = "" }
+                    ForEach(["characters", "tags"], id: \.self) { kind in
+                        Menu(kind.capitalized) {
+                            ForEach(Array(Set(board.beats.flatMap { board.trackNames(for: $0, kind: kind) })).sorted(), id: \.self) { name in
+                                Button((flowKind == kind && flowName == name ? "✓ " : "") + name) { flowKind = kind; flowName = name }
+                            }
+                        }
+                    }
+                }
+            }.help("View colors and chronological FlowLines; authored colors and causal links are preserved")
             Toggle("Ripple", isOn: $workspace.whiteboardRipple).toggleStyle(.button)
             Button { changeZoom(0.8) } label: { Image(systemName: "minus.magnifyingglass") }
             Text("\(Int(board.viewport.zoom * 100))%").monospacedDigit().frame(width: 36)

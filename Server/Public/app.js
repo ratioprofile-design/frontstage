@@ -7,14 +7,14 @@ import {insertScriptScene} from './continuous-script.js';
 import {isSceneModel,syncSceneMetadata,validateSceneModel,convertSceneCopy,duplicateBeat} from './scene-model.js';
 import {pullOutBeats,validateInclusion} from './script-inclusion.js';
 import {createScriptFilter,mountScriptFilter,matchesScriptFilter,gapLabel} from './script-filter.js';
-import { timelineModel, mountTimeline, timelinePreferences } from './story-timeline.js';
+import { timelineModel, mountTimeline, timelinePreferences, timelineColor } from './story-timeline.js';
 import { mountWorkspaces } from './workspaces.js';
 import { splitAtCaret, screenplayToolbar, sluglineFields, characterNames, screenplaySelection, restoreScreenplaySelection } from './screenplay-editor.js';
 import {dialogueSeed} from './dialogue-rules.js';
 import { splitBeat, scriptSegments, heading, captureRevision, restoreRevision } from './workspace-model.js';
 import { mergeDocuments } from './merge.js';
 import { apiOrigin as configuredOrigin } from './config.js';
-import { causalOrder as orderCauses, compactCausalTime, groupBlocks, ungroupBlocks, moveBlocks, moveStandaloneBeats, descendantBlocks, deleteBlocks, deleteBeats, validateBoard, groupBeats, beatSize, moveBeatsToLayer, spatialOrder, dropBeats, pruneEmptyBeatContainers, usesBlocks, nestGroups, splitGroupAt, mergeContainers, pushBoard, previewBoardPush, dependencyRoute, editDependency, splitBlockAt, reorderTimelineBeats } from './board-operations.js';
+import { causalOrder as orderCauses, compactCausalTime, groupBlocks, ungroupBlocks, moveBlocks, moveStandaloneBeats, descendantBlocks, deleteBlocks, deleteBeats, validateBoard, groupBeats, beatSize, moveBeatsToLayer, spatialOrder, dropBeats, pruneEmptyBeatContainers, usesBlocks, nestGroups, splitGroupAt, mergeContainers, pushBoard, previewBoardPush, dependencyRoute, editDependency, boardTrackNames, boardFlowLines, splitBlockAt, reorderTimelineBeats } from './board-operations.js';
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
 
@@ -394,6 +394,8 @@ function render() {
     };
     if (!boardCollapsed(block)) for (const beat of board().beats.filter(b => b.blockID === block.id).sort((a, b) => a.order - b.order)) {
       const tile = element('div', undefined, `beat${selectedBeats.has(beat.id) ? ' selected' : ''}`); tile.style.backgroundColor = beat.omitted ? '#777777' : /^#[a-f0-9]{6}$/i.test(beat.color) ? beat.color : '#a34eae';tile.classList.toggle('omitted',beat.omitted);tile.setAttribute('aria-label',beat.title+(beat.omitted?' · Omitted':''));
+      const trackNames=boardTrackNames(beat,boardColorMode);
+      if(!beat.omitted&&trackNames.length){const stops=trackNames.flatMap((name,i)=>{const color=`color-mix(in srgb, ${timelineColor(name)} 55%, black)`;return [color+' '+(i/trackNames.length*100)+'%',color+' '+((i+1)/trackNames.length*100)+'%'];});tile.style.background='linear-gradient(to right, '+stops.join(',')+')';tile.dataset.colorTracks=trackNames.join(', ');}
       tile.dataset.beatId = beat.id;
       const card=g.beats.get(beat.id);if(card){tile.style.position='absolute';position(tile,{...card,x:card.x-rect.x,y:card.y-rect.y});}
       tile.append(element('span', beat.title, 'beat-text')); tile.draggable = current.access !== 'reader' && !locked(beat);
@@ -409,6 +411,11 @@ function render() {
     $('blocks').append(node);
   }
   $('links').setAttribute('width', g.width); $('links').setAttribute('height', g.height);
+  refreshBoardDisplayControls();
+  for(const edge of boardFlowLines(board(),boardFlowKind,boardFlowName)){
+    const a=g.beats.get(edge.cause),b=g.beats.get(edge.effect);if(!a||!b)continue;
+    const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.dataset.flowCause=edge.cause;path.dataset.flowEffect=edge.effect;path.setAttribute('d',dependencyRoute(a,b).path);path.setAttribute('stroke',timelineColor(boardFlowName));path.setAttribute('stroke-width','3');path.setAttribute('vector-effect','non-scaling-stroke');path.setAttribute('stroke-dasharray','7 4');path.setAttribute('fill','none');const title=document.createElementNS(path.namespaceURI,'title');title.textContent=boardFlowName+' FlowLine';path.append(title);$('links').append(path);
+  }
   for (const edge of board().dependencies) {
     const a = g.beats.get(edge.cause), b = g.beats.get(edge.effect); if (!a || !b) continue;
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -774,6 +781,18 @@ $('canvas').addEventListener('pointerdown',e=>{
  canvas.addEventListener('pointerup',event=>{const frame=canvas.getBoundingClientRect(),x=boardPoint(event).x,y=boardPoint(event).y;const hit=[...geometry().beats].find(([,r])=>x>=r.x&&x<=r.x+r.width&&y>=r.y&&y<=r.y+r.height);if(hit&&hit[0]!==cause)edit(()=>{board().dependencies.push({id:uuid(),cause,effect:hit[0],reason:'',reference:false});});},{once:true});
 },true);
 document.addEventListener('keydown',e=>{if(e.target!==$('canvas')||!(e.ctrlKey||e.metaKey)||!selected)return;if(e.key.toLowerCase()==='i'){e.preventDefault();source=selected;status('Select the effect, then press Command/Ctrl+O');}if(e.key.toLowerCase()==='o'&&source){e.preventDefault();const cause=source;edit(()=>{board().dependencies.push({id:uuid(),cause,effect:selected,reason:'',reference:false});});source=null;}});
+let boardColorMode=localStorage.getItem('dot-whiteboard-color-mode')||'authored',boardFlowKind=localStorage.getItem('dot-whiteboard-flow-kind')||'',boardFlowName=localStorage.getItem('dot-whiteboard-flow-name')||'';
+const boardColorControl=element('select'),boardFlowControl=element('select');boardColorControl.setAttribute('aria-label','Beat color display');boardFlowControl.setAttribute('aria-label','Whiteboard FlowLines');
+for(const [value,label]of [['authored','Authored Colors'],['characters','Character Colors'],['tags','Tag Colors']]){const option=element('option',label);option.value=value;boardColorControl.append(option);}
+boardColorControl.value=['authored','characters','tags'].includes(boardColorMode)?boardColorMode:'authored';
+boardColorControl.onchange=()=>{boardColorMode=boardColorControl.value;localStorage.setItem('dot-whiteboard-color-mode',boardColorMode);render();};
+boardFlowControl.onchange=()=>{[boardFlowKind,boardFlowName]=JSON.parse(boardFlowControl.value);localStorage.setItem('dot-whiteboard-flow-kind',boardFlowKind);localStorage.setItem('dot-whiteboard-flow-name',boardFlowName);render();};
+function refreshBoardDisplayControls(){
+ const selected=JSON.stringify([boardFlowKind,boardFlowName]);boardFlowControl.replaceChildren();const off=element('option','FlowLines: Off');off.value='["",""]';boardFlowControl.append(off);
+ for(const kind of ['characters','tags']){const group=element('optgroup');group.label=kind==='characters'?'Characters':'Tags';for(const name of [...new Set(board().beats.flatMap(b=>boardTrackNames(b,kind)))].sort()){const option=element('option',name);option.value=JSON.stringify([kind,name]);group.append(option);}boardFlowControl.append(group);}
+ if(boardFlowName&&![...boardFlowControl.options].some(o=>o.value===selected)){const missing=element('option',boardFlowName+' (unavailable)');missing.value=selected;boardFlowControl.append(missing);}boardFlowControl.value=selected;
+}
+$('fit').after(boardColorControl,boardFlowControl);
 let pushEnabled=false;
 const pushButton=element('button','Push');pushButton.setAttribute('aria-pressed','false');pushButton.onclick=()=>{pushEnabled=!pushEnabled;pushButton.setAttribute('aria-pressed',String(pushEnabled));};$('fit').after(pushButton);
 function paintBoardProjection(projection){
@@ -782,6 +801,7 @@ function paintBoardProjection(projection){
  for(const node of $('blocks').children){const r=g.blocks.get(node.dataset.blockId);if(r)position(node,r);}
  for(const node of $('blocks').querySelectorAll('[data-beat-id]')){const beat=projection.beats.find(b=>b.id===node.dataset.beatId),r=g.beats.get(beat?.id),owner=g.blocks.get(beat?.blockID);if(r&&owner)position(node,{...r,x:r.x-owner.x,y:r.y-owner.y});}
  for(const edge of projection.dependencies){const a=g.beats.get(edge.cause),b=g.beats.get(edge.effect),path=[...$('links').querySelectorAll('[data-edge-id]')].find(n=>n.dataset.edgeId===edge.id);if(a&&b&&path)path.setAttribute('d',dependencyRoute(a,b).path);}
+ for(const path of $('links').querySelectorAll('[data-flow-cause]')){const a=g.beats.get(path.dataset.flowCause),b=g.beats.get(path.dataset.flowEffect);if(a&&b)path.setAttribute('d',dependencyRoute(a,b).path);}
  $('links').setAttribute('width',g.width);$('links').setAttribute('height',g.height);
 }
 $('canvas').addEventListener('pointerdown',e=>{
